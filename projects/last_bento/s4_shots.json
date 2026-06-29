@@ -1,0 +1,320 @@
+{
+  "totalShots": 22,
+  "shots": [
+    {
+      "shotId": "s01",
+      "shotNumber": 1,
+      "sceneNumber": 1,
+      "durationSec": 5,
+      "cameraDirection": "wide shot, establishing",
+      "description": "正午烈日，工地门口尘土飞扬。便当推车旁围了几个工人，林姐在摊后忙碌，不锈钢菜盆几乎见底。远景建立场景。",
+      "characters": [
+        "lin_jie"
+      ],
+      "isFirstFrame": true,
+      "isLastFrame": false,
+      "emotion": "日常的平淡，暗藏微妙的不对劲"
+    },
+    {
+      "shotId": "s02",
+      "shotNumber": 2,
+      "sceneNumber": 1,
+      "durationSec": 6,
+      "cameraDirection": "medium shot, tracking",
+      "description": "中景。老周穿着褪色蓝色工装，安全帽夹在臂弯里，走向便当摊。其他工人散去，只剩他一个。他瞟了一眼角落，那里还有一盒便当。",
+      "characters": [
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "习惯性的期待，发现角落的便当"
+    },
+    {
+      "shotId": "s03",
+      "shotNumber": 3,
+      "sceneNumber": 1,
+      "durationSec": 5,
+      "cameraDirection": "close-up, hands and faces",
+      "description": "近景。老周的手指向角落便当，林姐的手同时伸过来挡住。林姐冷冷丢下一句：那盒不卖，别人订的。眼神刻意避开老周。不锈钢菜盆反光在她脸上划过。",
+      "characters": [
+        "lao_zhou",
+        "lin_jie"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "伪装冷漠，语气冷但手在犹豫"
+    },
+    {
+      "shotId": "s04",
+      "shotNumber": 4,
+      "sceneNumber": 1,
+      "durationSec": 4,
+      "cameraDirection": "close-up, profile",
+      "description": "特写。林姐侧脸，嘴唇紧抿，眼眶微微发红但没让眼泪掉下来。转身继续收拾菜盆，背对镜头。",
+      "characters": [
+        "lin_jie"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "咬住嘴唇，她怕自己心软"
+    },
+    {
+      "shotId": "s05",
+      "shotNumber": 5,
+      "sceneNumber": 1,
+      "durationSec": 7,
+      "cameraDirection": "medium shot, slow zoom out",
+      "description": "中景。老周站在原地，然后慢慢转身离开。他背影在午后强光下格外孤独。摊位角落里，那盒便当孤零零放着。",
+      "characters": [
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": true,
+      "emotion": "被拒绝后的沉默，他习惯了"
+    },
+    {
+      "shotId": "s06",
+      "shotNumber": 6,
+      "sceneNumber": 2,
+      "durationSec": 6,
+      "cameraDirection": "wide shot, dramatic golden-hour backlight",
+      "description": "黄昏。夕阳穿透钢筋水泥骨架投射长长影子。老周独自坐在灰色水泥管上，手里攥着半个冷馒头。工地喧嚣远去，只剩风偶尔吹过钢管发出嗡鸣。",
+      "characters": [
+        "lao_zhou"
+      ],
+      "isFirstFrame": true,
+      "isLastFrame": false,
+      "emotion": "被世界遗忘的角落"
+    },
+    {
+      "shotId": "s07",
+      "shotNumber": 7,
+      "sceneNumber": 2,
+      "durationSec": 5,
+      "cameraDirection": "medium close-up, golden light on face",
+      "description": "中近景。老周咬了一口馒头，咀嚼很慢。夕阳在他脸上镀了金色，但照不到眼睛。眼角皱纹在逆光下像沟壑。",
+      "characters": [
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "嘴里是馒头，心里是空落落"
+    },
+    {
+      "shotId": "s08",
+      "shotNumber": 8,
+      "sceneNumber": 2,
+      "durationSec": 5,
+      "cameraDirection": "low angle, ground-up reveal",
+      "description": "地面仰拍。一双皮鞋小心绕过地上钢管。小陈穿白衬衫，手里提着白色塑料袋走入画面。皮鞋沾了灰色工地灰尘，和整体整洁形成强烈反差。",
+      "characters": [
+        "xiao_chen"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "闯入者，白衬衫在灰色世界里的突兀"
+    },
+    {
+      "shotId": "s09",
+      "shotNumber": 9,
+      "sceneNumber": 2,
+      "durationSec": 5,
+      "cameraDirection": "over-the-shoulder, backlit",
+      "description": "过肩镜头，小陈视角。小陈把白色塑料袋递过去。林姐让我带来的，他说话很慢，不敢直视老周，手指不自觉捏着衬衫下摆。",
+      "characters": [
+        "xiao_chen",
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "小心翼翼的传递，像完成一个仪式"
+    },
+    {
+      "shotId": "s10",
+      "shotNumber": 10,
+      "sceneNumber": 2,
+      "durationSec": 5,
+      "cameraDirection": "extreme close-up, hands and bento, slow pan",
+      "description": "特写。老周的手，粗糙布满老茧的手，打开便当盒盖子。画面只拍这双手和便当盒：红烧肉整齐码在一侧，油亮亮的；煎蛋盖在白米饭上，边缘微焦；青菜翠绿。和过去十年的每一天一模一样。",
+      "characters": [
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "十年如一日，三千六百五十天浓缩进一个盒子"
+    },
+    {
+      "shotId": "s11",
+      "shotNumber": 11,
+      "sceneNumber": 2,
+      "durationSec": 7,
+      "cameraDirection": "medium close-up, static, long take",
+      "description": "中近景。老周看着便当，手指开始颤抖，先是轻微抖动然后整个手控制不住。眼眶泛红但没流眼泪。没有台词没有配乐，长时间的沉默。",
+      "characters": [
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "无声的崩溃，石头终于裂开了缝"
+    },
+    {
+      "shotId": "s12",
+      "shotNumber": 12,
+      "sceneNumber": 2,
+      "durationSec": 5,
+      "cameraDirection": "medium shot, quiet observer",
+      "description": "中景。小陈站在一旁，推了推眼镜，悄悄退后一步，把这一刻留给老周。夕阳在他身后，把他的影子拉得很长。",
+      "characters": [
+        "xiao_chen",
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": true,
+      "emotion": "沉默的见证"
+    },
+    {
+      "shotId": "s13",
+      "shotNumber": 13,
+      "sceneNumber": 3,
+      "durationSec": 6,
+      "cameraDirection": "wide shot, top-down work light, night atmosphere",
+      "description": "夜晚。工地照明灯在头顶嗡嗡作响，冷白灯光。林姐在收摊，推车上东西撤了大半，不锈钢菜盆整齐码进纸箱。泡沫饭盒散落在地上。气氛安静，只有远处偶尔传来夜班工人的声音。",
+      "characters": [
+        "lin_jie"
+      ],
+      "isFirstFrame": true,
+      "isLastFrame": false,
+      "emotion": "收摊，一个时代的结束"
+    },
+    {
+      "shotId": "s14",
+      "shotNumber": 14,
+      "sceneNumber": 3,
+      "durationSec": 5,
+      "cameraDirection": "medium shot, follow tracking",
+      "description": "中景。老周端着洗干净的便当盒走过来。镜头跟他移动，高大的身材在冷白灯光下显得笨拙。停在摊位前。便当盒边缘有几道旧划痕，洗不掉了。",
+      "characters": [
+        "lao_zhou",
+        "lin_jie"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "他来了，但不是来买便当"
+    },
+    {
+      "shotId": "s15",
+      "shotNumber": 15,
+      "sceneNumber": 3,
+      "durationSec": 5,
+      "cameraDirection": "close two-shot, tension in hands",
+      "description": "近景。老周把便当盒放在摊位上，手指停留在盒盖上。明天真不来了？声音很轻。林姐低头装箱，没看他。",
+      "characters": [
+        "lao_zhou",
+        "lin_jie"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "笨拙的试探，想问又不敢"
+    },
+    {
+      "shotId": "s16",
+      "shotNumber": 16,
+      "sceneNumber": 3,
+      "durationSec": 4,
+      "cameraDirection": "extreme close-up, eyes",
+      "description": "特写。那以后谁给我做饭？老周的眼睛，眼神直直看着林姐，在冷白灯光下显得很深。他问得看似随意，手却不自觉握紧了。",
+      "characters": [
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "十年的勇气，终于问出口"
+    },
+    {
+      "shotId": "s17",
+      "shotNumber": 17,
+      "sceneNumber": 3,
+      "durationSec": 4,
+      "cameraDirection": "close-up, interrupted action, micro-expression",
+      "description": "近景。林姐下意识抬头，嘴唇微启，你老婆不是。话说到一半停住。她看到了老周的表情。手停在半空，碗没放进箱子。",
+      "characters": [
+        "lin_jie"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "说漏嘴了，她一直知道的"
+    },
+    {
+      "shotId": "s18",
+      "shotNumber": 18,
+      "sceneNumber": 3,
+      "durationSec": 5,
+      "cameraDirection": "medium close-up, slight camera drift",
+      "description": "中近景。走了八年了。老周打断她，声音沉下去，像石头落进井里。他别过头，肩膀微微缩了一下。",
+      "characters": [
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "承认，比问更需要勇气"
+    },
+    {
+      "shotId": "s19",
+      "shotNumber": 19,
+      "sceneNumber": 3,
+      "durationSec": 4,
+      "cameraDirection": "close-up, emotional release",
+      "description": "近景。林姐低声说出：我知道。三个字。垂下眼帘，手指微微发抖。这三个字轻得像叹息。但说出口的瞬间，她整张脸的表情都松了下来，十年的秘密终于不用再藏了。",
+      "characters": [
+        "lin_jie"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "秘密落地，比她想象中更轻"
+    },
+    {
+      "shotId": "s20",
+      "shotNumber": 20,
+      "sceneNumber": 3,
+      "durationSec": 5,
+      "cameraDirection": "medium shot, zipper sound focus, pause",
+      "description": "中景。林姐把最后一个碗装进箱子，拉上拉链。拉链声在空旷夜色里格外清脆。她站了三秒没动。然后抬起头看老周。",
+      "characters": [
+        "lin_jie",
+        "lao_zhou"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "一个句号，或者是新的开始"
+    },
+    {
+      "shotId": "s21",
+      "shotNumber": 21,
+      "sceneNumber": 3,
+      "durationSec": 5,
+      "cameraDirection": "over-the-shoulder, eye contact, warm close",
+      "description": "过肩镜头，老周视角。林姐抬头看他，嘴角微微动了一下，眼眶里有一点光。你明天想吃啥？她没有说明天还在，但她问了。",
+      "characters": [
+        "lin_jie"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": false,
+      "emotion": "比\"我爱你\"重一万倍的三个字"
+    },
+    {
+      "shotId": "s22",
+      "shotNumber": 22,
+      "sceneNumber": 3,
+      "durationSec": 7,
+      "cameraDirection": "wide shot, night silhouettes against city lights, slow zoom out",
+      "description": "广角。夜色中便当摊前的两个身影，老周高大的身形和林姐瘦小的轮廓并肩站着。远处是工地塔吊和城市万家灯火。慢拉远，留白。",
+      "characters": [
+        "lao_zhou",
+        "lin_jie"
+      ],
+      "isFirstFrame": false,
+      "isLastFrame": true,
+      "emotion": "明天，一切都重新开始了"
+    }
+  ]
+}

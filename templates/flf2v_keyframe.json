@@ -1,0 +1,147 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan"
+    }
+  },
+  "lora": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": ["1", 0],
+      "lora_name": "Wan_2_2_I2V_A14B_HIGH_lightx2v_4step_lora_v1030_rank_64_bf16.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "shift": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": ["lora", 0],
+      "shift": 5.0
+    }
+  },
+  "cache": {
+    "class_type": "EasyCache",
+    "inputs": {
+      "model": ["shift", 0],
+      "threshold": 0.2,
+      "start_percent": 0.15,
+      "end_percent": 0.95,
+      "reuse_threshold": 0.1,
+      "verbose": false
+    }
+  },
+  "6a": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": ["4", 0]
+    }
+  },
+  "6b": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "静态, 细节模糊不清, 最差质量, 低质量, 丑陋, 多余手指, 畸形的肢体, 字幕, 水印",
+      "clip": ["4", 0]
+    }
+  },
+  "7": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "start.png"
+    }
+  },
+  "8": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "end.png"
+    }
+  },
+  "9": {
+    "class_type": "CLIPVisionLoader",
+    "inputs": {
+      "clip_name": "clip_vision_h.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "CLIPVisionEncode",
+    "inputs": {
+      "clip_vision": ["9", 0],
+      "image": ["7", 0],
+      "crop": "center"
+    }
+  },
+  "11": {
+    "class_type": "CLIPVisionEncode",
+    "inputs": {
+      "clip_vision": ["9", 0],
+      "image": ["8", 0],
+      "crop": "center"
+    }
+  },
+  "12": {
+    "class_type": "WanFirstLastFrameToVideo",
+    "inputs": {
+      "positive": ["6a", 0],
+      "negative": ["6b", 0],
+      "vae": ["3", 0],
+      "clip_vision_start_image": ["10", 0],
+      "clip_vision_end_image": ["11", 0],
+      "start_image": ["7", 0],
+      "end_image": ["8", 0],
+      "width": 1024,
+      "height": 576,
+      "length": 25,
+      "batch_size": 1
+    }
+  },
+  "13": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["cache", 0],
+      "positive": ["12", 0],
+      "negative": ["12", 1],
+      "latent_image": ["12", 2],
+      "seed": 42,
+      "steps": 4,
+      "cfg": 1.0,
+      "sampler_name": "uni_pc",
+      "scheduler": "simple",
+      "denoise": 1.0
+    }
+  },
+  "15": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "vae": ["3", 0],
+      "samples": ["13", 0]
+    }
+  },
+  "16": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": ["15", 0],
+      "frame_rate": 25,
+      "loop_count": 0,
+      "filename_prefix": "aicf_flf2v",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "save_output": true,
+      "pingpong": false
+    }
+  }
+}

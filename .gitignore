@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+*.egg-info/
+
+# Generated assets (large files)
+projects/*/s3_character_refs/*.png
+projects/*/s5_frames/*.png
+projects/*/s6_videos/
+projects/*/s7_assembled/
+projects/*/s8_subtitled/
+projects/*/s9_final/
+projects/*/assets.json
+projects/*/state.json
+
+# Temp experiments
+projects/*/tmp/
+tmp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

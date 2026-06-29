@@ -1,0 +1,129 @@
+{
+  "12": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen_image_edit_2511_fp8mixed.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "61": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image"
+    }
+  },
+  "10": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "41": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "reference.png"
+    }
+  },
+  "75": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "41",
+        0
+      ],
+      "vae": [
+        "10",
+        0
+      ]
+    }
+  },
+  "68": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "61",
+        0
+      ],
+      "prompt": "test prompt",
+      "vae": [
+        "10",
+        0
+      ],
+      "image1": [
+        "41",
+        0
+      ]
+    }
+  },
+  "69": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "61",
+        0
+      ],
+      "prompt": "low quality, worst quality, bad anatomy, bad hands, missing fingers, extra fingers, fused fingers, ugly, deformed, blurry, watermark, text, signature, cropped, out of frame, multiple characters, group, crowd"
+    }
+  },
+  "67": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "12",
+        0
+      ],
+      "shift": 3.1
+    }
+  },
+  "65": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 2394123869,
+      "steps": 20,
+      "cfg": 7.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": [
+        "67",
+        0
+      ],
+      "positive": [
+        "68",
+        0
+      ],
+      "negative": [
+        "69",
+        0
+      ],
+      "latent_image": [
+        "75",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "65",
+        0
+      ],
+      "vae": [
+        "10",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "aicf_frame",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  }
+}
