@@ -1,308 +1,43 @@
 {
   "title": "最后的便当",
   "aspectRatio": "16:9",
-  "totalShots": 12,
+  "totalShots": 16,
   "scenes": [
     {
       "sceneNumber": 1,
-      "setting": "工地门口——日",
-      "mood": "平常却暗藏蹊跷",
+      "setting": "工地门口·白天",
+      "mood": "日常中的冷漠与隐忍",
       "shots": [
-        {
-          "shotNumber": 1,
-          "prompt": "A middle-aged man Lao Zhou (花白寸头，深麦肤色) wearing rough work clothes walking towards a street food stall, construction site entrance in daylight, dusty environment, realistic film style.",
-          "motionScript": "老周双脚交替迈出，脚步沉重踏在泥地上，扬起细微尘土。他微微低头，目光落在前方不远处的便当摊上，右手习惯性地微蜷着像握着工具。镜头缓慢向前推进，穿过飘浮的灰尘粒子。他粗糙的工装布料随步伐轻微摆动，受重力自然下垂。",
-          "videoScript": "老周脚步沉重地走向便当摊，右手微蜷，微风吹起地面的尘土，镜头缓缓推进。",
-          "cameraDirection": "slow_push_in",
-          "compositionGuide": "leading_lines",
-          "focalPoint": "老周的脸部和微蜷的右手",
-          "depthOfField": "medium",
-          "transitionIn": "fade_in",
-          "transitionOut": "cut",
-          "duration": 4.0,
-          "characters": [
-            "老周"
-          ],
-          "dialogues": [],
-          "soundDesign": "工地远处的敲击声，沉重的脚步声，风卷尘土的沙沙声",
-          "musicCue": "平淡略带生活质感的吉他拨弦"
-        },
-        {
-          "shotNumber": 2,
-          "prompt": "A middle-aged woman Lin Jie (栗棕发髻，枣红围裙) cleaning up a food stall, only one lunch box left on the corner of the table, realistic film style.",
-          "motionScript": "林姐双手麻利地将零散的物件归拢，手指翻飞间将抹布叠好。她眼神偶尔放空一瞬，又迅速聚焦在手头的活计上。镜头保持静止，背景中微尘在阳光里轻舞。她枣红色的围裙随着身体轻微的转动而摆动，受惯性微微贴向腿部。",
-          "videoScript": "林姐动作麻利地收拾摊位，眼神偶尔放空，枣红围裙随身体转动摆动。",
-          "cameraDirection": "static",
-          "compositionGuide": "rule_of_thirds",
-          "focalPoint": "角落的便当盒和林姐的手",
-          "depthOfField": "medium",
-          "transitionIn": "cut",
-          "transitionOut": "cut",
-          "duration": 4.0,
-          "characters": [
-            "林姐"
-          ],
-          "dialogues": [],
-          "soundDesign": "塑料袋摩擦声，碗筷轻碰声",
-          "musicCue": "吉他拨弦继续"
-        },
-        {
-          "shotNumber": 3,
-          "prompt": "Over shoulder shot of Lao Zhou (花白寸头，深麦肤色) looking at the last lunch box, Lin Jie (栗棕发髻，枣红围裙) standing behind the stall with hands folded, realistic film style.",
-          "motionScript": "林姐头也不抬，双手习惯性地交叠在围裙前，语气平淡地丢出一句，尾音不自觉放轻变柔。老周站在摊位前，双脚与肩同宽，右手微蜷，目光落在角落那个孤零零的便当盒上。镜头微微推近，聚焦在两人之间的空隙与那个便当盒上。微风拂过，林姐鬓角的碎发轻轻飘动。",
-          "videoScript": "林姐双手交叠在围裙前冷冷说话，老周站在摊前看着便当盒，镜头缓缓推近。",
-          "cameraDirection": "slow_push_in",
-          "compositionGuide": "over_shoulder",
-          "focalPoint": "角落的便当盒",
-          "depthOfField": "shallow",
-          "transitionIn": "cut",
-          "transitionOut": "dissolve",
-          "duration": 5.0,
-          "characters": [
-            "老周",
-            "林姐"
-          ],
-          "dialogues": [
-            {
-              "character": "林姐",
-              "text": "那盒不卖。别人订的。",
-              "startRatio": 0.1,
-              "endRatio": 0.5
-            }
-          ],
-          "soundDesign": "林姐平淡的声音，远处工地轰鸣",
-          "musicCue": "吉他拨弦略显停顿"
-        }
+        {"shotNumber":1,"prompt":"Wide shot of a dusty construction site entrance under harsh midday sunlight, concrete mixer and steel bars in background, heat haze rising from ground, a small folding table food stall near the gate with steam dissipated, one boxed bento wrapped in plastic bag sits alone at the edge of the table, realistic style, muted earth tones","motionScript":"[0-3s] 远景，工地入口铁门半开，尘土在日光下翻滚，远处塔吊静止，热浪扭曲地平线。[3-6s] 镜头缓慢推进，摊位渐大，铁锅已空，角落那盒便当在塑料袋里静静搁着，微风吹动袋角。","videoScript":"正午工地入口，尘土飞扬，阳光刺眼。铁门半开，远处塔吊静止。便当摊已收得差不多，铁锅空了，蒸汽散尽。角落折叠桌边，一盒用塑料袋包着的便当静静搁着，微风吹动袋角。","cameraDirection":"slow_push_in","compositionGuide":"leading_lines","focalPoint":"角落那盒包着塑料袋的便当","depthOfField":"deep","transitionIn":"fade_in","transitionOut":"cut","duration":6.0,"characters":[],"dialogues":[],"soundDesign":"远处打桩机闷响、风吹铁皮嗡鸣、稀疏人声","musicCue":"无音乐，环境音为主"},
+        {"shotNumber":2,"prompt":"Medium shot of a weathered middle-aged Chinese male worker, graying buzz cut, faded blue work clothes with frayed cuffs, walking with hunched shoulders and bowed head toward a food stall at a construction site, dusty ground, harsh sunlight, realistic style","motionScript":"[0-3s] 老周从画面左侧入镜，低头弓肩，步子沉重缓慢，旧工装袖口磨出线头晃动。[3-5s] 他走向摊位方向，目光始终不抬，左手无名指旧戒痕在侧光下一闪。","videoScript":"老周穿着洗白深蓝工装，低头弓肩走向便当摊，步子沉重。花白寸头在阳光下灰白混杂，袖口磨出的线头随步子晃动。他不看人，只朝摊位方向走。","cameraDirection":"dolly_right","compositionGuide":"rule_of_thirds","focalPoint":"老周低垂的面部和微驼的肩背","depthOfField":"medium","transitionIn":"cut","transitionOut":"cut","duration":5.0,"characters":["老周"],"dialogues":[],"soundDesign":"工靴踩碎石声、远处机械轰鸣","musicCue":"无音乐"},
+        {"shotNumber":3,"prompt":"Medium shot of a pragmatic middle-aged Chinese woman, neat short hair with a worn hair clip, dark red cotton apron with oil stains over a dark green sweater, wiping a food stall table with a cloth, expression blank and avoidant, construction site background, realistic style","motionScript":"[0-3s] 林姐站在摊后，面无表情擦台面，手上的布来回用力，围裙油渍在侧光下泛暗。[3-5s] 她余光感觉到有人走近，手指顿了一下，继续擦，目光始终不抬。","videoScript":"林姐站在摊后，暗红围裙沾着油渍，深绿旧毛衣袖口卷起。她面无表情地擦拭台面，手劲干脆，布来回蹭。余光感觉到有人，手指微顿，但目光始终避开，继续擦。","cameraDirection":"static","compositionGuide":"rule_of_thirds","focalPoint":"林姐的手和擦台面的动作","depthOfField":"medium","transitionIn":"cut","transitionOut":"cut","duration":5.0,"characters":["林姐"],"dialogues":[],"soundDesign":"抹布擦金属台面的摩擦声","musicCue":"无音乐"},
+        {"shotNumber":4,"prompt":"Close-up of a boxed bento wrapped in a clear plastic bag sitting at the edge of a folding table, sunlight hitting the plastic creating a small glare, construction site dust in the air, realistic style","motionScript":"[0-3s] 特写那盒便当，塑料袋裹得整齐，阳光打在袋面折射一小片白光，尘土在光线中浮游。[3-4s] 老周的手从画面边缘伸入，指尖刚触到塑料袋。","videoScript":"折叠桌边，那盒便当用塑料袋包着，阳光折射在袋面。尘土浮游。老周的手伸过来，指尖刚碰到袋子。","cameraDirection":"static","compositionGuide":"close_up","focalPoint":"塑料袋裹着的便当盒","depthOfField":"shallow","transitionIn":"cut","transitionOut":"cut","duration":4.0,"characters":[],"dialogues":[],"soundDesign":"风声微弱、手指触塑料袋的窸窣","musicCue":"无音乐"},
+        {"shotNumber":5,"prompt":"Over-shoulder shot from behind the male worker looking at the woman at the food stall, she stops wiping and looks to the side avoiding eye contact, her mouth slightly open about to speak, warm harsh sunlight, realistic style","motionScript":"[0-3s] 过老周肩看林姐，她停下手，目光偏向一侧不看他，嘴唇微动。[3-6s] 她开口说话，语速干脆，说完继续擦台面，手没有停顿，头始终偏向另一侧。","videoScript":"老周站在摊前，隔着台面看林姐。林姐停下手，目光避开他，偏向一侧，嘴唇动了。她语气冷淡，说完又低头擦台面，始终没看他。","cameraDirection":"static","compositionGuide":"over_shoulder","focalPoint":"林姐避开目光的脸","depthOfField":"medium","transitionIn":"cut","transitionOut":"cut","duration":6.0,"characters":["老周","林姐"],"dialogues":[{"character":"林姐","text":"那盒不卖。别人订的。","startRatio":0.25,"endRatio":0.6}],"soundDesign":"林姐干脆的语声、抹布停顿又继续的摩擦","musicCue":"无音乐"},
+        {"shotNumber":6,"prompt":"Close-up of the male worker's hand pulling back from the bento box, fingers slightly curled, old ring mark visible on left ring finger, dusty folding table surface, realistic style","motionScript":"[0-3s] 老周的手从便当盒上缓缓收回，五指微蜷，左手无名指旧戒痕在强光下清晰。[3-5s] 手垂回身侧，指尖攥了一下又松开，他转身，肩背更驼了几分。","videoScript":"老周的手从便当盒上缩回，五指微蜷，无名指上旧戒痕在日光下一闪。手垂回身侧，指尖攥了一下又松开，他慢慢转身走了。","cameraDirection":"static","compositionGuide":"close_up","focalPoint":"老周收回的手和旧戒痕","depthOfField":"shallow","transitionIn":"cut","transitionOut":"dissolve","duration":5.0,"characters":["老周"],"dialogues":[],"soundDesign":"工靴转身踩碎石、远处机械声渐弱","musicCue":"极轻的弦乐单音隐入"}
       ]
     },
     {
       "sceneNumber": 2,
-      "setting": "工地角落——黄昏",
-      "mood": "温暖中带着离别前的感伤",
+      "setting": "工地角落·黄昏",
+      "mood": "沉默中的暖意与震颤",
       "shots": [
-        {
-          "shotNumber": 4,
-          "prompt": "Lao Zhou (花白寸头，深麦肤色) sitting on a concrete pipe eating a dry steamed bun, sunset orange light, construction site background, realistic film style.",
-          "motionScript": "老周坐在水泥管上，双脚踩地，脊背微弓，低头啃着干硬的馒头。夕阳的橘红光线将他的影子拉长。镜头缓慢横移，扫过粗糙的水泥管表面。他咀嚼的动作沉稳缓慢，工装衣角在晚风中微微翻动。",
-          "videoScript": "老周坐在水泥管上低头啃馒头，夕阳拉长了他的影子，镜头缓缓横移。",
-          "cameraDirection": "dolly_right",
-          "compositionGuide": "diagonal",
-          "focalPoint": "老周低头吃东西的脸",
-          "depthOfField": "medium",
-          "transitionIn": "dissolve",
-          "transitionOut": "cut",
-          "duration": 4.0,
-          "characters": [
-            "老周"
-          ],
-          "dialogues": [],
-          "soundDesign": "干硬馒头咀嚼声，晚风呼啸声",
-          "musicCue": "缓慢忧伤的大提琴长音"
-        },
-        {
-          "shotNumber": 5,
-          "prompt": "A young man Xiao Chen (荧光背心，晒黑小伙) walking towards Lao Zhou holding a lunch box, sunset light, realistic film style.",
-          "motionScript": "小陈快步走来，脚步轻快带风，右手抬起挠了挠后脑勺，左手将便当盒递向老周。老周抬起头，放下馒头，接过便当。镜头跟随小陈的动作微微下摇。小陈荧光背心的布料因步伐幅度而拉伸回弹，夕阳在他身上投下跳跃的光斑。",
-          "videoScript": "小陈快步走来挠着后脑勺，递给老周一个便当盒，老周抬头接过。",
-          "cameraDirection": "tilt_down",
-          "compositionGuide": "rule_of_thirds",
-          "focalPoint": "小陈递出的便当盒",
-          "depthOfField": "medium",
-          "transitionIn": "cut",
-          "transitionOut": "cut",
-          "duration": 5.0,
-          "characters": [
-            "小陈",
-            "老周"
-          ],
-          "dialogues": [
-            {
-              "character": "小陈",
-              "text": "林姐让我带来的……她说，今天那盒本来就是留给你的。还有，明天她就不来了。她要回老家了。",
-              "startRatio": 0.15,
-              "endRatio": 0.85
-            }
-          ],
-          "soundDesign": "轻快的脚步声，衣服摩擦声",
-          "musicCue": "大提琴旋律变得柔和"
-        },
-        {
-          "shotNumber": 6,
-          "prompt": "Close up of Lao Zhou's (花白寸头，深麦肤色) rough hands opening the lunch box, revealing braised pork, fried egg and vegetables, sunset light, realistic film style.",
-          "motionScript": "老周粗糙的双手缓缓揭开便当盒盖，红烧肉和煎蛋的色泽在夕阳下显得格外醒目。他的手指突然开始不受控制地微微颤抖，便当盒盖在手中发出轻微的碰撞声。镜头缓慢推近至手部特写。夕阳的暖光在颤抖的指尖跳跃，布满老茧的手背肌肉紧绷。",
-          "videoScript": "老周粗糙的双手打开便当盒，看到丰盛的饭菜，手指开始不受控制地颤抖。",
-          "cameraDirection": "push_in",
-          "compositionGuide": "close_up",
-          "focalPoint": "颤抖的双手和便当里的饭菜",
-          "depthOfField": "shallow",
-          "transitionIn": "cut",
-          "transitionOut": "dissolve",
-          "duration": 5.0,
-          "characters": [
-            "老周"
-          ],
-          "dialogues": [],
-          "soundDesign": "塑料盒盖开启声，轻微的颤抖碰撞声",
-          "musicCue": "大提琴音符微微上扬又落下"
-        }
+        {"shotNumber":7,"prompt":"Wide shot of a construction site at dusk, long orange shadows stretching across gravel ground, concrete pipes stacked in corner, a lone male worker sitting on a concrete pipe eating a steamed bun, warm orange and purple sky, realistic style","motionScript":"[0-3s] 远景，夕阳把工地染成暗橘色，碎石地上影子拉得极长，水泥管堆在角落。[3-6s] 老周独坐在一根水泥管上，背对镜头，手里掰着白馒头，肩膀微缩，影子孤零零铺在碎石上。","videoScript":"黄昏的工地，夕阳染出一片暗橘，长长的影子拖在碎石地上。老周独自坐在角落的水泥管上，手里掰着白馒头，一口一口慢慢啃，肩膀微缩，影子孤零零地铺开。","cameraDirection":"static","compositionGuide":"rule_of_thirds","focalPoint":"老周独坐水泥管的剪影","depthOfField":"deep","transitionIn":"dissolve","transitionOut":"cut","duration":6.0,"characters":["老周"],"dialogues":[],"soundDesign":"远处工地收工哨声、风过钢管的呜咽","musicCue":"低沉大提琴单音缓慢铺入"},
+        {"shotNumber":8,"prompt":"Medium close-up of a weathered middle-aged Chinese man sitting on a concrete pipe, biting into a white steamed bun, gripping it tightly with both hands, face lit by warm orange sunset, expression weary and quiet, realistic style","motionScript":"[0-3s] 老周掰下一块馒头放入口中，嚼得慢，攥馒头的手指极紧，指节发白。[3-6s] 夕阳从侧面打在他脸上，皱纹里嵌着灰，目光落在手里的馒头上，嘴角没有表情。","videoScript":"老周坐在水泥管上，手里攥着白馒头，攥得极紧，指节发白。他掰下一块慢慢嚼，目光落在馒头表面，夕阳从侧面打来，皱纹里嵌着灰，脸上一片沉默。","cameraDirection":"slow_push_in","compositionGuide":"close_up","focalPoint":"老周紧攥馒头的手","depthOfField":"shallow","transitionIn":"cut","transitionOut":"cut","duration":6.0,"characters":["老周"],"dialogues":[],"soundDesign":"咀嚼声、远处脚步声渐近","musicCue":"大提琴持续低音"},
+        {"shotNumber":9,"prompt":"Medium shot of a young Chinese man in a light blue shirt with rolled-up sleeves carrying a soft backpack and holding a boxed bento, walking across a construction site at dusk, orange sunset lighting, realistic style","motionScript":"[0-3s] 小陈从画面右侧入镜，浅蓝衬衫袖口卷起，软双肩包在背后轻晃，右手提着那盒便当。[3-5s] 他走向老周，步子比老周轻快，便当盒在手里轻轻晃了一下。","videoScript":"小陈穿着浅蓝衬衫、袖口卷起，软双肩包在背后轻晃。他提着那盒便当走过来，步子轻快，便当盒在手里微微晃动。","cameraDirection":"dolly_left","compositionGuide":"rule_of_thirds","focalPoint":"小陈手中的便当盒","depthOfField":"medium","transitionIn":"cut","transitionOut":"cut","duration":5.0,"characters":["小陈"],"dialogues":[],"soundDesign":"轻快的皮鞋踩碎石声","musicCue":"大提琴低音持续"},
+        {"shotNumber":10,"prompt":"Two-shot of a young white-collar man standing in front of a seated older worker at a construction site, the young man extending a boxed bento toward the older man, orange sunset backlight, warm dusty atmosphere, realistic style","motionScript":"[0-3s] 两人同框，小陈站在老周面前，弯腰递过便当盒，老周抬头看他。[3-6s] 小陈嘴唇微动开始说话，语气轻缓，老周伸手接过便当，手有点抖。","videoScript":"小陈站在老周面前，弯腰递过便当。老周抬头看他，伸手接过来，手有点抖。小陈开始说话，语气轻缓。","cameraDirection":"static","compositionGuide":"two_shot","focalPoint":"两人之间递便当的动作","depthOfField":"medium","transitionIn":"cut","transitionOut":"cut","duration":6.0,"characters":["老周","小陈"],"dialogues":[{"character":"小陈","text":"林姐让我带来的……她说，今天那盒本来就是留给你的。还有，明天她就不来了。她要回老家了。","startRatio":0.2,"endRatio":0.75}],"soundDesign":"便当盒交接的轻微碰撞声","musicCue":"大提琴音渐强"},
+        {"shotNumber":11,"prompt":"Close-up of a bento box opened to reveal red braised pork, golden fried egg, and green vegetables, warm sunset light, the lid held open by a trembling hand with rough calloused fingers, realistic style","motionScript":"[0-3s] 特写打开的便当盒，红烧肉油亮、煎蛋金黄、青菜翠绿，夕阳暖光打在饭菜上。[3-5s] 老周粗糙的手颤抖着扶住盒盖，指节粗大，指甲缝里嵌着灰。","videoScript":"便当盒打开了——红烧肉油亮，煎蛋金黄，青菜翠绿，和十年来的每一天一样。老周粗糙的手颤抖着扶住盒盖，指节粗大，指甲缝里有灰。","cameraDirection":"slow_push_in","compositionGuide":"close_up","focalPoint":"便当里的红烧肉和颤抖的手","depthOfField":"shallow","transitionIn":"cut","transitionOut":"cut","duration":5.0,"characters":[],"dialogues":[],"soundDesign":"便当盒盖打开的塑料咔哒声","musicCue":"大提琴升至中音区"},
+        {"shotNumber":12,"prompt":"Extreme close-up of a weathered middle-aged man's trembling hand, rough calloused fingers slightly shaking, holding the edge of a bento box, sunset orange light, realistic style","motionScript":"[0-3s] 极近特写老周的手，指节粗大变形，虎口有老茧，无名指旧戒痕清晰。[3-4s] 手在微微颤抖，幅度从指尖传到掌根，夕阳从侧面打来，光影在粗糙皮肤上流动。","videoScript":"老周的手在抖。粗糙的指节微微颤抖，虎口老茧厚实，无名指上旧戒痕清晰。夕阳从侧面打来，颤抖的影子投在便当盒上。","cameraDirection":"static","compositionGuide":"close_up","focalPoint":"颤抖的手指","depthOfField":"shallow","transitionIn":"cut","transitionOut":"dissolve","duration":4.0,"characters":["老周"],"dialogues":[],"soundDesign":"手颤抖时便当盒轻微震动声","musicCue":"弦乐轻轻颤音"}
       ]
     },
     {
       "sceneNumber": 3,
-      "setting": "便当摊前——夜",
-      "mood": "含蓄、告别中的不舍与温情",
+      "setting": "便当摊前·夜晚",
+      "mood": "克制中的不舍与微光",
       "shots": [
-        {
-          "shotNumber": 7,
-          "prompt": "Lin Jie (栗棕发髻，枣红围裙) packing the last bowl into a box and zipping it up, dim yellow light at night, Lao Zhou (花白寸头，深麦肤色) standing nearby holding a clean empty lunch box, realistic film style.",
-          "motionScript": "林姐弯着腰，双手麻利地将最后一个碗放进纸箱，拉上拉链，动作干脆。老周站在她身侧两步远，双脚与肩同宽，右手拿着洗干净的空便当盒，左手微微蜷缩。镜头从侧面缓慢推近，昏黄的灯光在两人身上投下温暖的轮廓。拉链咬合的金属微光在夜色中闪烁，林姐的围裙随着弯腰的动作垂下。",
-          "videoScript": "林姐麻利地装箱拉拉链，老周站在一旁拿着空便当盒，镜头缓缓推近。",
-          "cameraDirection": "slow_push_in",
-          "compositionGuide": "rule_of_thirds",
-          "focalPoint": "林姐拉拉链的手和老周拿着的空盒",
-          "depthOfField": "medium",
-          "transitionIn": "dissolve",
-          "transitionOut": "cut",
-          "duration": 5.0,
-          "characters": [
-            "林姐",
-            "老周"
-          ],
-          "dialogues": [],
-          "soundDesign": "拉链拉合声，夜虫鸣叫，远处偶尔的车辆驶过声",
-          "musicCue": "安静温暖的钢琴单音"
-        },
-        {
-          "shotNumber": 8,
-          "prompt": "Close up of Lao Zhou (花白寸头，深麦肤色) looking down with a low voice, holding an empty lunch box, dim yellow light, realistic film style.",
-          "motionScript": "老周微微低头，目光看着地面，喉结滚动，声音低沉地开口。他的右手紧紧攥着空便当盒，手指因为用力而微微泛白，带着一丝不受控制的颤抖。镜头保持静止，昏暗的灯光映照出他脸上深深的皱纹。夜风吹过，他花白的寸发纹丝不动，但衣领微微拂动。",
-          "videoScript": "老周低头看着地面，声音低沉地询问，右手紧紧攥着便当盒微微颤抖。",
-          "cameraDirection": "static",
-          "compositionGuide": "close_up",
-          "focalPoint": "老周黯淡的眼神和颤抖的手",
-          "depthOfField": "shallow",
-          "transitionIn": "cut",
-          "transitionOut": "cut",
-          "duration": 4.0,
-          "characters": [
-            "老周"
-          ],
-          "dialogues": [
-            {
-              "character": "老周",
-              "text": "那以后谁给我做饭？",
-              "startRatio": 0.2,
-              "endRatio": 0.7
-            }
-          ],
-          "soundDesign": "低沉的男声，夜风轻微拂过",
-          "musicCue": "钢琴单音延续"
-        },
-        {
-          "shotNumber": 9,
-          "prompt": "Close up of Lin Jie (栗棕发髻，枣红围裙) responding instinctively with hands folded in front of apron, dim yellow light, realistic film style.",
-          "motionScript": "林姐下意识地快速接话，双手交叠在围裙前，但说到一半突然停住，眼神放空了一瞬，意识到不妥后声音渐弱。她的身体微微僵硬，下颌线条收紧。镜头微微推近，捕捉她眼神的闪躲与柔和。她交叠的双手不自觉地捏紧了围裙的布料。",
-          "videoScript": "林姐下意识接话，说到一半停住，双手捏紧围裙，眼神放空声音渐弱。",
-          "cameraDirection": "slow_push_in",
-          "compositionGuide": "close_up",
-          "focalPoint": "林姐放空的眼神和微动的嘴唇",
-          "depthOfField": "shallow",
-          "transitionIn": "cut",
-          "transitionOut": "cut",
-          "duration": 4.0,
-          "characters": [
-            "林姐"
-          ],
-          "dialogues": [
-            {
-              "character": "林姐",
-              "text": "你老婆不是——",
-              "startRatio": 0.1,
-              "endRatio": 0.6
-            }
-          ],
-          "soundDesign": "林姐渐弱的声音，围裙布料摩擦声",
-          "musicCue": "钢琴声暂歇"
-        },
-        {
-          "shotNumber": 10,
-          "prompt": "Close up of Lao Zhou (花白寸头，深麦肤色) looking up with calm and dim eyes, dim yellow light, realistic film style.",
-          "motionScript": "老周抬起头，眼神黯淡无光，平静地说出那句话。他的嘴唇微微抿紧，右手拿着的便当盒缓缓垂落至腿侧，手指的颤抖从指尖蔓延到手腕。镜头极缓慢地推近，聚焦在他布满沧桑的眼角。昏黄的灯光在他脸上投下浓重的阴影，呼吸的起伏微乎其微。",
-          "videoScript": "老周抬头平静地回答，眼神黯淡，拿着便当盒的手缓缓垂落并颤抖。",
-          "cameraDirection": "slow_push_in",
-          "compositionGuide": "close_up",
-          "focalPoint": "老周黯淡的眼神",
-          "depthOfField": "shallow",
-          "transitionIn": "cut",
-          "transitionOut": "cut",
-          "duration": 4.0,
-          "characters": [
-            "老周"
-          ],
-          "dialogues": [
-            {
-              "character": "老周",
-              "text": "走了八年了。",
-              "startRatio": 0.2,
-              "endRatio": 0.6
-            }
-          ],
-          "soundDesign": "平静低沉的男声",
-          "musicCue": "极其轻微的弦乐铺垫"
-        },
-        {
-          "shotNumber": 11,
-          "prompt": "Close up of Lin Jie (栗棕发髻，枣红围裙) looking down with soft eyes, dim yellow light, realistic film style.",
-          "motionScript": "林姐低垂着眼帘，轻声回应，尾音放得极轻极柔。她的双手从围裙前松开，自然垂落在身侧，肩膀微微下沉。镜头保持静止，背景中一两只飞蛾在灯泡旁盘旋。她栗棕色的发髻在暖光下泛着柔和的光泽，围裙的系带静止垂落。",
-          "videoScript": "林姐低垂眼帘轻声回应，双手自然垂落，尾音极轻极柔。",
-          "cameraDirection": "static",
-          "compositionGuide": "close_up",
-          "focalPoint": "林姐低垂的眼睛和柔和的面部线条",
-          "depthOfField": "shallow",
-          "transitionIn": "cut",
-          "transitionOut": "cut",
-          "duration": 3.0,
-          "characters": [
-            "林姐"
-          ],
-          "dialogues": [
-            {
-              "character": "林姐",
-              "text": "我知道。",
-              "startRatio": 0.1,
-              "endRatio": 0.5
-            }
-          ],
-          "soundDesign": "极轻的女声，飞蛾扑翅的微响",
-          "musicCue": "弦乐缓慢流淌"
-        },
-        {
-          "shotNumber": 12,
-          "prompt": "Medium shot of Lin Jie (栗棕发髻，枣红围裙) looking up at Lao Zhou (花白寸头，深麦肤色) with a gentle smile, Lao Zhou standing opposite, dim yellow light, night scene, realistic film style.",
-          "motionScript": "林姐缓缓抬起头，目光直视老周，嘴角扬起一抹温柔的弧度，轻声询问。老周站在对面，身体微微前倾，右手紧紧攥着空便当盒，手部的颤抖在此刻似乎被某种力量安抚，渐渐平息。镜头缓慢拉远，将两人纳入同一个昏黄光圈中。夜风轻拂，林姐围裙的边缘微微扬起，灯光在两人脚下的泥地上投下交叠的影子。",
-          "videoScript": "林姐抬头看向老周温柔微笑着询问，老周手部的颤抖渐渐平息，镜头缓缓拉远。",
-          "cameraDirection": "pull_out",
-          "compositionGuide": "symmetric",
-          "focalPoint": "两人对视的眼神",
-          "depthOfField": "medium",
-          "transitionIn": "cut",
-          "transitionOut": "fade_out",
-          "duration": 6.0,
-          "characters": [
-            "林姐",
-            "老周"
-          ],
-          "dialogues": [
-            {
-              "character": "林姐",
-              "text": "你明天想吃啥？",
-              "startRatio": 0.15,
-              "endRatio": 0.55
-            }
-          ],
-          "soundDesign": "温柔的女声，夜风拂过，灯光微弱嗡嗡声",
-          "musicCue": "弦乐与钢琴交织，温暖而略带感伤地收尾"
-        }
+        {"shotNumber":13,"prompt":"Wide shot of a food stall at night, only a single small light bulb glowing warm yellow, the stall counter cleared, cardboard boxes stacked on a tricycle cart nearby, a male worker standing in front of the stall holding an empty bento box, realistic style","motionScript":"[0-3s] 远景，夜色下的便当摊，只剩一盏小灯泡发出暖黄光圈，摊面已清空，纸箱叠在三轮车旁。[3-6s] 老周站在摊前，手里拿着空饭盒，影子被灯光拉得很长。","videoScript":"夜里的便当摊，只剩一盏小灯泡亮着，暖黄光圈很小。摊面清空了，纸箱叠在三轮车旁。老周站在摊前，拿着空饭盒来还，影子被灯光拉得很长。","cameraDirection":"slow_push_in","compositionGuide":"leading_lines","focalPoint":"灯泡下老周和空摊位","depthOfField":"deep","transitionIn":"dissolve","transitionOut":"cut","duration":6.0,"characters":["老周"],"dialogues":[],"soundDesign":"夜虫鸣叫、远处车声","musicCue":"极轻钢琴单音"},
+        {"shotNumber":14,"prompt":"Two-shot of a middle-aged male worker and a middle-aged woman at a food stall at night, standing close but not touching, the man holding an empty bento box, the woman with her hands on a cardboard box, warm yellow light from a single bulb, realistic style","motionScript":"[0-3s] 两人同框，隔着半步，暖黄灯光映着各自的脸。老周拿着空饭盒，林姐双手搁在纸箱上。[3-6s] 老周嘴唇动了，说出第一句话，声音低哑像开玩笑。","videoScript":"老周和林姐隔着半步站在摊前，灯泡暖黄光映着各自的脸。老周拿着空饭盒，嘴唇动了，声音低哑，像在开玩笑。","cameraDirection":"static","compositionGuide":"two_shot","focalPoint":"两人之间半步的距离","depthOfField":"medium","transitionIn":"cut","transitionOut":"cut","duration":6.0,"characters":["老周","林姐"],"dialogues":[{"character":"老周","text":"那以后谁给我做饭？","startRatio":0.15,"endRatio":0.4},{"character":"林姐","text":"你老婆不是——","startRatio":0.45,"endRatio":0.6}],"soundDesign":"灯光嗡嗡声、纸箱摩擦声","musicCue":"钢琴单音持续"},
+        {"shotNumber":15,"prompt":"Close-up of the male worker's face looking down at the empty bento box, dim warm light, eyes lowered, jaw tight, expression flat but heavy with restrained emotion, realistic style","motionScript":"[0-3s] 特写老周的脸，低头看空饭盒，下颌绷紧，目光落在饭盒上。[3-5s] 他开口，声音很平，说完嘴唇抿了一下，没有抬头。","videoScript":"老周低头看着空饭盒，下颌绷紧，目光落在饭盒上。他开口说了那句话，声音很平，说完抿了一下嘴，没抬头。","cameraDirection":"static","compositionGuide":"close_up","focalPoint":"老周低垂的目光和绷紧的下颌","depthOfField":"shallow","transitionIn":"cut","transitionOut":"cut","duration":5.0,"characters":["老周"],"dialogues":[{"character":"老周","text":"走了八年了。","startRatio":0.3,"endRatio":0.5}],"soundDesign":"呼吸声","musicCue":"钢琴音渐轻"},
+        {"shotNumber":16,"prompt":"Close-up of the woman's face looking up at the man, warm yellow light from a single bulb, eyes soft and slightly red, mouth open about to speak, a moment of vulnerability, cardboard boxes in background, realistic style","motionScript":"[0-3s] 特写林姐的脸，她低声说了三个字，眼眶微红，抬头看向老周。[3-6s] 她把最后一个碗放进纸箱，拉上拉链，动作停了一秒，然后抬头直视老周，说出最后一句话。","videoScript":"林姐低声说了三个字，眼眶微红。她把最后一个碗放进纸箱，拉上拉链，停了一秒，然后抬头直视老周：你明天想吃啥？","cameraDirection":"slow_push_in","compositionGuide":"close_up","focalPoint":"林姐抬头时眼里的一丝柔软","depthOfField":"shallow","transitionIn":"cut","transitionOut":"fade_out","duration":6.0,"characters":["林姐"],"dialogues":[{"character":"林姐","text":"我知道。","startRatio":0.15,"endRatio":0.3},{"character":"林姐","text":"你明天想吃啥？","startRatio":0.7,"endRatio":0.9}],"soundDesign":"纸箱拉链声、碗轻碰声","musicCue":"钢琴音缓缓收束"}
       ]
     }
   ]

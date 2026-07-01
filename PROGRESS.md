@@ -13,7 +13,9 @@
 | 2026-06-28 | D3/D4 决策: LLM 改用 baidu-codingplan，prompt 不需精简 |
 | 2026-06-28 | Phase 1 骨架完成: 3 个 prompt + state manager + prompt runner + SKILL.md |
 | 2026-06-28 夜间 | 全链路跑通: last_bento 端到端 (S1-S8), IPAdapter v3 角色参考图, FLF2V CLIPVision 修复, Qwen3-TTS 集成 |
-| 2026-06-29 凌晨 | 从零重跑: 修复 S5 尾帧缺失, S6 Wan 节点 schema 适配, S7/S8 脚本正式化, D方案(FLF2V 自动分段), S9 TTS-ASR 对齐管线 |
+| 2026-07-01 | S7 xfade offset bug 修复, S6 stdout 缓冲修复, 多角色一致性决策 (TIV), VL 质检生命周期 |
+| 2026-07-02 | qwen-image-edit ReferenceLatent 工作流调通 (v9), SageAttention 兼容性确认, S3 --gen qedit 合入版本 |
+| 2026-07-02 | **工具链统一实施**: S3 Flux Dev 替换, S5 多角色+前帧增强, S4b 独立 stage, shot_split 增强 |
 
 ---
 
@@ -354,4 +356,76 @@
 | Workflow 模板 | ✅ 4 个 JSON + README |
 | 转场效果 | ✅ 7 种 (xfade) + BGM + SRT + drawtext |
 | Composition | ✅ compositionGuide/focalPoint/depthOfField/colorPalette/heightCm |
+
+---
+
+## 工具链统一实施 (2026-07-02)
+
+**决策来源**: `docs/TOOLCHAIN_UNIFICATION_PLAN.md` + Vincent 5项决策确认
+
+### 决策确认
+
+| # | 决策点 | 确认方案 |
+|---|--------|----------|
+| D1 | S3 Flux Dev 分辨率 | 1024×1536 — 与 S3b/S5 对齐 |
+| D2 | Flux Dev 推理步数 | 20步 euler/simple — 速度优先 |
+| D3 | S5 多角色参考图上限 | 3张 — image1=主角色, image2=配角, image3=前帧 |
+| D4 | S5 前帧注入位置 | image3 (首帧生成时) |
+| D5 | S4b 是否独立 stage | 是 — 解耦架构，可独立重跑 |
+
+### Phase 1: S3 Flux Dev 替换 ✅
+
+| 变更 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `templates/flux_dev_t2i.json` | Flux Dev fp8 T2I 工作流 (9节点) |
+| 修改 | `scripts/s3_character_image.py` | 新增 `build_flux_dev_prompt()` + `build_flux_dev_workflow()`; `--gen flux` 为新默认; 保留 `--gen t2i` 向后兼容 |
+| 修改 | `prompts/defaults/character_image.py` | 新增 `build_flux_ref_prompt()` 自然语言单视图 prompt |
+
+架构: UNETLoader(flux1-dev-fp8) + DualCLIPLoader(clip_l+t5xxl) + VAELoader(ae) → KSampler(20步 euler/simple cfg=3.5) → VAEDecode → SaveImage
+
+### Phase 2: S5 多角色+前帧增强 ✅
+
+| 变更 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `templates/qwen_edit_frame_multi.json` | 扩展多参考图工作流 (+2 LoadImage 节点, image2/image3 链接到 TextEncodeQwenImageEditPlus) |
+| 修改 | `scripts/s5_frame_generate.py` | `build_qedit_frame_workflow()` 支持 ref_image2/ref_image3; `generate_frame()` 透传; 主循环多角色 ref 查找 + image3=前帧; S4b prompt 优先 |
+
+关键: 多角色场景 image1=主角色, image2=配角, image3=前帧(D4); 单角色场景自动回退到原模板
+
+### Phase 3: S4 prompt 重写 + S4b 独立 stage ✅
+
+| 变更 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `scripts/s4b_keyframe_assets.py` | 独立 stage，从 s4+s2 生成首尾帧 prompt |
+| 修改 | `prompts/defaults/shot_split.py` | 新增 `SHOT_COUNT_RULES` slot (分镜数量下限/首尾帧规则/prompt字数下限) |
+| 修改 | `core/state_manager.py` | STAGE_ORDER 增加 `s4b_keyframe_assets`; S5 依赖增加 s4b |
+| 修改 | `scripts/s5_frame_generate.py` | S4b prompt 优先: 有 s4b 数据时使用预构建 prompt，否则回退到 on-the-fly 构建 |
+
+S4b 产出: `projects/{project}/s4b_keyframe_assets.json` (每个 shot 的 startFrame/endFrame prompt + characterRefPrompts)
+
+### Phase 4: 全链路验证 ✅
+
+| 验证项 | 结果 |
+|--------|------|
+| flux_dev_t2i.json 结构 | ✅ 9 节点, 所有链接正确 |
+| qwen_edit_frame_multi.json 结构 | ✅ 19 节点, node 42/43 + image2/image3 链接 |
+| build_flux_dev_prompt() 输出 | ✅ 自然语言 381c |
+| build_flux_dev_workflow() 参数 | ✅ steps=20, cfg=3.5, euler/simple, 1024×1536 |
+| build_qedit_frame_workflow() 多参考图 | ✅ 单参考用原模板, 多参考自动切换 |
+| s4b_keyframe_assets.py 干跑 | ✅ 16 shots 正确 |
+| shot_split SHOT_COUNT_RULES | ✅ slot 集成 |
+| state_manager s4b | ✅ 在 STAGE_ORDER/STAGE_LABELS/STAGE_DEPS |
+| 全部 Python 导入 | ✅ 无错误 |
+
+### 工具链统一后的架构
+
+```
+S3  角色ref图:  Flux Dev fp8 (T2I, 1024×1536, 20步 euler/simple)
+S3b 四视角:     qedit ReferenceLatent (1024×1536, 不变)
+S4b 关键帧资产: 独立 stage (首尾帧 prompt 预构建)
+S5  首帧+尾帧:  qedit ReferenceLatent (多角色 image1/2/3 + 前帧连续性)
+S6  视频生成:   Wan2.2 FLF2V (不变)
+```
+
+分辨率全线对齐: 1024×1536，消除 latent 变形。
 | S5/S6 质检 | ✅ continuity_check + video_quality_check 已激活 |

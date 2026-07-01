@@ -47,7 +47,7 @@ AIComicFactory 是两个项目的融合：
 | LLM 引擎 | baidu-codingplan (GPT-4 级) | 百炼/Dify/Coze agent | 本地无百炼 key，baidu-codingplan 等效 | prompt 内容不变 | ✅ 稳定 |
 | 编排层 | OpenClaw Skill + sessions_spawn | 自研 Web UI + API | 不做独立软件 | 调度逻辑内聚在 SKILL.md | ✅ 稳定 |
 | 数据持久化 | 文件系统 JSON | SQLite (Prisma) | 零运维，git 友好 | 无下游依赖 | ✅ 稳定 |
-| 角色参考图 | S3 单视图 + S3b 四视图 (Qwen Edit) | 四视图 T2I (单次生成) | 本地已有 Qwen Edit 2511 | S3/S3b prompt 有差异 | ⚠️ 待验证 |
+| 角色参考图 | S3 t2i + S3b qedit 四视角 (ReferenceLatent) | 四视图 T2I (单次生成) | qedit ReferenceLatent 已验证，产出 1024×1536 清晰多视角 | S3/S3b prompt 有差异 | ✅ 已验证
 | 视频生成 | Wan2.2 FLF2V + Lightx2v 4-step | Seedance 2.0 | WF 已验证，本地模型 | S6 prompt 格式不同 | ✅ 稳定 |
 | TTS | Qwen3-TTS (ComfyUI) | 未明确 | WF 已验证 | S9 链路 | ✅ 稳定 |
 
@@ -98,9 +98,11 @@ AIComicFactory 是两个项目的融合：
 |---|-------|------|------|------|------|
 | 1 | `script_parse` | 原始文本 | OpenClaw LLM (baidu-codingplan) | s1_parsed.json | 剧本→结构化 JSON |
 | 2 | `character_extract` | s1_parsed.json | OpenClaw LLM (baidu-codingplan) | s2_characters.json | 角色提取+视觉规格 |
-| 3 | `character_image` | s2_characters.json | ComfyUI (SDXL T2I + IPAdapter) | s3_character_refs/ | 单参考图（非四视图） |
+| 3 | `character_image` | s2_characters.json | ComfyUI (Flux Dev fp8 T2I) | s3_character_refs/ | 单正面参考图 (T2I, 1024×1536) |
+| 3b | `character_4view` | s2 + s3_refs | ComfyUI (qwen-image-edit ReferenceLatent) | s3_character_refs/ | 四视角参考图 (front/±angle/back) |
 | 4 | `shot_split` | s1+s2 | OpenClaw LLM (baidu-codingplan) | s4_shots.json | 分镜拆解 |
-| 5 | `frame_generate` | s4+s3 | ComfyUI (img2img + IPAdapter) | s5_frames/ | 首帧+尾帧 |
+| 4b | `keyframe_assets` | s4+s2 | Python (prompt构建) | s4b_keyframe_assets.json | 首尾帧prompt预构建 |
+| 5 | `frame_generate` | s4+s4b+s3 | ComfyUI (qedit ReferenceLatent, 多角色) | s5_frames/ | 首帧+尾帧 |
 | 6 | `video_generate` | s5+s4 | ComfyUI (Wan2.2 FLF2V) | s6_videos/ | Keyframe 插值视频 |
 | 7 | `video_assemble` | s6+s4 | FFmpeg | s7_assembled.mp4 | 拼接+转场+BGM+标题卡 |
 | 8 | `subtitles` | s7+TTS音频 | Whisper ASR | s8_subtitles.ass | 字幕烧录 |
@@ -291,7 +293,7 @@ shot_asset = {
 
 | # | 决策 | 方案 | 理由 | 备选（需 Vincent 授权才可切换） |
 |---|------|------|------|------|
-| D1 | 角色参考图 | 单正面全身 + IPAdapter | 实现简单，IPAdapter 已验证 | 四视图（需 LoRA/ControlNet） |
+| D1 | 角色参考图 | **S3 t2i + S3b qedit 四视角** | qedit ReferenceLatent 产出清晰多视角，角色一致性远超单视图 T2I | 单正面全身 + IPAdapter（一致性差） |
 | D2 | 视频生成模式 | 仅 Keyframe (首尾帧插值) | FLF2V 只支持 keyframe | + Reference 模式（需 Wan2.2 I2V） |
 | D3 | LLM | **baidu-codingplan (主)** + Qwen3.6-27B (备) | GPT-4 级模型，prompt 不需精简；本地备选可切换 | Gemma4-26B |
 | D4 | 结构化输出 | 纯 prompt 约束 | GPT-4 级模型原生稳定输出 JSON | guided_json（仅备选本地模型时） |

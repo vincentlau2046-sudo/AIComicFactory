@@ -85,3 +85,52 @@ def build_full_prompt(
     lines.append("")
     lines.append(resolve("quality_rules"))
     return "\n".join(lines)
+
+
+def build_flux_ref_prompt(
+    slot_contents: dict = None,
+    character_name: str = "",
+    character_description: str = "",
+    visual_hint: str = "",
+    visual_anchors: dict = None,
+) -> str:
+    """Build natural language prompt for Flux Dev T2I character reference.
+    
+    Unlike the 4-view prompt (build_full_prompt), this generates a single
+    front-view reference image suitable for Flux Dev T2I pipeline.
+    Uses natural language instead of Danbooru tags.
+    """
+    anchors = visual_anchors or {}
+    
+    parts = [f"Character reference sheet of {character_name}."]
+    parts.append("Full body, standing, front view, facing camera, neutral expression.")
+    parts.append("Plain white background, studio lighting.")
+    
+    # Inject visual anchors as natural language
+    if anchors.get("face"):
+        parts.append(f"Face: {anchors['face']}.")
+    if anchors.get("hair"):
+        parts.append(f"Hair: {anchors['hair']}.")
+    if anchors.get("body"):
+        parts.append(f"Body: {anchors['body']}.")
+    if anchors.get("clothing"):
+        parts.append(f"Clothing: {anchors['clothing']}.")
+    if anchors.get("signature"):
+        parts.append(f"Signature details: {anchors['signature']}.")
+    
+    if visual_hint:
+        parts.append(f"Key visual: {visual_hint}.")
+    
+    if character_description:
+        # Extract style keywords
+        desc_lower = character_description.lower()
+        if any(kw in desc_lower for kw in ["写实", "realistic", "photorealistic"]):
+            parts.append("Style: photorealistic, cinematic lighting, high detail.")
+        elif any(kw in desc_lower for kw in ["动漫", "anime", "漫画", "manga"]):
+            parts.append("Style: anime illustration, vibrant colors, detailed.")
+        else:
+            parts.append("Style: detailed character design, high quality, 8k resolution.")
+    
+    parts.append("Single figure, no other people, no background elements, clean composition.")
+    
+    return " ".join(parts)

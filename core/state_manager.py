@@ -19,6 +19,7 @@ STAGE_ORDER = [
     "s3_character_image",
     "s3b_four_view",
     "s4_shot_split",
+    "s4b_keyframe_assets",
     "s5_frame_generate",
     "s6_video_generate",
     "s7_assemble",
@@ -32,6 +33,7 @@ STAGE_LABELS = {
     "s3_character_image": "角色参考图",
     "s3b_four_view": "四视图扩展",
     "s4_shot_split": "分镜拆解",
+    "s4b_keyframe_assets": "关键帧资产",
     "s5_frame_generate": "关键帧生成",
     "s6_video_generate": "视频生成",
     "s7_assemble": "视频合成",
@@ -45,7 +47,8 @@ STAGE_DEPS = {
     "s3_character_image": ["s2_character_extract"],
     "s3b_four_view": ["s3_character_image"],
     "s4_shot_split": ["s1_parse", "s2_character_extract"],
-    "s5_frame_generate": ["s3_character_image", "s4_shot_split"],
+    "s4b_keyframe_assets": ["s4_shot_split", "s2_character_extract"],
+    "s5_frame_generate": ["s3_character_image", "s4_shot_split", "s4b_keyframe_assets"],
     "s6_video_generate": ["s5_frame_generate"],
     "s7_assemble": ["s6_video_generate"],
     "s8_subtitles": ["s7_assemble"],
@@ -120,6 +123,18 @@ class StateManager:
             "stage": stage,
             "error": error,
             "ts": datetime.now(TZ).isoformat(),
+        })
+        self._write(project, state)
+        return state
+
+    def add_error(self, project: str, stage: str, error: str):
+        """Record a non-fatal error (e.g. quality check warning) without changing stage status."""
+        state = self.get(project)
+        state["errors"].append({
+            "stage": stage,
+            "error": error,
+            "ts": datetime.now(TZ).isoformat(),
+            "severity": "warning",
         })
         self._write(project, state)
         return state

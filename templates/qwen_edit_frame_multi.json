@@ -1,11 +1,18 @@
 {
-  "_comment": "qwen-image-edit ReferenceLatent 四视角工作流 (官方 QIE-ReferenceLatents)",
+  "_comment": "qwen-image-edit ReferenceLatent 多角色帧生成工作流 (S5 multi-character)",
+  "_architecture": {
+    "image1": "主角色参考图 (node 41 → TextEncodeQwenImageEditPlus.image1)",
+    "image2": "配角参考图 (node 42 → TextEncodeQwenImageEditPlus.image2)",
+    "image3": "前帧连续性参考 / 第3角色 (node 43 → TextEncodeQwenImageEditPlus.image3)",
+    "description": "TextEncodeQwenImageEditPlus 内部处理 image1/image2/image3 的参考潜在编码，无需额外 VAEEncode/ReferenceLatent 链。单角色场景仍使用 qwen_edit_frame.json。"
+  },
   "_requirements": [
     "ComfyUI must NOT run with --use-sage-attention (causes black output)",
     "Lightning LoRA: Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
     "Checkpoint: qwen_image_edit_2511_fp8mixed.safetensors (in diffusion_models/)",
     "CLIP: qwen_2.5_vl_7b_fp8_scaled.safetensors (in text_encoders/)",
-    "VAE: qwen_image_vae.safetensors (in vae/)"
+    "VAE: qwen_image_vae.safetensors (in vae/)",
+    "Reference images: character refs from S3/S3b"
   ],
 
   "12": {
@@ -53,7 +60,19 @@
   "41": {
     "class_type": "LoadImage",
     "inputs": {
-      "image": "placeholder.png"
+      "image": "reference.png"
+    }
+  },
+  "42": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "reference2.png"
+    }
+  },
+  "43": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "reference3.png"
     }
   },
   "75": {
@@ -69,15 +88,16 @@
       "clip": ["61", 0],
       "prompt": "",
       "vae": ["10", 0],
-      "image1": ["41", 0]
+      "image1": ["41", 0],
+      "image2": ["42", 0],
+      "image3": ["43", 0]
     }
   },
   "69": {
     "class_type": "TextEncodeQwenImageEditPlus",
     "inputs": {
       "clip": ["61", 0],
-      "prompt": "",
-      "vae": ["10", 0]
+      "prompt": ""
     }
   },
   "89": {
@@ -133,7 +153,7 @@
   "60": {
     "class_type": "SaveImage",
     "inputs": {
-      "filename_prefix": "aicf_fourview",
+      "filename_prefix": "aicf_frame",
       "images": ["8", 0]
     }
   }

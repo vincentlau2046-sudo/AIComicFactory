@@ -13,11 +13,14 @@ scripts/s6_flf2v_render.py — Stage 6: FLF2V Keyframe Video Rendering
 """
 
 import json, sys, argparse, shutil, os, random, subprocess, tempfile
+# Force unbuffered stdout for real-time progress monitoring
+sys.stdout.reconfigure(line_buffering=True)
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.comfyui_session import ComfyUISession, ComfyUIError
 from core.state_manager import get_state_manager
 from core.asset_manager import get_asset_manager
+from core.workflow_loader import load_workflow, inject_params
 from prompts.defaults.video_generate import build_video_prompt
 
 # ═══════════════════════════════════════
@@ -53,7 +56,34 @@ MID_NEG = "low quality, worst quality, bad anatomy, bad hands, blurry, watermark
 def build_flf2v_workflow(start_image: str, end_image: str, motion_prompt: str,
                           duration_frames: int, seed: int = 42,
                           width: int = 1280, height: int = 720) -> dict:
-    """Build FLF2V workflow. duration_frames = requested output frames at FPS."""
+    """Build FLF2V workflow. Try loading from template first, fallback to inline."""
+    try:
+        wf = load_workflow("flf2v_keyframe.json")
+        return inject_params(wf, {
+            "1": {"unet_name": UNET_HIGH},
+            "3": {"vae_name": VAE_NAME},
+            "4": {"clip_name": CLIP_NAME},
+            "lora": {"lora_name": LORA_HIGH},
+            "shift": {"shift": SHIFT},
+            "cache": {"threshold": TEACACHE_THRESHOLD, "start_percent": TEACACHE_START, "end_percent": TEACACHE_END},
+            "6a": {"text": motion_prompt},
+            "6b": {"text": NEG_PROMPT},
+            "7": {"image": start_image},
+            "8": {"image": end_image},
+            "12": {"width": width, "height": height, "length": duration_frames},
+            "13": {"seed": seed, "steps": STEPS, "cfg": CFG},
+            "16": {"frame_rate": FPS},
+        })
+    except FileNotFoundError:
+        pass  # Fallback to inline workflow below
+    
+    return _build_flf2v_inline(start_image, end_image, motion_prompt, duration_frames, seed, width, height)
+
+
+def _build_flf2v_inline(start_image: str, end_image: str, motion_prompt: str,
+                          duration_frames: int, seed: int = 42,
+                          width: int = 1280, height: int = 720) -> dict:
+    """Fallback inline FLF2V workflow (when template not available)."""
     return {
         "1":  {"class_type": "UNETLoader", "inputs": {"unet_name": UNET_HIGH, "weight_dtype": "default"}},
         "3":  {"class_type": "VAELoader", "inputs": {"vae_name": VAE_NAME}},
@@ -276,12 +306,7 @@ def main():
                     key=lambda x: x.stat().st_mtime, reverse=True
                 )
                 if candidates:
-                    dest = videos_dir / f"s{sn:02d}.mp4"
-                    shutil.copy2(str(candidates[0]), str(dest))
-                    size_mb = dest.stat().st_size / (1024 * 1024)
-                    print(f"  ✅ {size_mb:.1f}MB ({result.elapsed:.0f}s)")
-                    
-                    # Register asset
+                    # Register asset (am.register writes the file with dest_name)
                     am = get_asset_manager()
                     am.register(
                         project=args.project,
@@ -289,12 +314,16 @@ def main():
                         shot_id=f"shot_{sn:03d}",
                         source_path=candidates[0],
                         relative_dir="s6_videos",
+                        dest_name=f"s{sn:02d}.mp4",
                         metadata={
                             "frames": total_frames,
                             "duration_s": duration,
                             "accelerations": "Lightx2v+TeaCache+SageAttention",
                         }
                     )
+                    dest = videos_dir / f"s{sn:02d}.mp4"
+                    size_mb = dest.stat().st_size / (1024 * 1024)
+                    print(f"  ✅ {size_mb:.1f}MB ({result.elapsed:.0f}s)")
                 else:
                     print(f"  ⚠️ No output file")
             except ComfyUIError as e:
@@ -349,7 +378,9 @@ def main():
         concat_segments(segments, dest)
         print(f"  → concat ✅ {dest.stat().st_size/(1024*1024):.1f}MB")
         
-        # Register concatenated asset
+        # Register concatenated asset (am.register writes the file with dest_name)
+        # Note: dest already exists (written by concat_segments), so am.register
+        # will copy it to the versioned name; we use dest_name to also write the canonical name.
         am = get_asset_manager()
         am.register(
             project=args.project,
@@ -357,6 +388,7 @@ def main():
             shot_id=f"shot_{sn:03d}",
             source_path=dest,
             relative_dir="s6_videos",
+            dest_name=f"s{sn:02d}.mp4",
             metadata={
                 "frames": total_frames,
                 "duration_s": duration,

@@ -11,10 +11,17 @@ projects/*/s3_character_refs/*.png
 projects/*/s5_frames/*.png
 projects/*/s6_videos/
 projects/*/s7_assembled/
+projects/*/s7_assembled.mp4
 projects/*/s8_subtitled/
 projects/*/s9_final/
+projects/*/s9_final.mp4
+projects/*/s9_timeline_audio*.wav
+projects/*/s9_tts_audio/
 projects/*/assets.json
 projects/*/state.json
+projects/*/*.mp4
+projects/*/title-*.mp4
+projects/*/credits-*.mp4
 
 # Temp experiments
 projects/*/tmp/

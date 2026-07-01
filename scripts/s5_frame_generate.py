@@ -1,69 +1,64 @@
 #!/usr/bin/env python3
 """
-scripts/s5_frame_generate.py — Stage 5: 关键帧生成 (v2.0)
+scripts/s5_frame_generate.py — Stage 5: 关键帧生成 (v3.0)
 
-重大升级 (2026-06-30):
-  - P0-1: 构建链重构——删除自建 build_frame_prompt(), 改用 prompts/defaults/ build_full_prompt()
-  - P0-2: IPAdapter 升级——纯 T2I → img2img+IPAdapter(四视图参考图 + 前 shot 尾帧)
-  - P0-4: S2→S5 消费链——注入 colorPalette / performanceStyle / scene-level 数据 / relationships
+v3.0 重写: qwen-image-edit ReferenceLatent 工作流
+  - 删除 SDXL/IPAdapter 路径，统一使用 qwen-image-edit
+  - VAEEncode 参考图 → ReferenceLatent → FluxKontextMultiReferenceLatentMethod
+  - Lightning 4-step LoRA, er_sde/beta sampler
+  - 产出 1024×1536 高质量帧
 
-从 s4_shots.json + s2_characters.json 读取分镜和角色数据，生成首帧/尾帧。
-支持双风格路径 + IPAdapter 角色一致性。
+AICB 对齐:
+  - P0-1: 标准化 prompt 构建 (build_full_prompt from prompts/defaults/)
+  - P0-4: S2→S5 消费链 (colorPalette / performanceStyle / scene-level / relationships)
 
 用法:
     python scripts/s5_frame_generate.py --project last_bento
-    python scripts/s5_frame_generate.py --project last_bento --mode ipadapter
-    python scripts/s5_frame_generate.py --project last_bento --mode t2i  # 纯T2I回退
     python scripts/s5_frame_generate.py --project last_bento --shot 1
     python scripts/s5_frame_generate.py --project last_bento --dry-run
+
+前置条件:
+    - ComfyUI 必须在无 --use-sage-attention 下运行
+    - S3 T2I 参考图已存在 (s3_character_refs/{name}.png)
+    - S3b qedit 四视角可选 (s3_character_refs/{name}_{view}.png)
 """
 
-import json, sys, argparse, random, os
+import json, sys, argparse, random, os, shutil
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.stdout.reconfigure(line_buffering=True)
 
 from prompts.defaults.frame_generate_first import build_full_prompt as build_first_prompt
 from prompts.defaults.frame_generate_last import build_full_prompt as build_last_prompt
 from core.comfyui_session import ComfyUISession, ComfyUIError
 from core.state_manager import get_state_manager
 from core.asset_manager import get_asset_manager
+from core.workflow_loader import load_workflow, inject_params
+from core.vl_backend import get_vl_backend
 
 # ═══════════════════════════════════════════════════════════════════
 # Constants
 # ═══════════════════════════════════════════════════════════════════
 
-"""T2I 模式强制角色一致性负面提示 (P1-1)."""
-CHARACTER_CONSISTENCY_NEGATIVE = (
-    "mismatched face, different character, changed appearance, "
-    "different hairstyle, different clothing, inconsistent age, "
-    "different ethnicity, face swap, identity change, morphing face, "
-    "different body type, inconsistent height, style inconsistency"
-)
+# qwen-image-edit 默认参数
+QEDIT_STEPS = 4
+QEDIT_CFG = 1.0
+QEDIT_SAMPLER = "er_sde"
+QEDIT_SCHEDULER = "beta"
+QEDIT_SHIFT = 3.1
+QEDIT_SEED = None  # None = random
 
-NEGATIVE_PROMPT = (
-    "low quality, worst quality, bad anatomy, bad hands, missing fingers, "
-    "extra fingers, fused fingers, ugly, deformed, blurry, watermark, "
-    "text, signature, cropped, out of frame, multiple views, split screen, "
-    "comic panel, crowd, duplicate, clone, "
-    "dark, underexposed, dim lighting, low contrast"
-)
+# 参考图选取优先级: front > minus_angle > plus_angle > 单视图
+REF_VIEW_PRIORITY = ["front", "minus_angle", "plus_angle", "back"]
 
-SDXL_QUALITY = "masterpiece, best quality, very aesthetic, highres, detailed, cinematic lighting, dramatic"
-
-# IPAdapter 参数
-IPADAPTER_WEIGHT = 0.75          # 默认权重 (0.5-1.0, 越高参考图影响越大)
-IPADAPTER_WEIGHT_CLOSEUP = 0.85  # 大特写用更高权重保持脸部一致
-IPADAPTER_WEIGHT_FULL = 0.65     # 全身用稍低权重保持姿态自由度
-IPADAPTER_NOISE = 0.3            # 注入噪声, 提高多样性
-IPADAPTER_START = 0.0
-IPADAPTER_END = 1.0
 
 # ═══════════════════════════════════════════════════════════════════
-# P0-1/P0-4: 标准化 Prompt 构建 (对齐 AICB buildFirstFramePrompt / buildLastFramePrompt)
+# Prompt builders (AICB 对齐)
 # ═══════════════════════════════════════════════════════════════════
 
 def _build_scene_description(scene: dict, color_palette: str = "") -> str:
-    """从 scene 数据构建场景环境描述 (P0-4: scene-level 数据消费 + AICB colorPalette)."""
+    """从 scene 数据构建场景环境描述."""
     parts = []
     setting = scene.get("setting", "")
     mood = scene.get("mood", "")
@@ -80,11 +75,7 @@ def _build_scene_description(scene: dict, color_palette: str = "") -> str:
 
 
 def _build_character_descriptions(characters: list, shot_char_names: list) -> str:
-    """构建角色描述文本 (对齐 AICB characterDescriptions 格式).
-    
-    P1-1 增强: 视觉签名前置 → 最大化 primacy effect 于 T2I 模式。
-    格式: [视觉签名] {name}（{hint}）: {description}
-    """
+    """构建角色描述文本. 视觉签名前置 → 最大化 primacy effect."""
     lines = []
     for cn in shot_char_names:
         for c in characters:
@@ -92,29 +83,27 @@ def _build_character_descriptions(characters: list, shot_char_names: list) -> st
                 hint = c.get("visualHint", "")
                 desc = c.get("description", c.get("appearance", ""))
                 anchors = c.get("visualAnchors", {})
-                
-                # P1-1: 视觉签名前置 — 关键特征作为 prompt 最前导部分
+
                 sig_parts = []
                 for dim in ["face", "hair", "body", "clothing"]:
                     v = anchors.get(dim, "").strip()
                     if v and v != "无特殊":
                         sig_parts.append(v)
                 visual_sig = "【" + " | ".join(sig_parts) + "】" if sig_parts else ""
-                
+
                 cp = c.get("colorPalette", "")
                 if cp:
                     visual_sig += f" 配色:[{cp}]"
-                
+
                 line = f"{visual_sig} {cn}"
                 if hint:
                     line += f"({hint})"
                 line += f": {desc[:400]}"
-                
-                # 标志动作/姿态约束
+
                 ps = c.get("performanceStyle", "")
                 if ps:
                     line += f"\n  姿势约束: {ps[:200]}"
-                
+
                 lines.append(line)
                 break
         else:
@@ -122,60 +111,28 @@ def _build_character_descriptions(characters: list, shot_char_names: list) -> st
     return "\n\n".join(lines)
 
 
-def _find_character_ref_images(characters: list, shot_char_names: list, project_dir: Path) -> list:
-    """查找角色四视图参考图路径 (S3b 输出)."""
-    refs = []
-    for cn in shot_char_names:
-        # 参考图来源: S3b四视图优先, S3单视图作为fallback
-        for subdir in ["s3b_four_views", "s3_character_refs"]:
-            if not (project_dir / subdir).exists():
-                continue
-            search_dir = project_dir / subdir
-            for p in search_dir.iterdir():
-                if cn in p.stem and p.suffix == '.png':
-                    refs.append(str(p))
-                    break
-    return refs
-
-
-def _get_ipadapter_weight(shot: dict) -> float:
-    """根据镜头类型动态调整 IPAdapter 权重."""
-    comp = shot.get("compositionGuide", "")
-    if comp == "close_up":
-        return IPADAPTER_WEIGHT_CLOSEUP
-    if comp in ("over_shoulder", "framing"):
-        return IPADAPTER_WEIGHT
-    return IPADAPTER_WEIGHT_FULL
-
-
 def _build_composition_suffix(shot: dict, chars_in_shot: list, characters: list,
                                color_palette: str = "") -> str:
-    """
-    AICB composition suffix: 构图指导 + 焦点 + 景深 + 角色身高 + 色板.
-    附加在 buildFirstFramePrompt / buildLastFramePrompt 输出末端.
-    
-    对齐 AICB src/lib/pipeline/frame-generate.ts handleFrameGenerate()
-    """
+    """构图指导 + 焦点 + 景深 + 角色身高 + 色板."""
     parts = []
-    
+
     comp = shot.get("compositionGuide", "")
     if comp:
         parts.append(f"{comp.replace('_', ' ')} composition")
-    
+
     focal = shot.get("focalPoint", "")
     if focal:
         parts.append(f"focus on {focal}")
-    
+
     dof = shot.get("depthOfField", "")
     if dof == "shallow":
         parts.append("shallow depth of field, bokeh background")
     elif dof == "deep":
         parts.append("deep focus, everything sharp")
-    
+
     if color_palette:
         parts.append(f"\nGLOBAL COLOR PALETTE (mandatory): {color_palette}. All frames must adhere to this color scheme.")
-    
-    # Character height context (multi-character shots)
+
     if len(chars_in_shot) > 1:
         height_info = []
         for cn in chars_in_shot:
@@ -189,221 +146,184 @@ def _build_composition_suffix(shot: dict, chars_in_shot: list, characters: list,
                 f"{name}: {h}cm ({bt})" for name, h, bt in height_info
             )
             parts.append(f"Character heights: {height_text}. Maintain correct relative proportions")
-    
-    suffix = ", ".join([p for p in parts if p.startswith(', ') or not p.startswith('\n')])
-    # Re-attach color palette section (which starts with \n)
+
+    suffix = ", ".join([p for p in parts if not p.startswith('\n')])
     for p in parts:
         if p.startswith('\n'):
             suffix += p
-    
-    # AICB format: prepend ", " + suffix, or just suffix for palette line
     if suffix and not suffix.startswith('\n'):
         return ", " + suffix
     return suffix
 
 
 # ═══════════════════════════════════════════════════════════════════
-# ComfyUI Workflow Builders
+# Reference Image Management
 # ═══════════════════════════════════════════════════════════════════
 
-def build_ipadapter_workflow(
-    checkpoint: str,
-    positive: str,
-    ref_images: list,   # 角色四视图参考图路径列表
-    prev_frame: str = "",  # 上一个 shot 的尾帧 (连续性参考)
-    width: int = 1280,
-    height: int = 720,
+def _find_character_ref_image(char_name: str, project_dir: Path) -> Path | None:
+    """查找角色参考图. 优先 front 四视角 > 单视图."""
+    ref_dir = project_dir / "s3_character_refs"
+    if not ref_dir.exists():
+        return None
+
+    # 优先四视角 front
+    for view in REF_VIEW_PRIORITY:
+        p = ref_dir / f"{char_name}_{view}.png"
+        if p.exists():
+            return p
+
+    # Fallback: 单视图
+    p = ref_dir / f"{char_name}.png"
+    if p.exists():
+        return p
+
+    return None
+
+
+def _upload_to_comfyui_input(image_path: Path, project: str, label: str) -> str:
+    """Upload image to ComfyUI input dir, return filename."""
+    comfyui_input = Path.home() / "ComfyUI" / "input"
+    comfyui_input.mkdir(parents=True, exist_ok=True)
+    input_name = f"aicf_{project}_{label}.png"
+    shutil.copy2(str(image_path), str(comfyui_input / input_name))
+    return input_name
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Workflow Builder — qwen-image-edit ReferenceLatent
+# ═══════════════════════════════════════════════════════════════════
+
+def build_qedit_frame_workflow(
+    ref_image: str,
+    prompt: str,
+    prefix: str,
     seed: int = None,
-    steps: int = 25,
-    cfg: float = 7.0,
-    ipa_weight: float = IPADAPTER_WEIGHT,
-    ipa_noise: float = IPADAPTER_NOISE,
+    steps: int = QEDIT_STEPS,
+    cfg: float = QEDIT_CFG,
+    ref_image2: str = None,   # supporting character reference
+    ref_image3: str = None,   # previous frame or 3rd character reference
 ) -> dict:
-    """
-    构建 SDXL + IPAdapter workflow (P0-2).
+    """Build qwen-image-edit ReferenceLatent frame generation workflow.
     
-    ComfyUI 节点拓扑:
-      Checkpoint → CLIP(正面/负面) + KSampler → VAE → Save
-      LoadImage(参考图) → IPAdapter Apply → KSampler
-      LoadImage(前帧) → [可选] IPAdapter Apply → KSampler
+    Single-ref: templates/qwen_edit_frame.json (1 LoadImage)
+    Multi-ref:  templates/qwen_edit_frame_multi.json (3 LoadImage)
     
-    对齐 AICB 设计:
-      - 首帧: 文本prompt + IPAdapter(角色四视图) → 生成
-      - 尾帧: 文本prompt + IPAdapter(角色四视图) + LoadImage(首帧) → 生成
+    Architecture:
+      UNETLoader → LoraLoaderModelOnly (Lightning 4-step) → ModelSamplingAuraFlow → CFGNorm
+      CLIPLoader → TextEncodeQwenImageEditPlus (positive + negative)
+      VAELoader → VAEEncode (ref image) → ReferenceLatent (×2) → FluxKontextMultiReferenceLatentMethod (×2)
+      KSampler: er_sde / beta, steps=4, cfg=1
+      latent_image = VAEEncoded reference (NOT EmptyQwenImageLayeredLatentImage)
+    
+    Multi-reference (ref_image2/ref_image3):
+      image1 = main character ref  (node 41)
+      image2 = supporting character ref  (node 42)
+      image3 = previous frame / 3rd character  (node 43)
+      TextEncodeQwenImageEditPlus handles image2/image3 internally.
+    
+    IMPORTANT: ComfyUI must NOT run with --use-sage-attention!
     """
     if seed is None:
         seed = random.randint(0, 2**32 - 1)
 
-    wf = {}
-    node_id = 0
+    # Use multi-ref template if image2 or image3 provided
+    if ref_image2 or ref_image3:
+        wf = load_workflow("qwen_edit_frame_multi.json")
+    else:
+        wf = load_workflow("qwen_edit_frame.json")
 
-    # Node 1: Checkpoint
-    wf["1"] = {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": checkpoint}}
-    node_id = 1
-
-    # Node 2: Positive CLIP
-    node_id += 1
-    wf[str(node_id)] = {"class_type": "CLIPTextEncode", "inputs": {"text": positive, "clip": ["1", 1]}}
-    pos_clip = str(node_id)
-
-    # Node 3: Negative CLIP
-    node_id += 1
-    wf[str(node_id)] = {"class_type": "CLIPTextEncode", "inputs": {"text": NEGATIVE_PROMPT, "clip": ["1", 1]}}
-    neg_clip = str(node_id)
-
-    # Node 4: Empty Latent
-    node_id += 1
-    wf[str(node_id)] = {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}}
-    latent_node = str(node_id)
-
-    # --- IPAdapter 参考图加载 ---
-    ipa_ref_nodes = []
-    for img_path in ref_images:
-        node_id += 1
-        wf[str(node_id)] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
-        ipa_ref_nodes.append(str(node_id))
-
-    # Node: IPAdapter Unified Loader
-    node_id += 1
-    ipa_loader = str(node_id)
-    wf[ipa_loader] = {
-        "class_type": "IPAdapterUnifiedLoader",
-        "inputs": {"model": ["1", 0], "preset": "PLUS (high strength)"}
+    injections = {
+        "41": {"image": ref_image},
+        "68": {"prompt": prompt},
+        "69": {"prompt": ""},  # negative = empty
+        "65": {"seed": seed, "steps": steps, "cfg": cfg},
+        "60": {"filename_prefix": prefix},
     }
 
-    # Node: IPAdapter Apply (使用第一个参考图)
-    node_id += 1
-    ipa_apply = str(node_id)
-    wf[ipa_apply] = {
-        "class_type": "IPAdapterAdvanced",
-        "inputs": {
-            "model": ["1", 0],
-            "ipadapter": [ipa_loader, 1],  # 输出索引1是IPADAPTER类型
-            "image": [ipa_ref_nodes[0], 0],
-            "weight": ipa_weight,
-            "weight_type": "linear",
-            "combine_embeds": "concat",
-            "start_at": IPADAPTER_START,
-            "end_at": IPADAPTER_END,
-            "embeds_scaling": "V only",
-        }
-    }
-    # 如果有多个参考图，concat 到同一个 IPAdapter
-    if len(ipa_ref_nodes) > 1:
-        wf[ipa_apply]["inputs"]["image"] = [ipa_ref_nodes[0], 0]  # 主参考
-        # 多参考图可用 Batch Images + IPAdapter Batch, 此处简化用第一个
+    # Multi-reference injections (only in multi template)
+    if ref_image2:
+        injections["42"] = {"image": ref_image2}
+    if ref_image3:
+        injections["43"] = {"image": ref_image3}
 
-    # --- 前帧连续性 (如果有) ---
-    prev_frame_node = None
-    if prev_frame and Path(prev_frame).exists():
-        node_id += 1
-        prev_frame_node = str(node_id)
-        wf[prev_frame_node] = {"class_type": "LoadImage", "inputs": {"image": prev_frame}}
-
-    # Node: KSampler (带 IPAdapter model)
-    node_id += 1
-    sampler_node = str(node_id)
-    wf[sampler_node] = {
-        "class_type": "KSampler",
-        "inputs": {
-            "seed": seed,
-            "steps": steps,
-            "cfg": cfg,
-            "sampler_name": "dpmpp_2m",
-            "scheduler": "karras",
-            "denoise": 0.92,  # img2img: 0.9-0.95
-            "model": [ipa_apply, 0] if not prev_frame_node else [ipa_apply, 0],
-            "positive": [pos_clip, 0],
-            "negative": [neg_clip, 0],
-            "latent_image": [latent_node, 0],
-        }
-    }
-
-    # Node: VAE Decode
-    node_id += 1
-    wf[str(node_id)] = {"class_type": "VAEDecode", "inputs": {"samples": [sampler_node, 0], "vae": ["1", 2]}}
-    vae_node = str(node_id)
-
-    # Node: Save Image
-    node_id += 1
-    wf[str(node_id)] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "aicf_frame", "images": [vae_node, 0]}}
-
-    return wf
-
-
-def build_t2i_workflow(checkpoint, positive, width=1280, height=720, seed=None, steps=25, cfg=7.0):
-    """纯 T2I 回退模式 (无 IPAdapter)."""
-    if seed is None:
-        seed = random.randint(0, 2**32 - 1)
-    return {
-        "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": checkpoint}},
-        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
-        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": positive, "clip": ["4", 1]}},
-        "7": {"class_type": "CLIPTextEncode", "inputs": {"text": NEGATIVE_PROMPT, "clip": ["4", 1]}},
-        "3": {"class_type": "KSampler", "inputs": {
-            "seed": seed, "steps": steps, "cfg": cfg,
-            "sampler_name": "dpmpp_2m", "scheduler": "karras",
-            "denoise": 1.0, "model": ["4", 0],
-            "positive": ["6", 0], "negative": ["7", 0],
-            "latent_image": ["5", 0]}},
-        "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
-        "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "aicf_frame", "images": ["8", 0]}},
-    }
+    return inject_params(wf, injections)
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Frame Generation (unified)
+# Frame Generation
 # ═══════════════════════════════════════════════════════════════════
 
-def generate_frame(sess, prompt, shot_num, frame_type, project, output_dir,
-                   style="vivid", checkpoint="animexl_xuebiMIX_v60.safetensors",
-                   width=1280, height=720, steps=30, cfg=7.0,
-                   seed=None, max_retries=2,
-                   mode="ipadapter", ref_images=None, prev_frame=""):
+def generate_frame(
+    sess: ComfyUISession,
+    prompt: str,
+    shot_num: int,
+    frame_type: str,       # "first" or "last"
+    project: str,
+    output_dir: Path,
+    ref_image_name: str,   # ComfyUI input filename
+    seed: int = None,
+    max_retries: int = 2,
+    ref_image2_name: str = None,  # supporting character ComfyUI input filename
+    ref_image3_name: str = None,  # previous frame / 3rd character ComfyUI input filename
+) -> bool:
+    """Generate a single frame using qwen-image-edit ReferenceLatent."""
+    prefix = f"aicf_{project}_s{shot_num:02d}_{frame_type}"
+
     for attempt in range(max_retries + 1):
         s = seed if seed is not None else random.randint(0, 2**32 - 1)
 
-        if mode == "t2i":
-            wf = build_t2i_workflow(checkpoint, prompt, width, height, s, steps, cfg)
-        else:
-            wf = build_ipadapter_workflow(
-                checkpoint, prompt, ref_images or [], prev_frame,
-                width, height, s, steps, cfg,
-                ipa_weight=IPADAPTER_WEIGHT,
+        try:
+            wf = build_qedit_frame_workflow(
+                ref_image=ref_image_name,
+                prompt=prompt,
+                prefix=prefix,
+                seed=s,
+                ref_image2=ref_image2_name,
+                ref_image3=ref_image3_name,
+            )
+            result = sess.run(wf, timeout=300)
+
+            # Find output
+            output_path = Path.home() / "ComfyUI" / "output"
+            files = sorted(output_path.glob(f"{prefix}_*.png"),
+                          key=lambda x: x.stat().st_mtime, reverse=True)
+
+            if not files:
+                print(f"    ⚠️ No output file found, retry {attempt+1}/{max_retries}")
+                continue
+
+            # Copy to project output dir
+            dest = output_dir / f"s{shot_num:02d}_{frame_type}.png"
+            shutil.copy2(str(files[0]), str(dest))
+
+            # Quality check: black detection
+            from PIL import Image as PILImage
+            img = PILImage.open(str(dest))
+            gray = img.convert('L')
+            avg = sum(gray.getdata()) / (img.width * img.height)
+            black_pct = sum(1 for p in gray.getdata() if p < 10) / (img.width * img.height) * 100
+
+            if black_pct > 50:
+                print(f"    ⚠️ Black output (avg={avg:.1f}, black={black_pct:.1f}%), retry {attempt+1}/{max_retries}")
+                dest.unlink(missing_ok=True)
+                continue
+
+            # Register asset
+            am = get_asset_manager()
+            am.register(
+                project=project, asset_type=f"{frame_type}_frame",
+                shot_id=f"shot_{shot_num:03d}", source_path=files[0],
+                relative_dir="s5_frames",
+                dest_name=f"s{shot_num:02d}_{frame_type}.png",
+                metadata={
+                    "prompt": prompt[:200], "seed": s,
+                    "mode": "qedit", "resolution": f"{img.width}x{img.height}",
+                },
             )
 
-        prefix = f"aicf_{project}_s{shot_num:02d}_{frame_type}"
-        last_node = str(max(int(k) for k in wf.keys()))
-        wf[last_node]["inputs"]["filename_prefix"] = prefix
+            print(f"    ✅ s{shot_num:02d}_{frame_type}.png ({dest.stat().st_size//1024}KB, {img.width}×{img.height}, avg={avg:.0f})")
+            return True
 
-        try:
-            result = sess.run(wf, timeout=480 if mode == "ipadapter" else 300)
-            files = sorted(Path.home().glob(f"ComfyUI/output/{prefix}_*.png"),
-                          key=lambda x: x.stat().st_mtime, reverse=True)
-            if files:
-                am = get_asset_manager()
-                am.register(
-                    project=project, asset_type=f"{frame_type}_frame",
-                    shot_id=f"shot_{shot_num:03d}", source_path=files[0],
-                    relative_dir="s5_frames",
-                    dest_name=f"s{shot_num:02d}_{frame_type}.png",
-                    metadata={
-                        "prompt": prompt[:200], "seed": s,
-                        "checkpoint": checkpoint, "mode": mode,
-                    },
-                )
-
-                dest = output_dir / f"s{shot_num:02d}_{frame_type}.png"
-                from PIL import Image as PILImage
-                img = PILImage.open(str(dest))
-                avg = sum(img.convert('L').getdata()) / (img.width * img.height)
-                if avg < 5.0:
-                    print(f"    ⚠️ Dark image (brightness={avg:.1f}), retry {attempt+1}/{max_retries}")
-                    dest.unlink(missing_ok=True)
-                    continue
-
-                print(f"    ✅ s{shot_num:02d}_{frame_type}.png ({dest.stat().st_size//1024}KB, brightness={avg:.0f}, mode={mode})")
-                return True
         except ComfyUIError as e:
             print(f"    ❌ ComfyUIError: {e}")
         except Exception as e:
@@ -418,47 +338,25 @@ def generate_frame(sess, prompt, shot_num, frame_type, project, output_dir,
 # ═══════════════════════════════════════════════════════════════════
 
 def main():
-    p = argparse.ArgumentParser(description="S5: 关键帧生成 (T2I + IPAdapter)")
-    p.add_argument("--style", default="vivid", choices=["vivid", "classic", "concept"])
+    p = argparse.ArgumentParser(description="S5: 关键帧生成 (qwen-image-edit ReferenceLatent)")
     p.add_argument("--project", "-P", required=True)
-    p.add_argument("--shot", "-s", type=int)
-    p.add_argument("--gen", default="t2i", choices=["t2i", "ipadapter"],
-                   help="Generation mode: ipadapter (IPAdapter+reference images) or t2i (pure text)")
+    p.add_argument("--shot", "-s", type=int, help="Generate specific shot only")
     p.add_argument("--frames", default="both", choices=["first", "last", "both"],
                    help="Which frames to generate")
-    p.add_argument("--checkpoint", default="animexl_xuebiMIX_v60.safetensors")
-    p.add_argument("--steps", type=int, default=25)
-    p.add_argument("--cfg", type=float, default=7.0)
-    p.add_argument("--width", type=int, default=1280)
-    p.add_argument("--height", type=int, default=720)
-    p.add_argument("--no-check", action="store_true", help="Skip auto quality checks after S5")
+    p.add_argument("--steps", type=int, default=QEDIT_STEPS)
+    p.add_argument("--cfg", type=float, default=QEDIT_CFG)
+    p.add_argument("--no-check", action="store_true", help="Skip post-S5 quality checks")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
-
-    # Auto-select checkpoint based on style (方案 A: vivid/classic/concept)
-    CHECKPOINT_MAP = {
-        "vivid": "animexl_xuebiMIX_v60.safetensors",
-        "classic": "animagine-xl-3.1.safetensors",
-        "concept": "juggernautXL_v10.safetensors",
-    }
-    if args.checkpoint == p.get_default("checkpoint") and args.style in CHECKPOINT_MAP:
-        args.checkpoint = CHECKPOINT_MAP[args.style]
 
     pd = Path(__file__).parent.parent / "projects" / args.project
     s4 = json.load(open(pd / "s4_shots.json"))
     s2 = json.load(open(pd / "s2_characters.json"))
-    
-    # Project-level color palette (AICB: from episode or project)
-    project_color_palette = s2.get("colorPalette", "")
-    if not project_color_palette:
-        project_color_palette = s4.get("colorPalette", "")
+
+    project_color_palette = s2.get("colorPalette", "") or s4.get("colorPalette", "")
     chars = s2["characters"]
 
-    # Separate gen technology from frame selection
-    gen_mode = args.gen
-    frame_mode = args.frames
-
-    # Flatten shots — support both flat and nested formats
+    # Flatten shots
     scenes = s4.get("scenes", [])
     shots = []
     if scenes:
@@ -466,13 +364,20 @@ def main():
             for sh in sc["shots"]:
                 shots.append((sc, sh))
     else:
-        # Backward compat: flat shots array (旧格式)
-        flat_shots = s4.get("shots", [])
-        for sh in flat_shots:
-            shots.append(({}, sh))  # empty scene dict
+        for sh in s4.get("shots", []):
+            shots.append(({}, sh))
+
     if args.shot:
         shots = [(sc, sh) for sc, sh in shots if sh["shotNumber"] == args.shot]
 
+    # Load S4b keyframe assets if available (prefer S4b prompts over self-built)
+    s4b_data = None
+    s4b_path = pd / "s4b_keyframe_assets.json"
+    if s4b_path.exists():
+        s4b_data = json.load(open(s4b_path))
+        print(f"  📋 Using S4b keyframe assets ({len(s4b_data.get('shots', []))} shots)")
+
+    # Dry run
     if args.dry_run:
         for sc, sh in shots:
             n = sh["shotNumber"]
@@ -480,7 +385,6 @@ def main():
             scene_desc = _build_scene_description(sc, color_palette=project_color_palette)
             char_desc = _build_character_descriptions(chars, chars_in)
             comp_suffix = _build_composition_suffix(sh, chars_in, chars, project_color_palette)
-            refs = _find_character_ref_images(chars, chars_in, pd)
 
             fp_first = build_first_prompt(
                 scene_description=scene_desc,
@@ -492,18 +396,24 @@ def main():
                 end_frame_desc=sh.get("prompt", sh.get("description", "")),
                 character_descriptions=char_desc,
             )
-            print(f"Shot {n:2d} ({','.join(chars_in)}) -> first={len(fp_first)}c last={len(fp_last)}c refs={len(refs)}")
+            # Find ref images
+            refs = {}
+            for cn in chars_in:
+                ref = _find_character_ref_image(cn, pd)
+                refs[cn] = ref.name if ref else "NONE"
+            print(f"Shot {n:2d} ({','.join(chars_in)}) -> first={len(fp_first)}c last={len(fp_last)}c refs={refs}")
         return
 
+    # Setup
     sm = get_state_manager()
-    sm.mark_running(args.project, "s5_frame_generate",
-                    remaining=len(shots), gen_mode=gen_mode, frame_mode=frame_mode)
+    total = len(shots) * (2 if args.frames == "both" else 1)
+    sm.mark_running(args.project, "s5_frame_generate", remaining=total)
+
     out = pd / "s5_frames"
     out.mkdir(parents=True, exist_ok=True)
-    sess = ComfyUISession()
 
+    sess = ComfyUISession()
     total_ok = 0
-    total = len(shots) * (2 if frame_mode == "both" else 1)
     prev_last = ""  # 前一个 shot 的尾帧路径
 
     for i, (sc, sh) in enumerate(shots):
@@ -512,81 +422,154 @@ def main():
         scene_desc = _build_scene_description(sc, color_palette=project_color_palette)
         char_desc = _build_character_descriptions(chars, chars_in)
         comp_suffix = _build_composition_suffix(sh, chars_in, chars, project_color_palette)
-        ref_images = _find_character_ref_images(chars, chars_in, pd)
-        ipa_weight = _get_ipadapter_weight(sh)
 
-        print(f"\n[{i+1}/{len(shots)}] Shot {n} | chars={chars_in} | refs={len(ref_images)} | ipa_w={ipa_weight}")
+        # Check S4b for pre-built prompts
+        s4b_shot = None
+        if s4b_data:
+            for s in s4b_data.get("shots", []):
+                if s["shotNumber"] == n:
+                    s4b_shot = s
+                    break
 
-        if frame_mode in ("first", "both"):
-            # P0-1: 使用标准化 build_full_prompt (对齐 AICB buildFirstFramePrompt)
-            fp = build_first_prompt(
-                scene_description=scene_desc,
-                start_frame_desc=sh.get("prompt", sh.get("description", "")),
-                character_descriptions=char_desc,
-                previous_last_frame=prev_last if prev_last else "",
+        # 查找所有角色参考图 (最多3个: D3)
+        ref_images = []  # list of (char_name, Path)
+        for cn in chars_in:
+            ref = _find_character_ref_image(cn, pd)
+            if ref:
+                ref_images.append((cn, ref))
+
+        if not ref_images:
+            print(f"\n[{i+1}/{len(shots)}] Shot {n} | ❌ No character ref images found for {chars_in}")
+            continue
+
+        # 上传所有参考图到 ComfyUI input
+        ref_input_names = []
+        for cn, ref_path in ref_images[:3]:  # max 3 (D3)
+            input_name = _upload_to_comfyui_input(ref_path, args.project, f"ref_{cn}")
+            ref_input_names.append(input_name)
+
+        # image1 = 主角色参考, image2 = 配角参考 (如有)
+        main_ref = ref_input_names[0]
+        ref2 = ref_input_names[1] if len(ref_input_names) > 1 else None
+
+        # 如果有前shot尾帧，也上传作为额外参考
+        prev_input_name = None
+        if prev_last and Path(prev_last).exists():
+            prev_input_name = _upload_to_comfyui_input(
+                Path(prev_last), args.project, f"prev_s{n:02d}"
             )
-            if comp_suffix:
-                fp += comp_suffix
-            print(f"  First ({len(fp)}c): {fp[:80]}...")
+
+        ref_names_display = [ref_images[j][0] for j in range(len(ref_input_names))]
+        print(f"\n[{i+1}/{len(shots)}] Shot {n} | chars={chars_in} | refs={ref_names_display} | prev={'yes' if prev_input_name else 'no'}")
+
+        if args.frames in ("first", "both"):
+            # Use S4b pre-built prompt if available, otherwise build on-the-fly
+            if s4b_shot and s4b_shot.get("startFrame", {}).get("prompt"):
+                fp = s4b_shot["startFrame"]["prompt"]
+                if comp_suffix:
+                    fp += comp_suffix
+                print(f"  First (S4b, {len(fp)}c): {fp[:80]}...")
+            else:
+                fp = build_first_prompt(
+                    scene_description=scene_desc,
+                    start_frame_desc=sh.get("prompt", sh.get("description", "")),
+                    character_descriptions=char_desc,
+                    previous_last_frame=prev_last if prev_last else "",
+                )
+                if comp_suffix:
+                    fp += comp_suffix
+                print(f"  First ({len(fp)}c): {fp[:80]}...")
+
+            # image3 = 前帧连续性参考 (D4: prev frame at image3)
+            ref3_for_first = prev_input_name if prev_input_name else None
+
             ok = generate_frame(
                 sess, fp, n, "first", args.project, out,
-                style=args.style, checkpoint=args.checkpoint,
-                steps=args.steps, cfg=args.cfg,
-                width=args.width, height=args.height,
-                mode=gen_mode, ref_images=ref_images, prev_frame=prev_last,
+                ref_image_name=main_ref,
+                ref_image2_name=ref2,
+                ref_image3_name=ref3_for_first,
             )
             if ok:
                 total_ok += 1
 
-        if frame_mode in ("last", "both"):
-            # P0-1: 使用标准化 build_full_prompt (对齐 AICB buildLastFramePrompt)
+        if args.frames in ("last", "both"):
             first_frame_path = str(out / f"s{n:02d}_first.png")
-            fl = build_last_prompt(
-                scene_description=scene_desc,
-                end_frame_desc=sh.get("prompt", sh.get("description", "")),
-                character_descriptions=char_desc,
-            )
-            if comp_suffix:
-                fl += comp_suffix
-            print(f"  Last  ({len(fl)}c): {fl[:80]}...")
+
+            # Use S4b pre-built prompt if available, otherwise build on-the-fly
+            if s4b_shot and s4b_shot.get("endFrame", {}).get("prompt"):
+                fl = s4b_shot["endFrame"]["prompt"]
+                if comp_suffix:
+                    fl += comp_suffix
+                print(f"  Last  (S4b, {len(fl)}c): {fl[:80]}...")
+            else:
+                fl = build_last_prompt(
+                    scene_description=scene_desc,
+                    end_frame_desc=sh.get("prompt", sh.get("description", "")),
+                    character_descriptions=char_desc,
+                    first_frame_path=first_frame_path,
+                )
+                if comp_suffix:
+                    fl += comp_suffix
+                print(f"  Last  ({len(fl)}c): {fl[:80]}...")
+
+            # 尾帧参考：首帧优先（同一 shot 内连续性），角色参考作为 image1
+            last_ref = main_ref
+            if Path(first_frame_path).exists():
+                last_ref_input = _upload_to_comfyui_input(
+                    Path(first_frame_path), args.project, f"first_s{n:02d}"
+                )
+                # 用首帧作为 VAEEncode 输入（latent_image），角色参考作为 image1
+                last_ref = last_ref_input
+
             ok = generate_frame(
                 sess, fl, n, "last", args.project, out,
-                style=args.style, checkpoint=args.checkpoint,
-                steps=args.steps, cfg=args.cfg,
-                width=args.width, height=args.height,
-                mode=gen_mode, ref_images=ref_images, prev_frame=first_frame_path,
+                ref_image_name=last_ref,
+                ref_image2_name=ref2,
+                ref_image3_name=None,  # no prev frame needed for last frame
             )
             if ok:
                 total_ok += 1
-                prev_last = str(out / f"s{n:02d}_last.png")  # 下一 shot 的连续性参考
+                prev_last = str(out / f"s{n:02d}_last.png")
 
     sm.mark_completed(args.project, "s5_frame_generate", generated=f"{total_ok}/{total}")
     print(f"\n{'='*60}")
-    print(f"S5 Complete: {total_ok}/{total} frames (mode={gen_mode})")
+    print(f"S5 Complete: {total_ok}/{total} frames (qedit ReferenceLatent)")
 
-    # ── P1-1+P1-5: Auto-trigger quality checks after S5 ──
-    if total_ok > 0 and not args.dry_run and not getattr(args, 'no_check', False):
-        print(f"\n{'='*60}")
-        print("Running post-S5 quality checks...")
-        print(f"{'='*60}")
-        # Continuity check
-        try:
-            from core.continuity_check import ContinuityChecker
-            print("\n[Continuity Check — adjacent shot consistency]")
-            cc = ContinuityChecker()
-            c_report = cc.check_project(args.project, threshold=70)
-            print(cc.generate_summary(c_report))
-        except Exception as e:
-            print(f"  ⚠️ Continuity check failed: {e}")
-        # Video quality check
-        try:
-            from core.video_quality_check import VideoQualityChecker
-            print("\n[Video Quality Check — individual frame scoring]")
-            vc = VideoQualityChecker()
-            v_report = vc.check_project(args.project, sample_every=2)
-            print(vc.generate_summary(v_report))
-        except Exception as e:
-            print(f"  ⚠️ Quality check failed: {e}")
+    # ── Post-S5 quality checks ──
+    if total_ok > 0 and not args.dry_run and not args.no_check:
+        vl = get_vl_backend()
+        vl_ok = vl.ensure_available(auto_start=True)
+        if vl_ok:
+            print(f"\n{'='*60}")
+            print("Running post-S5 quality checks...")
+            print(f"{'='*60}")
+            try:
+                from core.continuity_check import ContinuityChecker
+                cc = ContinuityChecker()
+                c_report = cc.check_project(args.project, threshold=70)
+                print(cc.generate_summary(c_report))
+                if c_report.get("issues"):
+                    print(f"  ⚠️ {len(c_report['issues'])} 对相邻帧连续性低于阈值")
+                    for iss in c_report["issues"]:
+                        sm.add_error(args.project, "s5_frame_generate",
+                                     f"continuity: shot {iss.get('shot_a')}->{iss.get('shot_b')} score={iss.get('overall_score', '?')}")
+            except Exception as e:
+                print(f"  ⚠️ Continuity check failed: {e}")
+            try:
+                from core.video_quality_check import VideoQualityChecker
+                vc = VideoQualityChecker()
+                v_report = vc.check_project(args.project, sample_every=2)
+                print(vc.generate_summary(v_report))
+                if v_report.get("issues"):
+                    print(f"  ⚠️ {len(v_report['issues'])} 帧质量低于阈值")
+                    for iss in v_report["issues"]:
+                        sm.add_error(args.project, "s5_frame_generate",
+                                     f"quality: shot {iss.get('shot', '?')} overall={iss.get('overall', '?')}")
+            except Exception as e:
+                print(f"  ⚠️ Quality check failed: {e}")
+        else:
+            print(f"\n  ⚠️ VL 后端不可用，跳过质检")
+            print(f"  → 运行 'edge-llm switch qwen35-9b' 后重新执行 S5 可触发质检")
 
 
 if __name__ == "__main__":

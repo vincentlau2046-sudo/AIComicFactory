@@ -264,34 +264,41 @@ def concat_with_transitions(
         return
 
     # Mixed transitions: xfade filter chain
+    # Key: offset for xfade[i] = total output duration so far - xfade_duration
+    # After each xfade, output grows by: next_clip_duration - xfade_duration
     cmd = ["ffmpeg", "-y"]
     for vp in video_paths:
         cmd.extend(["-i", str(vp)])
 
     filter_parts = []
     prev_label = "0:v"
-    cumulative_offset = 0.0
+    # Output duration after processing clips[0..i]
+    output_dur = shot_durations[0]
 
     for i, t in enumerate(transitions):
-        duration = shot_durations[i]
         out_label = f"v{i}" if i < len(transitions) - 1 else "vout"
+        next_dur = shot_durations[i + 1]
+        xfade_name = map_transition(t)
+        eff_dur = xfade_duration if xfade_name != "cut" else 0.0
 
-        if t == "cut":
-            # Hard cut: xfade with duration=0 at exact boundary
-            offset = cumulative_offset + duration
+        # offset = when the xfade starts = current output length - overlap
+        offset = output_dur - eff_dur
+        if offset < 0:
+            offset = 0
+
+        if xfade_name == "cut" or eff_dur == 0:
+            # Hard cut: no overlap, offset at exact boundary
             filter_parts.append(
                 f"[{prev_label}][{i + 1}:v]xfade=transition=fade:duration=0"
                 f":offset={offset:.3f}[{out_label}]"
             )
-            cumulative_offset = offset
+            output_dur = output_dur + next_dur
         else:
-            xfade_name = map_transition(t)
-            offset = cumulative_offset + duration - xfade_duration
             filter_parts.append(
                 f"[{prev_label}][{i + 1}:v]xfade=transition={xfade_name}"
-                f":duration={xfade_duration}:offset={offset:.3f}[{out_label}]"
+                f":duration={eff_dur}:offset={offset:.3f}[{out_label}]"
             )
-            cumulative_offset = offset
+            output_dur = output_dur + next_dur - eff_dur
 
         prev_label = out_label
 
@@ -457,11 +464,10 @@ def main():
                         help="BGM 音量 (0.0-1.0, 默认: 0.3)")
     parser.add_argument("--with-subtitles", action="store_true",
                         help="在组装阶段烧录字幕（粗略时间轴，S9 会精修）")
-    parser.add_argument("--width", type=int, default=W, help=f"宽度 (默认: {W})")
-    parser.add_argument("--height", type=int, default=H, help=f"高度 (默认: {H})")
+    parser.add_argument("--width", type=int, default=1280, help="宽度 (默认: 1280)")
+    parser.add_argument("--height", type=int, default=720, help="高度 (默认: 720)")
     args = parser.parse_args()
 
-    global W, H
     W, H = args.width, args.height
 
     pd = Path(__file__).parent.parent / "projects" / args.project
@@ -497,8 +503,17 @@ def main():
         for shot in scene["shots"]:
             sn = shot["shotNumber"]
             clip = videos_dir / f"s{sn:02d}.mp4"
+            # B5: Fallback to assets.json active video path
             if not clip.exists():
-                print(f"  ⚠️ Missing clip: s{sn:02d}.mp4")
+                try:
+                    am = get_asset_manager()
+                    active = am.get_active(args.project, f"shot_{sn:03d}", "keyframe_video")
+                    if active:
+                        clip = pd / active["file_path"]
+                except Exception:
+                    pass
+            if not clip.exists():
+                print(f"  ⚠️ Missing clip: s{sn:02d}.mp4 (checked assets.json fallback)")
                 continue
 
             video_paths.append(clip)

@@ -1,4 +1,14 @@
 {
+  "_comment": "qwen-image-edit ReferenceLatent 帧生成工作流 (S5)",
+  "_requirements": [
+    "ComfyUI must NOT run with --use-sage-attention (causes black output)",
+    "Lightning LoRA: Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    "Checkpoint: qwen_image_edit_2511_fp8mixed.safetensors (in diffusion_models/)",
+    "CLIP: qwen_2.5_vl_7b_fp8_scaled.safetensors (in text_encoders/)",
+    "VAE: qwen_image_vae.safetensors (in vae/)",
+    "Reference image: character ref from S3/S3b"
+  ],
+
   "12": {
     "class_type": "UNETLoader",
     "inputs": {
@@ -19,6 +29,28 @@
       "vae_name": "qwen_image_vae.safetensors"
     }
   },
+  "74": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": ["12", 0],
+      "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "67": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": ["74", 0],
+      "shift": 3.1
+    }
+  },
+  "64": {
+    "class_type": "CFGNorm",
+    "inputs": {
+      "model": ["67", 0],
+      "strength": 1
+    }
+  },
   "41": {
     "class_type": "LoadImage",
     "inputs": {
@@ -28,102 +60,81 @@
   "75": {
     "class_type": "VAEEncode",
     "inputs": {
-      "pixels": [
-        "41",
-        0
-      ],
-      "vae": [
-        "10",
-        0
-      ]
+      "pixels": ["41", 0],
+      "vae": ["10", 0]
     }
   },
   "68": {
     "class_type": "TextEncodeQwenImageEditPlus",
     "inputs": {
-      "clip": [
-        "61",
-        0
-      ],
-      "prompt": "test prompt",
-      "vae": [
-        "10",
-        0
-      ],
-      "image1": [
-        "41",
-        0
-      ]
+      "clip": ["61", 0],
+      "prompt": "",
+      "vae": ["10", 0],
+      "image1": ["41", 0]
     }
   },
   "69": {
     "class_type": "TextEncodeQwenImageEditPlus",
     "inputs": {
-      "clip": [
-        "61",
-        0
-      ],
-      "prompt": "low quality, worst quality, bad anatomy, bad hands, missing fingers, extra fingers, fused fingers, ugly, deformed, blurry, watermark, text, signature, cropped, out of frame, multiple characters, group, crowd"
+      "clip": ["61", 0],
+      "prompt": ""
     }
   },
-  "67": {
-    "class_type": "ModelSamplingAuraFlow",
+  "89": {
+    "class_type": "ReferenceLatent",
     "inputs": {
-      "model": [
-        "12",
-        0
-      ],
-      "shift": 3.1
+      "conditioning": ["68", 0],
+      "latent": ["75", 0]
+    }
+  },
+  "90": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": ["69", 0],
+      "latent": ["75", 0]
+    }
+  },
+  "70": {
+    "class_type": "FluxKontextMultiReferenceLatentMethod",
+    "inputs": {
+      "conditioning": ["89", 0],
+      "reference_latents_method": "index_timestep_zero"
+    }
+  },
+  "71": {
+    "class_type": "FluxKontextMultiReferenceLatentMethod",
+    "inputs": {
+      "conditioning": ["90", 0],
+      "reference_latents_method": "index_timestep_zero"
     }
   },
   "65": {
     "class_type": "KSampler",
     "inputs": {
-      "seed": 2394123869,
-      "steps": 20,
-      "cfg": 7.0,
-      "sampler_name": "euler",
-      "scheduler": "simple",
+      "seed": 0,
+      "steps": 4,
+      "cfg": 1.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
       "denoise": 1.0,
-      "model": [
-        "67",
-        0
-      ],
-      "positive": [
-        "68",
-        0
-      ],
-      "negative": [
-        "69",
-        0
-      ],
-      "latent_image": [
-        "75",
-        0
-      ]
+      "model": ["64", 0],
+      "positive": ["70", 0],
+      "negative": ["71", 0],
+      "latent_image": ["75", 0]
     }
   },
   "8": {
     "class_type": "VAEDecode",
     "inputs": {
-      "samples": [
-        "65",
-        0
-      ],
-      "vae": [
-        "10",
-        0
-      ]
+      "samples": ["65", 0],
+      "vae": ["10", 0]
     }
   },
-  "9": {
+  "60": {
     "class_type": "SaveImage",
     "inputs": {
       "filename_prefix": "aicf_frame",
-      "images": [
-        "8",
-        0
-      ]
+      "images": ["8", 0]
     }
   }
 }

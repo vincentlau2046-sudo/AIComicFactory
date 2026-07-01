@@ -1,0 +1,24 @@
+{
+  "project": "last_bento",
+  "gen_mode": "qedit",
+  "views": [
+    "front",
+    "minus_angle",
+    "plus_angle",
+    "back"
+  ],
+  "characters": {
+    "老周_front": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/老周_front.png",
+    "老周_minus_angle": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/老周_minus_angle.png",
+    "老周_plus_angle": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/老周_plus_angle.png",
+    "老周_back": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/老周_back.png",
+    "林姐_front": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/林姐_front.png",
+    "林姐_minus_angle": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/林姐_minus_angle.png",
+    "林姐_plus_angle": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/林姐_plus_angle.png",
+    "林姐_back": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/林姐_back.png",
+    "小陈_front": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/小陈_front.png",
+    "小陈_minus_angle": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/小陈_minus_angle.png",
+    "小陈_plus_angle": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/小陈_plus_angle.png",
+    "小陈_back": "/home/vince/AIComicFactory/projects/last_bento/s3_character_refs/小陈_back.png"
+  }
+}

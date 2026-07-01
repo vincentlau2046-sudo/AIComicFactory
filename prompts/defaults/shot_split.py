@@ -68,6 +68,37 @@ MOTION_RULES = """=== 变化幅度比例规则 ===
 
 禁止纯列表式罗列！四层信息必须交织成流畅的散文。"""
 
+SHOT_COUNT_RULES = """=== 分镜数量规则 ===
+
+每个场景的最少分镜数：
+- 含对白的场景：至少4个shot（建立镜头 + 对话正反打 + 反应镜头）
+- 无对白的场景：至少2个shot（建立 + 特写/反应）
+- 高潮场景：至少6个shot（建立 + 递进 × 3 + 高潮 + 收束）
+- 情感场景：至少5个shot（建立 + 铺垫 + 情感触发 + 反应 + 余韵）
+
+总集时长目标：60-120秒（根据剧本长度调整）
+每个shot时长范围：3-8秒
+
+=== 首帧/尾帧规则 ===
+
+每个场景的首个shot：
+- 必须是建立镜头（establishing shot），宽景或全景
+- prompt 必须包含完整的环境描述（地点、时间、光照、氛围）
+- 如果场景有角色，首shot应包含至少一个角色以建立空间关系
+
+每个场景的末个shot：
+- 必须是收束镜头（closing shot），构图完整、稳定
+- 尾帧将作为下一场景首帧的视觉过渡参考
+- 尾帧姿态必须是稳定的（非运动中间态）
+- 情感场景的尾帧应留有"余韵"——不急着切走
+
+=== Prompt 字数下限 ===
+
+- prompt 字段：至少 40 个英文单词（确保足够的视觉细节）
+- motionScript 字段：每3秒段至少 30 个中文字符
+- videoScript 字段：30-60 个中文字
+- 太短的 prompt 会导致生成结果模糊、不可控"""
+
 COMPOSITION = """=== 构图指南 ===
 
 根据场景情绪选择合适的构图方式：
@@ -216,6 +247,7 @@ class ShotSplitPrompt(PromptDefinition):
             slot("role", ROLE, editable=True),
             slot("physics", PHYSICS, editable=True),
             slot("safe_zone", SAFE_ZONE, editable=True),
+            slot("shot_count_rules", SHOT_COUNT_RULES, editable=True),
             slot("motion_rules", MOTION_RULES, editable=True),
             slot("composition", COMPOSITION, editable=True),
             slot("transition", TRANSITION, editable=True),
@@ -233,6 +265,7 @@ class ShotSplitPrompt(PromptDefinition):
             r("role"),
             r("physics"),
             r("safe_zone"),
+            r("shot_count_rules"),
             r("motion_rules"),
             r("composition"),
             r("transition"),
