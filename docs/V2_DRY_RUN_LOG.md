@@ -89,11 +89,88 @@ else:
 
 **验证**: Shot 3 (单角色+前帧) 从 3次400失败 → 1次成功
 
-### S5 运行结果（进行中）
+### S5 运行结果 ✅
 - Shot 1: 跳过（无角色）
-- Shot 2: ✅ first + last
-- Shot 3: ✅ first + last（修复后）
+- Shot 2: ✅ first(1633KB) + last(1582KB)
+- Shot 3: ✅ first(1674KB) + last(1596KB) — 修复后成功
 - Shot 4: 跳过（无角色）
-- Shot 5: ✅ first + last（多角色+前帧，修复后）
-- Shot 6: ✅ first + last（修复后）
-- Shot 7+: 进行中...
+- Shot 5: ✅ first(1720KB) + last(1668KB) — 多角色+前帧
+- Shot 6: ✅ first(1727KB) + last(1673KB)
+- Shot 7: ✅ first(1583KB) + last(1586KB)
+- Shot 8: ✅ first(1646KB) + last(1569KB)
+- Shot 9: ✅ first(1576KB) + last(1420KB)
+- Shot 10: ✅ first(1648KB) + last(1658KB) — 多角色+前帧
+- Shot 11: 跳过（无角色）
+- Shot 12: ✅ first(1584KB) + last(1690KB)
+- Shot 13: ✅ first(1644KB) + last(1516KB)
+- Shot 14: ✅ first(1622KB) + last(1608KB) — 多角色+前帧
+- Shot 15: ✅ first(1587KB) + last(1549KB)
+- Shot 16: ✅ first(1601KB) + last(1525KB)
+
+**总计**: 26/32 帧（4 shots × 2帧 = 8帧因无角色跳过，正确行为）
+
+**场景3(夜晚)亮度偏低** (avg=41-46) — 符合剧本'便当摊前·夜晚'的氛围
+
+---
+
+## S6: FLF2V 视频生成 ✅
+
+- Shot 2: ✅ 4.1MB (286s)
+- Shot 3: ✅ 4.0MB (286s)
+- Shot 4: 跳过（无角色帧）
+- Shot 5: ✅ 5.4MB (2 segments)
+- Shot 6: ✅ 4.3MB (286s)
+- Shot 7: ✅ 3.2MB (2 segments)
+- Shot 8: ✅ 4.2MB (2 segments)
+- Shot 9: ✅ 3.7MB (284s)
+- Shot 10: ✅ 4.9MB (2 segments)
+- Shot 11: 跳过（无角色帧）
+- Shot 12: ✅ 2.9MB (186s)
+- Shot 13: ✅ 5.2MB (2 segments)
+- Shot 14: ✅ 4.3MB (2 segments)
+- Shot 15: ✅ 3.3MB (286s)
+- Shot 16: ✅ 4.2MB (2 segments)
+
+**总计**: 13/16 videos (3 shots 无角色帧跳过)
+
+---
+
+## S7: 视频组装 ✅
+
+31.8MB, 16 shots → s7_assembled.mp4
+
+---
+
+## S8: 字幕生成 ✅
+
+7 条对白 → SRT + ASS
+
+---
+
+## S9: TTS + 最终成片 ✅
+
+- 7 条对白 TTS 生成 (Qwen3-TTS)
+- 时间轴音频: 88.5s
+- 最终成片: 30.9MB
+
+---
+
+## 全链路验证总结
+
+| Stage | 结果 | 备注 |
+|-------|------|------|
+| S3 Flux Dev | ✅ 3 chars | prompt重写后质量提升(nw 75%→0%) |
+| S3b qedit | ✅ 12 views | 四视图无错误 |
+| S4b | ✅ 16 shots | 新 stage 正常工作 |
+| S5 | ✅ 26/32 frames | 4 shots无角色跳过(正确) |
+| S6 | ✅ 13/16 videos | 3 shots无帧跳过(正确) |
+| S7 | ✅ 31.8MB | 组装成功 |
+| S8 | ✅ 7 dialogues | SRT+ASS |
+| S9 | ✅ 30.9MB | 最终成片 |
+
+### 发现并修复的 Bug (4个)
+
+1. **Flux '毛玻璃'**: prompt 背景权重过高 → character-first 架构重写
+2. **D2 参数不足**: 20步 euler/simple → 28步 dpmpp_2m/sgm_uniform
+3. **VL关闭循环不break**: 添加 break
+4. **multi-ref LoadImage 占位符不存在**: fallback 到 ref_image
