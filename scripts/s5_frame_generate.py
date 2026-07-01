@@ -241,10 +241,17 @@ def build_qedit_frame_workflow(
     }
 
     # Multi-reference injections (only in multi template)
+    # IMPORTANT: When using multi-ref template, ALL LoadImage nodes must have valid
+    # filenames in ComfyUI input dir. If image2/image3 not provided, duplicate image1
+    # as fallback — the model will simply give it less weight.
     if ref_image2:
         injections["42"] = {"image": ref_image2}
+    else:
+        injections["42"] = {"image": ref_image}  # fallback: same as image1
     if ref_image3:
         injections["43"] = {"image": ref_image3}
+    else:
+        injections["43"] = {"image": ref_image}  # fallback: same as image1
 
     return inject_params(wf, injections)
 

@@ -1,0 +1,430 @@
+{
+  "project": "last_bento",
+  "source": "s4_shots.json + s2_characters.json",
+  "totalShots": 16,
+  "shots": [
+    {
+      "shotNumber": 1,
+      "sceneNumber": 1,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nWide shot of a dusty construction site entrance under harsh midday sunlight, concrete mixer and steel bars in background, heat haze rising from ground, a small folding table food stall near the gate with steam dissipated, one boxed bento wrapped in plastic bag sits alone at the edge of the table, realistic style, muted earth tones\n\n=== 角色描述 ===\n\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, leading lines composition, focus on 角落那盒包着塑料袋的便当, deep focus, everything sharp",
+        "ref_characters": [],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "leading_lines",
+        "focalPoint": "角落那盒包着塑料袋的便当",
+        "depthOfField": "deep"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nWide shot of a dusty construction site entrance under harsh midday sunlight, concrete mixer and steel bars in background, heat haze rising from ground, a small folding table food stall near the gate with steam dissipated, one boxed bento wrapped in plastic bag sits alone at the edge of the table, realistic style, muted earth tones\n\n=== 角色描述 ===\n\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, leading lines composition, focus on 角落那盒包着塑料袋的便当, deep focus, everything sharp",
+        "ref_characters": [],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "leading_lines",
+        "focalPoint": "角落那盒包着塑料袋的便当",
+        "depthOfField": "deep"
+      },
+      "characterRefPrompts": {}
+    },
+    {
+      "shotNumber": 2,
+      "sceneNumber": 1,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nMedium shot of a weathered middle-aged Chinese male worker, graying buzz cut, faded blue work clothes with frayed cuffs, walking with hunched shoulders and bowed head toward a food stall at a construction site, dusty ground, harsh sunlight, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, rule of thirds composition, focus on 老周低垂的面部和微驼的肩背",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "dolly_right",
+        "compositionGuide": "rule_of_thirds",
+        "focalPoint": "老周低垂的面部和微驼的肩背",
+        "depthOfField": "medium"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nMedium shot of a weathered middle-aged Chinese male worker, graying buzz cut, faded blue work clothes with frayed cuffs, walking with hunched shoulders and bowed head toward a food stall at a construction site, dusty ground, harsh sunlight, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, rule of thirds composition, focus on 老周低垂的面部和微驼的肩背",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "dolly_right",
+        "compositionGuide": "rule_of_thirds",
+        "focalPoint": "老周低垂的面部和微驼的肩背",
+        "depthOfField": "medium"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 3,
+      "sceneNumber": 1,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nMedium shot of a pragmatic middle-aged Chinese woman, neat short hair with a worn hair clip, dark red cotton apron with oil stains over a dark green sweater, wiping a food stall table with a cloth, expression blank and avoidant, construction site background, realistic style\n\n=== 角色描述 ===\n【圆脸杏眼，眼尾笑纹藏疲倦 | 齐耳短发黑夹银，旧发卡别耳后 | 微胖端正，肩膀宽厚手脚利落 | 深红棉布围裙沾油渍，暗绿旧毛衣】 林姐(暗红围裙利落短发): 写实风格，干练质朴的中年女性形象。身高约160cm，身形微胖但手脚利落，站姿端正，肩膀宽厚有力。圆脸，面色红润偏暗，一双利落温和的杏眼，眼尾有笑纹却藏不住疲倦，鼻头圆润，嘴唇厚实常抿着，皮肤粗糙偏黄，常年烟火气熏出暖色。齐耳短发，黑发夹少量银丝，用一根旧发卡别在耳后。穿着深红色棉布围裙系在腰间，围裙上沾着油渍与酱点，内搭暗绿色旧毛衣袖口挽起，深色宽松长裤，脚穿黑色布鞋。摊车上挂着一条洗得发硬的擦手毛巾。调色板：暗红、烟绿、暖黄、旧铜色。\n  姿势约束: 说话干脆不拖泥带水，语气硬但手上动作温柔——递便当时别过头不看他，装碗时多塞一块红烧肉；收摊时动作麻利，拉拉链前停顿一下，抬头问话时眼底有光，笑纹与疲倦同时浮现\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, rule of thirds composition, focus on 林姐的手和擦台面的动作",
+        "ref_characters": [
+          "林姐"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "rule_of_thirds",
+        "focalPoint": "林姐的手和擦台面的动作",
+        "depthOfField": "medium"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nMedium shot of a pragmatic middle-aged Chinese woman, neat short hair with a worn hair clip, dark red cotton apron with oil stains over a dark green sweater, wiping a food stall table with a cloth, expression blank and avoidant, construction site background, realistic style\n\n=== 角色描述 ===\n【圆脸杏眼，眼尾笑纹藏疲倦 | 齐耳短发黑夹银，旧发卡别耳后 | 微胖端正，肩膀宽厚手脚利落 | 深红棉布围裙沾油渍，暗绿旧毛衣】 林姐(暗红围裙利落短发): 写实风格，干练质朴的中年女性形象。身高约160cm，身形微胖但手脚利落，站姿端正，肩膀宽厚有力。圆脸，面色红润偏暗，一双利落温和的杏眼，眼尾有笑纹却藏不住疲倦，鼻头圆润，嘴唇厚实常抿着，皮肤粗糙偏黄，常年烟火气熏出暖色。齐耳短发，黑发夹少量银丝，用一根旧发卡别在耳后。穿着深红色棉布围裙系在腰间，围裙上沾着油渍与酱点，内搭暗绿色旧毛衣袖口挽起，深色宽松长裤，脚穿黑色布鞋。摊车上挂着一条洗得发硬的擦手毛巾。调色板：暗红、烟绿、暖黄、旧铜色。\n  姿势约束: 说话干脆不拖泥带水，语气硬但手上动作温柔——递便当时别过头不看他，装碗时多塞一块红烧肉；收摊时动作麻利，拉拉链前停顿一下，抬头问话时眼底有光，笑纹与疲倦同时浮现\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, rule of thirds composition, focus on 林姐的手和擦台面的动作",
+        "ref_characters": [
+          "林姐"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "rule_of_thirds",
+        "focalPoint": "林姐的手和擦台面的动作",
+        "depthOfField": "medium"
+      },
+      "characterRefPrompts": {
+        "林姐": "Full body portrait of a character named 林姐. Face and head: 圆脸杏眼，眼尾笑纹藏疲倦, 齐耳短发黑夹银，旧发卡别耳后. Looking directly at camera with neutral expression. Body and outfit: 微胖端正，肩膀宽厚手脚利落, 深红棉布围裙沾油渍，暗绿旧毛衣. Signature detail: 摊车上洗硬的擦手毛巾. Distinctive feature: 暗红围裙利落短发. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 4,
+      "sceneNumber": 1,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nClose-up of a boxed bento wrapped in a clear plastic bag sitting at the edge of a folding table, sunlight hitting the plastic creating a small glare, construction site dust in the air, realistic style\n\n=== 角色描述 ===\n\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, close up composition, focus on 塑料袋裹着的便当盒, shallow depth of field, bokeh background",
+        "ref_characters": [],
+        "cameraDirection": "static",
+        "compositionGuide": "close_up",
+        "focalPoint": "塑料袋裹着的便当盒",
+        "depthOfField": "shallow"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nClose-up of a boxed bento wrapped in a clear plastic bag sitting at the edge of a folding table, sunlight hitting the plastic creating a small glare, construction site dust in the air, realistic style\n\n=== 角色描述 ===\n\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, close up composition, focus on 塑料袋裹着的便当盒, shallow depth of field, bokeh background",
+        "ref_characters": [],
+        "cameraDirection": "static",
+        "compositionGuide": "close_up",
+        "focalPoint": "塑料袋裹着的便当盒",
+        "depthOfField": "shallow"
+      },
+      "characterRefPrompts": {}
+    },
+    {
+      "shotNumber": 5,
+      "sceneNumber": 1,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nOver-shoulder shot from behind the male worker looking at the woman at the food stall, she stops wiping and looks to the side avoiding eye contact, her mouth slightly open about to speak, warm harsh sunlight, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n【圆脸杏眼，眼尾笑纹藏疲倦 | 齐耳短发黑夹银，旧发卡别耳后 | 微胖端正，肩膀宽厚手脚利落 | 深红棉布围裙沾油渍，暗绿旧毛衣】 林姐(暗红围裙利落短发): 写实风格，干练质朴的中年女性形象。身高约160cm，身形微胖但手脚利落，站姿端正，肩膀宽厚有力。圆脸，面色红润偏暗，一双利落温和的杏眼，眼尾有笑纹却藏不住疲倦，鼻头圆润，嘴唇厚实常抿着，皮肤粗糙偏黄，常年烟火气熏出暖色。齐耳短发，黑发夹少量银丝，用一根旧发卡别在耳后。穿着深红色棉布围裙系在腰间，围裙上沾着油渍与酱点，内搭暗绿色旧毛衣袖口挽起，深色宽松长裤，脚穿黑色布鞋。摊车上挂着一条洗得发硬的擦手毛巾。调色板：暗红、烟绿、暖黄、旧铜色。\n  姿势约束: 说话干脆不拖泥带水，语气硬但手上动作温柔——递便当时别过头不看他，装碗时多塞一块红烧肉；收摊时动作麻利，拉拉链前停顿一下，抬头问话时眼底有光，笑纹与疲倦同时浮现\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, over shoulder composition, focus on 林姐避开目光的脸, Character heights: 老周: 172cm (slim), 林姐: 160cm (average). Maintain correct relative proportions",
+        "ref_characters": [
+          "老周",
+          "林姐"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "over_shoulder",
+        "focalPoint": "林姐避开目光的脸",
+        "depthOfField": "medium"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nOver-shoulder shot from behind the male worker looking at the woman at the food stall, she stops wiping and looks to the side avoiding eye contact, her mouth slightly open about to speak, warm harsh sunlight, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n【圆脸杏眼，眼尾笑纹藏疲倦 | 齐耳短发黑夹银，旧发卡别耳后 | 微胖端正，肩膀宽厚手脚利落 | 深红棉布围裙沾油渍，暗绿旧毛衣】 林姐(暗红围裙利落短发): 写实风格，干练质朴的中年女性形象。身高约160cm，身形微胖但手脚利落，站姿端正，肩膀宽厚有力。圆脸，面色红润偏暗，一双利落温和的杏眼，眼尾有笑纹却藏不住疲倦，鼻头圆润，嘴唇厚实常抿着，皮肤粗糙偏黄，常年烟火气熏出暖色。齐耳短发，黑发夹少量银丝，用一根旧发卡别在耳后。穿着深红色棉布围裙系在腰间，围裙上沾着油渍与酱点，内搭暗绿色旧毛衣袖口挽起，深色宽松长裤，脚穿黑色布鞋。摊车上挂着一条洗得发硬的擦手毛巾。调色板：暗红、烟绿、暖黄、旧铜色。\n  姿势约束: 说话干脆不拖泥带水，语气硬但手上动作温柔——递便当时别过头不看他，装碗时多塞一块红烧肉；收摊时动作麻利，拉拉链前停顿一下，抬头问话时眼底有光，笑纹与疲倦同时浮现\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, over shoulder composition, focus on 林姐避开目光的脸, Character heights: 老周: 172cm (slim), 林姐: 160cm (average). Maintain correct relative proportions",
+        "ref_characters": [
+          "老周",
+          "林姐"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "over_shoulder",
+        "focalPoint": "林姐避开目光的脸",
+        "depthOfField": "medium"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background.",
+        "林姐": "Full body portrait of a character named 林姐. Face and head: 圆脸杏眼，眼尾笑纹藏疲倦, 齐耳短发黑夹银，旧发卡别耳后. Looking directly at camera with neutral expression. Body and outfit: 微胖端正，肩膀宽厚手脚利落, 深红棉布围裙沾油渍，暗绿旧毛衣. Signature detail: 摊车上洗硬的擦手毛巾. Distinctive feature: 暗红围裙利落短发. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 6,
+      "sceneNumber": 1,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nClose-up of the male worker's hand pulling back from the bento box, fingers slightly curled, old ring mark visible on left ring finger, dusty folding table surface, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, close up composition, focus on 老周收回的手和旧戒痕, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "close_up",
+        "focalPoint": "老周收回的手和旧戒痕",
+        "depthOfField": "shallow"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地门口·白天, 氛围: 日常中的冷漠与隐忍\n\n=== 画面描述 ===\nClose-up of the male worker's hand pulling back from the bento box, fingers slightly curled, old ring mark visible on left ring finger, dusty folding table surface, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, close up composition, focus on 老周收回的手和旧戒痕, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "close_up",
+        "focalPoint": "老周收回的手和旧戒痕",
+        "depthOfField": "shallow"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 7,
+      "sceneNumber": 2,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nWide shot of a construction site at dusk, long orange shadows stretching across gravel ground, concrete pipes stacked in corner, a lone male worker sitting on a concrete pipe eating a steamed bun, warm orange and purple sky, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, rule of thirds composition, focus on 老周独坐水泥管的剪影, deep focus, everything sharp",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "rule_of_thirds",
+        "focalPoint": "老周独坐水泥管的剪影",
+        "depthOfField": "deep"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nWide shot of a construction site at dusk, long orange shadows stretching across gravel ground, concrete pipes stacked in corner, a lone male worker sitting on a concrete pipe eating a steamed bun, warm orange and purple sky, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, rule of thirds composition, focus on 老周独坐水泥管的剪影, deep focus, everything sharp",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "rule_of_thirds",
+        "focalPoint": "老周独坐水泥管的剪影",
+        "depthOfField": "deep"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 8,
+      "sceneNumber": 2,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nMedium close-up of a weathered middle-aged Chinese man sitting on a concrete pipe, biting into a white steamed bun, gripping it tightly with both hands, face lit by warm orange sunset, expression weary and quiet, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, close up composition, focus on 老周紧攥馒头的手, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "close_up",
+        "focalPoint": "老周紧攥馒头的手",
+        "depthOfField": "shallow"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nMedium close-up of a weathered middle-aged Chinese man sitting on a concrete pipe, biting into a white steamed bun, gripping it tightly with both hands, face lit by warm orange sunset, expression weary and quiet, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, close up composition, focus on 老周紧攥馒头的手, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "close_up",
+        "focalPoint": "老周紧攥馒头的手",
+        "depthOfField": "shallow"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 9,
+      "sceneNumber": 2,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nMedium shot of a young Chinese man in a light blue shirt with rolled-up sleeves carrying a soft backpack and holding a boxed bento, walking across a construction site at dusk, orange sunset lighting, realistic style\n\n=== 角色描述 ===\n【长脸清秀，单眼皮，目光温和 | 碎短黑发偏软，刘海微长 | 匀称偏瘦，站姿随意松弛 | 浅蓝衬衫袖口卷起，领松一扣】 小陈(浅蓝衬衫软双肩包): 写实风格，普通青年白领形象。身高约175cm，体形匀称偏瘦，站姿随意，带着尚未被生活磨平的松弛感。长脸，五官端正偏清秀，眉毛淡而平，单眼皮，目光温和无攻击性，鼻梁细直，嘴唇薄，皮肤白净偏办公室冷白。碎短发，黑发偏软，刘海微长偶尔遮眼。穿着浅蓝色衬衫袖口卷到小臂，衣领松开一颗扣子，深灰西裤裤脚微皱，背一个软塌塌的黑色双肩包。调色板：浅蓝、深灰、冷白、哑黑。\n  姿势约束: 走路轻快，递便当时双手捧着像捧一件郑重的东西，说话小心翼翼带着试探，传达完消息后安静退到一边，眼神在老周和便当之间游移，不追问不评判，沉默地做一个靠谱的中间人\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, rule of thirds composition, focus on 小陈手中的便当盒",
+        "ref_characters": [
+          "小陈"
+        ],
+        "cameraDirection": "dolly_left",
+        "compositionGuide": "rule_of_thirds",
+        "focalPoint": "小陈手中的便当盒",
+        "depthOfField": "medium"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nMedium shot of a young Chinese man in a light blue shirt with rolled-up sleeves carrying a soft backpack and holding a boxed bento, walking across a construction site at dusk, orange sunset lighting, realistic style\n\n=== 角色描述 ===\n【长脸清秀，单眼皮，目光温和 | 碎短黑发偏软，刘海微长 | 匀称偏瘦，站姿随意松弛 | 浅蓝衬衫袖口卷起，领松一扣】 小陈(浅蓝衬衫软双肩包): 写实风格，普通青年白领形象。身高约175cm，体形匀称偏瘦，站姿随意，带着尚未被生活磨平的松弛感。长脸，五官端正偏清秀，眉毛淡而平，单眼皮，目光温和无攻击性，鼻梁细直，嘴唇薄，皮肤白净偏办公室冷白。碎短发，黑发偏软，刘海微长偶尔遮眼。穿着浅蓝色衬衫袖口卷到小臂，衣领松开一颗扣子，深灰西裤裤脚微皱，背一个软塌塌的黑色双肩包。调色板：浅蓝、深灰、冷白、哑黑。\n  姿势约束: 走路轻快，递便当时双手捧着像捧一件郑重的东西，说话小心翼翼带着试探，传达完消息后安静退到一边，眼神在老周和便当之间游移，不追问不评判，沉默地做一个靠谱的中间人\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, rule of thirds composition, focus on 小陈手中的便当盒",
+        "ref_characters": [
+          "小陈"
+        ],
+        "cameraDirection": "dolly_left",
+        "compositionGuide": "rule_of_thirds",
+        "focalPoint": "小陈手中的便当盒",
+        "depthOfField": "medium"
+      },
+      "characterRefPrompts": {
+        "小陈": "Full body portrait of a character named 小陈. Face and head: 长脸清秀，单眼皮，目光温和, 碎短黑发偏软，刘海微长. Looking directly at camera with neutral expression. Body and outfit: 匀称偏瘦，站姿随意松弛, 浅蓝衬衫袖口卷起，领松一扣. Signature detail: 软塌黑色双肩包. Distinctive feature: 浅蓝衬衫软双肩包. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 10,
+      "sceneNumber": 2,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nTwo-shot of a young white-collar man standing in front of a seated older worker at a construction site, the young man extending a boxed bento toward the older man, orange sunset backlight, warm dusty atmosphere, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n【长脸清秀，单眼皮，目光温和 | 碎短黑发偏软，刘海微长 | 匀称偏瘦，站姿随意松弛 | 浅蓝衬衫袖口卷起，领松一扣】 小陈(浅蓝衬衫软双肩包): 写实风格，普通青年白领形象。身高约175cm，体形匀称偏瘦，站姿随意，带着尚未被生活磨平的松弛感。长脸，五官端正偏清秀，眉毛淡而平，单眼皮，目光温和无攻击性，鼻梁细直，嘴唇薄，皮肤白净偏办公室冷白。碎短发，黑发偏软，刘海微长偶尔遮眼。穿着浅蓝色衬衫袖口卷到小臂，衣领松开一颗扣子，深灰西裤裤脚微皱，背一个软塌塌的黑色双肩包。调色板：浅蓝、深灰、冷白、哑黑。\n  姿势约束: 走路轻快，递便当时双手捧着像捧一件郑重的东西，说话小心翼翼带着试探，传达完消息后安静退到一边，眼神在老周和便当之间游移，不追问不评判，沉默地做一个靠谱的中间人\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, two shot composition, focus on 两人之间递便当的动作, Character heights: 小陈: 175cm (slim), 老周: 172cm (slim). Maintain correct relative proportions",
+        "ref_characters": [
+          "老周",
+          "小陈"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "two_shot",
+        "focalPoint": "两人之间递便当的动作",
+        "depthOfField": "medium"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nTwo-shot of a young white-collar man standing in front of a seated older worker at a construction site, the young man extending a boxed bento toward the older man, orange sunset backlight, warm dusty atmosphere, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n【长脸清秀，单眼皮，目光温和 | 碎短黑发偏软，刘海微长 | 匀称偏瘦，站姿随意松弛 | 浅蓝衬衫袖口卷起，领松一扣】 小陈(浅蓝衬衫软双肩包): 写实风格，普通青年白领形象。身高约175cm，体形匀称偏瘦，站姿随意，带着尚未被生活磨平的松弛感。长脸，五官端正偏清秀，眉毛淡而平，单眼皮，目光温和无攻击性，鼻梁细直，嘴唇薄，皮肤白净偏办公室冷白。碎短发，黑发偏软，刘海微长偶尔遮眼。穿着浅蓝色衬衫袖口卷到小臂，衣领松开一颗扣子，深灰西裤裤脚微皱，背一个软塌塌的黑色双肩包。调色板：浅蓝、深灰、冷白、哑黑。\n  姿势约束: 走路轻快，递便当时双手捧着像捧一件郑重的东西，说话小心翼翼带着试探，传达完消息后安静退到一边，眼神在老周和便当之间游移，不追问不评判，沉默地做一个靠谱的中间人\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, two shot composition, focus on 两人之间递便当的动作, Character heights: 小陈: 175cm (slim), 老周: 172cm (slim). Maintain correct relative proportions",
+        "ref_characters": [
+          "老周",
+          "小陈"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "two_shot",
+        "focalPoint": "两人之间递便当的动作",
+        "depthOfField": "medium"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background.",
+        "小陈": "Full body portrait of a character named 小陈. Face and head: 长脸清秀，单眼皮，目光温和, 碎短黑发偏软，刘海微长. Looking directly at camera with neutral expression. Body and outfit: 匀称偏瘦，站姿随意松弛, 浅蓝衬衫袖口卷起，领松一扣. Signature detail: 软塌黑色双肩包. Distinctive feature: 浅蓝衬衫软双肩包. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 11,
+      "sceneNumber": 2,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nClose-up of a bento box opened to reveal red braised pork, golden fried egg, and green vegetables, warm sunset light, the lid held open by a trembling hand with rough calloused fingers, realistic style\n\n=== 角色描述 ===\n\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, close up composition, focus on 便当里的红烧肉和颤抖的手, shallow depth of field, bokeh background",
+        "ref_characters": [],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "close_up",
+        "focalPoint": "便当里的红烧肉和颤抖的手",
+        "depthOfField": "shallow"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nClose-up of a bento box opened to reveal red braised pork, golden fried egg, and green vegetables, warm sunset light, the lid held open by a trembling hand with rough calloused fingers, realistic style\n\n=== 角色描述 ===\n\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, close up composition, focus on 便当里的红烧肉和颤抖的手, shallow depth of field, bokeh background",
+        "ref_characters": [],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "close_up",
+        "focalPoint": "便当里的红烧肉和颤抖的手",
+        "depthOfField": "shallow"
+      },
+      "characterRefPrompts": {}
+    },
+    {
+      "shotNumber": 12,
+      "sceneNumber": 2,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nExtreme close-up of a weathered middle-aged man's trembling hand, rough calloused fingers slightly shaking, holding the edge of a bento box, sunset orange light, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, close up composition, focus on 颤抖的手指, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "close_up",
+        "focalPoint": "颤抖的手指",
+        "depthOfField": "shallow"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 工地角落·黄昏, 氛围: 沉默中的暖意与震颤\n\n=== 画面描述 ===\nExtreme close-up of a weathered middle-aged man's trembling hand, rough calloused fingers slightly shaking, holding the edge of a bento box, sunset orange light, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, close up composition, focus on 颤抖的手指, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "close_up",
+        "focalPoint": "颤抖的手指",
+        "depthOfField": "shallow"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 13,
+      "sceneNumber": 3,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 便当摊前·夜晚, 氛围: 克制中的不舍与微光\n\n=== 画面描述 ===\nWide shot of a food stall at night, only a single small light bulb glowing warm yellow, the stall counter cleared, cardboard boxes stacked on a tricycle cart nearby, a male worker standing in front of the stall holding an empty bento box, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, leading lines composition, focus on 灯泡下老周和空摊位, deep focus, everything sharp",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "leading_lines",
+        "focalPoint": "灯泡下老周和空摊位",
+        "depthOfField": "deep"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 便当摊前·夜晚, 氛围: 克制中的不舍与微光\n\n=== 画面描述 ===\nWide shot of a food stall at night, only a single small light bulb glowing warm yellow, the stall counter cleared, cardboard boxes stacked on a tricycle cart nearby, a male worker standing in front of the stall holding an empty bento box, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, leading lines composition, focus on 灯泡下老周和空摊位, deep focus, everything sharp",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "leading_lines",
+        "focalPoint": "灯泡下老周和空摊位",
+        "depthOfField": "deep"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 14,
+      "sceneNumber": 3,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 便当摊前·夜晚, 氛围: 克制中的不舍与微光\n\n=== 画面描述 ===\nTwo-shot of a middle-aged male worker and a middle-aged woman at a food stall at night, standing close but not touching, the man holding an empty bento box, the woman with her hands on a cardboard box, warm yellow light from a single bulb, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n【圆脸杏眼，眼尾笑纹藏疲倦 | 齐耳短发黑夹银，旧发卡别耳后 | 微胖端正，肩膀宽厚手脚利落 | 深红棉布围裙沾油渍，暗绿旧毛衣】 林姐(暗红围裙利落短发): 写实风格，干练质朴的中年女性形象。身高约160cm，身形微胖但手脚利落，站姿端正，肩膀宽厚有力。圆脸，面色红润偏暗，一双利落温和的杏眼，眼尾有笑纹却藏不住疲倦，鼻头圆润，嘴唇厚实常抿着，皮肤粗糙偏黄，常年烟火气熏出暖色。齐耳短发，黑发夹少量银丝，用一根旧发卡别在耳后。穿着深红色棉布围裙系在腰间，围裙上沾着油渍与酱点，内搭暗绿色旧毛衣袖口挽起，深色宽松长裤，脚穿黑色布鞋。摊车上挂着一条洗得发硬的擦手毛巾。调色板：暗红、烟绿、暖黄、旧铜色。\n  姿势约束: 说话干脆不拖泥带水，语气硬但手上动作温柔——递便当时别过头不看他，装碗时多塞一块红烧肉；收摊时动作麻利，拉拉链前停顿一下，抬头问话时眼底有光，笑纹与疲倦同时浮现\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, two shot composition, focus on 两人之间半步的距离, Character heights: 老周: 172cm (slim), 林姐: 160cm (average). Maintain correct relative proportions",
+        "ref_characters": [
+          "老周",
+          "林姐"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "two_shot",
+        "focalPoint": "两人之间半步的距离",
+        "depthOfField": "medium"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 便当摊前·夜晚, 氛围: 克制中的不舍与微光\n\n=== 画面描述 ===\nTwo-shot of a middle-aged male worker and a middle-aged woman at a food stall at night, standing close but not touching, the man holding an empty bento box, the woman with her hands on a cardboard box, warm yellow light from a single bulb, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n【圆脸杏眼，眼尾笑纹藏疲倦 | 齐耳短发黑夹银，旧发卡别耳后 | 微胖端正，肩膀宽厚手脚利落 | 深红棉布围裙沾油渍，暗绿旧毛衣】 林姐(暗红围裙利落短发): 写实风格，干练质朴的中年女性形象。身高约160cm，身形微胖但手脚利落，站姿端正，肩膀宽厚有力。圆脸，面色红润偏暗，一双利落温和的杏眼，眼尾有笑纹却藏不住疲倦，鼻头圆润，嘴唇厚实常抿着，皮肤粗糙偏黄，常年烟火气熏出暖色。齐耳短发，黑发夹少量银丝，用一根旧发卡别在耳后。穿着深红色棉布围裙系在腰间，围裙上沾着油渍与酱点，内搭暗绿色旧毛衣袖口挽起，深色宽松长裤，脚穿黑色布鞋。摊车上挂着一条洗得发硬的擦手毛巾。调色板：暗红、烟绿、暖黄、旧铜色。\n  姿势约束: 说话干脆不拖泥带水，语气硬但手上动作温柔——递便当时别过头不看他，装碗时多塞一块红烧肉；收摊时动作麻利，拉拉链前停顿一下，抬头问话时眼底有光，笑纹与疲倦同时浮现\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, two shot composition, focus on 两人之间半步的距离, Character heights: 老周: 172cm (slim), 林姐: 160cm (average). Maintain correct relative proportions",
+        "ref_characters": [
+          "老周",
+          "林姐"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "two_shot",
+        "focalPoint": "两人之间半步的距离",
+        "depthOfField": "medium"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background.",
+        "林姐": "Full body portrait of a character named 林姐. Face and head: 圆脸杏眼，眼尾笑纹藏疲倦, 齐耳短发黑夹银，旧发卡别耳后. Looking directly at camera with neutral expression. Body and outfit: 微胖端正，肩膀宽厚手脚利落, 深红棉布围裙沾油渍，暗绿旧毛衣. Signature detail: 摊车上洗硬的擦手毛巾. Distinctive feature: 暗红围裙利落短发. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 15,
+      "sceneNumber": 3,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 便当摊前·夜晚, 氛围: 克制中的不舍与微光\n\n=== 画面描述 ===\nClose-up of the male worker's face looking down at the empty bento box, dim warm light, eyes lowered, jaw tight, expression flat but heavy with restrained emotion, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, close up composition, focus on 老周低垂的目光和绷紧的下颌, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "close_up",
+        "focalPoint": "老周低垂的目光和绷紧的下颌",
+        "depthOfField": "shallow"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 便当摊前·夜晚, 氛围: 克制中的不舍与微光\n\n=== 画面描述 ===\nClose-up of the male worker's face looking down at the empty bento box, dim warm light, eyes lowered, jaw tight, expression flat but heavy with restrained emotion, realistic style\n\n=== 角色描述 ===\n【颧骨突出，眼窝深陷，纹如干裂河床 | 花白寸头，灰白混杂如霜草 | 骨架宽大偏瘦，肩背微驼 | 洗白深蓝工装，袖口磨线头】 老周(花白寸头旧工装): 写实风格，饱经风霜的中年劳工形象。身高约172cm，体格偏瘦但骨架宽大，肩背微驼，手掌粗糙布满老茧。面容消瘦，颧骨突出，深陷的眼窝下一双浑浊却温厚的眼睛，眼角细纹密布如干裂河床，鼻梁粗直，嘴唇干裂发白，皮肤黝黑粗糙，日光灼痕遍布额头与后颈。短发花白，寸头渐长，灰白混杂如霜草，鬓角全白。穿着洗到发白的深蓝色工装外套，袖口磨出线头，内搭灰色旧圆领汗衫，深灰工装裤膝部泛白，脚踩沾满水泥灰的解放鞋。左手无名指有褪色旧戒痕，指甲缝嵌着洗不掉的灰泥。调色板：铁锈蓝、灰白、枯草黄、水泥灰。\n  姿势约束: 极少言语，情绪全在手上——打开便当时手在抖，啃馒头时攥得极紧；走路低头弓肩，目光不与人直视，转身离开时步子顿一下再迈；沉默是最重的表达，无言比千句更有力\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, close up composition, focus on 老周低垂的目光和绷紧的下颌, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "老周"
+        ],
+        "cameraDirection": "static",
+        "compositionGuide": "close_up",
+        "focalPoint": "老周低垂的目光和绷紧的下颌",
+        "depthOfField": "shallow"
+      },
+      "characterRefPrompts": {
+        "老周": "Full body portrait of a character named 老周. Face and head: 颧骨突出，眼窝深陷，纹如干裂河床, 花白寸头，灰白混杂如霜草. Looking directly at camera with neutral expression. Body and outfit: 骨架宽大偏瘦，肩背微驼, 洗白深蓝工装，袖口磨线头. Signature detail: 左手无名指旧戒痕，指甲缝灰泥. Distinctive feature: 花白寸头旧工装. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    },
+    {
+      "shotNumber": 16,
+      "sceneNumber": 3,
+      "startFrame": {
+        "prompt": "生成该镜头的开场帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。\n你必须完全匹配该画风。不得默认使用写实风格。\n- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画\n- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像\n- 如果附有参考图，其视觉风格即为标准——必须精确匹配\n- 输出的画风必须与角色参考图保持一致\n\n=== 场景环境 ===\n场景: 便当摊前·夜晚, 氛围: 克制中的不舍与微光\n\n=== 画面描述 ===\nClose-up of the woman's face looking up at the man, warm yellow light from a single bulb, eyes soft and slightly red, mouth open about to speak, a moment of vulnerability, cardboard boxes in background, realistic style\n\n=== 角色描述 ===\n【圆脸杏眼，眼尾笑纹藏疲倦 | 齐耳短发黑夹银，旧发卡别耳后 | 微胖端正，肩膀宽厚手脚利落 | 深红棉布围裙沾油渍，暗绿旧毛衣】 林姐(暗红围裙利落短发): 写实风格，干练质朴的中年女性形象。身高约160cm，身形微胖但手脚利落，站姿端正，肩膀宽厚有力。圆脸，面色红润偏暗，一双利落温和的杏眼，眼尾有笑纹却藏不住疲倦，鼻头圆润，嘴唇厚实常抿着，皮肤粗糙偏黄，常年烟火气熏出暖色。齐耳短发，黑发夹少量银丝，用一根旧发卡别在耳后。穿着深红色棉布围裙系在腰间，围裙上沾着油渍与酱点，内搭暗绿色旧毛衣袖口挽起，深色宽松长裤，脚穿黑色布鞋。摊车上挂着一条洗得发硬的擦手毛巾。调色板：暗红、烟绿、暖黄、旧铜色。\n  姿势约束: 说话干脆不拖泥带水，语气硬但手上动作温柔——递便当时别过头不看他，装碗时多塞一块红烧肉；收摊时动作麻利，拉拉链前停顿一下，抬头问话时眼底有光，笑纹与疲倦同时浮现\n\n=== 参考图（角色设定图）===\n每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。\n角色名印在每张设定图底部——用它来识别对应的角色。\n强制一致性规则：\n- 将设定图中的角色名与场景描述中的角色名匹配\n- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）\n- 面部、发型、发色、体型、肤色必须精确匹配\n- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现\n- 画风必须与参考图精确匹配\n\n=== 渲染 ===\n质感：与画风相称的丰富细节\n光照：电影级打光，具有合理的光源。使用轮廓光分离角色。\n背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。\n角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。\n构图：电影式取景，具有清晰的焦点和景深。, close up composition, focus on 林姐抬头时眼里的一丝柔软, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "林姐"
+        ],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "close_up",
+        "focalPoint": "林姐抬头时眼里的一丝柔软",
+        "depthOfField": "shallow"
+      },
+      "endFrame": {
+        "prompt": "生成该镜头的结束帧，作为一张高质量图像。\n\n=== 关键：画风（最高优先级）===\n你必须精确匹配首帧图像（已附带）的画风。\n如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。\n如果首帧是写实风格 → 此帧也必须是写实风格。\n不得更改或混用画风。这是不可妥协的。\n\n=== 场景环境 ===\n场景: 便当摊前·夜晚, 氛围: 克制中的不舍与微光\n\n=== 画面描述 ===\nClose-up of the woman's face looking up at the man, warm yellow light from a single bulb, eyes soft and slightly red, mouth open about to speak, a moment of vulnerability, cardboard boxes in background, realistic style\n\n=== 角色描述 ===\n【圆脸杏眼，眼尾笑纹藏疲倦 | 齐耳短发黑夹银，旧发卡别耳后 | 微胖端正，肩膀宽厚手脚利落 | 深红棉布围裙沾油渍，暗绿旧毛衣】 林姐(暗红围裙利落短发): 写实风格，干练质朴的中年女性形象。身高约160cm，身形微胖但手脚利落，站姿端正，肩膀宽厚有力。圆脸，面色红润偏暗，一双利落温和的杏眼，眼尾有笑纹却藏不住疲倦，鼻头圆润，嘴唇厚实常抿着，皮肤粗糙偏黄，常年烟火气熏出暖色。齐耳短发，黑发夹少量银丝，用一根旧发卡别在耳后。穿着深红色棉布围裙系在腰间，围裙上沾着油渍与酱点，内搭暗绿色旧毛衣袖口挽起，深色宽松长裤，脚穿黑色布鞋。摊车上挂着一条洗得发硬的擦手毛巾。调色板：暗红、烟绿、暖黄、旧铜色。\n  姿势约束: 说话干脆不拖泥带水，语气硬但手上动作温柔——递便当时别过头不看他，装碗时多塞一块红烧肉；收摊时动作麻利，拉拉链前停顿一下，抬头问话时眼底有光，笑纹与疲倦同时浮现\n\n=== 参考图 ===\n第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。\n其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。\n将每张角色设定图的名字与场景中的角色匹配。\n\n=== 与首帧的关系 ===\n此结束帧展示镜头动作完成后的终止状态。与首帧相比：\n- 相同的环境、光照设置和色彩方案\n- 相同画风——绝对不得更改风格\n- 服装完全一致——角色穿着与参考设定图和首帧中完全相同的服装。不得更换服装。\n- 相同的面部、发型、配饰——仅姿势/表情/位置发生变化\n- 角色的位置、姿势和表情已按上方画面描述发生变化\n\n=== 作为下一镜头的起始点 ===\n此帧将被复用为下一个镜头的开场帧。确保：\n- 姿势是稳定的——非运动中间态或模糊的\n- 构图是完整的，可作为独立画面成立\n- 取景允许自然过渡到不同的机位角度\n\n=== 渲染 ===\n质感：与首帧风格匹配的丰富细节\n光照：与首帧相同的光照设置。仅在动作需要时才变化。\n背景：必须与首帧的环境一致。\n角色：精确匹配参考图。展示镜头动作结束时的情绪状态。\n构图：镜头的自然收束，为切换到下一个镜头做好准备。, close up composition, focus on 林姐抬头时眼里的一丝柔软, shallow depth of field, bokeh background",
+        "ref_characters": [
+          "林姐"
+        ],
+        "cameraDirection": "slow_push_in",
+        "compositionGuide": "close_up",
+        "focalPoint": "林姐抬头时眼里的一丝柔软",
+        "depthOfField": "shallow"
+      },
+      "characterRefPrompts": {
+        "林姐": "Full body portrait of a character named 林姐. Face and head: 圆脸杏眼，眼尾笑纹藏疲倦, 齐耳短发黑夹银，旧发卡别耳后. Looking directly at camera with neutral expression. Body and outfit: 微胖端正，肩膀宽厚手脚利落, 深红棉布围裙沾油渍，暗绿旧毛衣. Signature detail: 摊车上洗硬的擦手毛巾. Distinctive feature: 暗红围裙利落短发. Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe. Style: photorealistic, cinematic lighting, sharp focus, high detail. Simple neutral gray background."
+      }
+    }
+  ]
+}

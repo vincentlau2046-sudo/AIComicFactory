@@ -160,6 +160,12 @@ def build_flux_dev_prompt(character: dict) -> str:
     
     Unlike SDXL prompts which use Danbooru-style tags, Flux Dev works
     best with natural language descriptions.
+    
+    Key insight: Flux Dev gives excessive weight to background instructions.
+    For character reference images, we need to:
+    1. Put character description FIRST and in detail
+    2. Use minimal background instruction (neutral gray, not white)
+    3. Emphasize the figure fills the frame
     """
     desc = character.get("description") or character.get("appearance", "")
     anchors = character.get("visualAnchors", {})
@@ -172,75 +178,92 @@ def build_flux_dev_prompt(character: dict) -> str:
     gender = infer_gender(combined_text, gender_field)
     _, age_visual = infer_age(combined_text)
     
-    parts = [f"Character reference sheet of {name}."]
+    # ── CHARACTER-FIRST structure ──
+    # Start with the most important: who is this person, what do they look like
+    char_parts = []
     
-    # Demographics
+    # Core identity
+    identity = f"Full body portrait of a character named {name}"
     demo_parts = []
     if age_visual:
         demo_parts.append(age_visual)
     if gender:
         demo_parts.append(gender)
     if demo_parts:
-        parts.append(", ".join(demo_parts) + ".")
+        identity += f", {', '.join(demo_parts)}"
+    char_parts.append(identity + ".")
     
-    # Pose & framing
-    parts.append("Full body, standing, front view, facing camera, neutral expression.")
-    parts.append("Plain white background, studio lighting.")
-    
-    # Visual anchors as natural language
+    # Face & expression — most critical for reference
+    face_parts = []
     if anchors.get("face"):
-        parts.append(f"Face: {anchors['face']}.")
+        face_parts.append(anchors["face"])
     if anchors.get("hair"):
-        parts.append(f"Hair: {anchors['hair']}.")
+        face_parts.append(anchors["hair"])
+    if face_parts:
+        char_parts.append(f"Face and head: {', '.join(face_parts)}. Looking directly at camera with neutral expression.")
+    else:
+        char_parts.append("Looking directly at camera with neutral expression.")
+    
+    # Body & clothing — second most important
+    body_parts = []
     if anchors.get("body"):
-        parts.append(f"Body: {anchors['body']}.")
+        body_parts.append(anchors["body"])
     if anchors.get("clothing"):
-        parts.append(f"Clothing: {anchors['clothing']}.")
+        body_parts.append(anchors["clothing"])
+    if body_parts:
+        char_parts.append(f"Body and outfit: {', '.join(body_parts)}.")
+    
     if anchors.get("signature"):
-        parts.append(f"Signature details: {anchors['signature']}.")
+        char_parts.append(f"Signature detail: {anchors['signature']}.")
     
     # Visual hint
     if hint:
-        parts.append(f"Key visual: {hint}.")
+        char_parts.append(f"Distinctive feature: {hint}.")
     
-    # Style from description
+    # Pose — fill the frame
+    char_parts.append("Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe.")
+    
+    # Style
+    style_str = "detailed, high quality"
     if desc:
         desc_lower = desc.lower()
         if any(kw in desc_lower for kw in ["写实", "realistic", "photorealistic"]):
-            parts.append("Style: photorealistic, cinematic lighting, high detail.")
+            style_str = "photorealistic, cinematic lighting, sharp focus, high detail"
         elif any(kw in desc_lower for kw in ["动漫", "anime", "漫画", "manga"]):
-            parts.append("Style: anime illustration, vibrant colors, detailed.")
-        else:
-            parts.append("Style: detailed character design, high quality, 8k resolution.")
+            style_str = "anime illustration, vibrant colors, clean linework, detailed"
+    char_parts.append(f"Style: {style_str}.")
     
-    parts.append("Single figure, no other people, no background elements, clean composition.")
+    # Background — LAST and minimal (Flux over-weights background instructions)
+    char_parts.append("Simple neutral gray background.")
     
-    return " ".join(parts)
+    return " ".join(char_parts)
 
 
 # ═══════════════════════════════════════════════════════════════════
 # Flux Dev T2I workflow builder
 # ═══════════════════════════════════════════════════════════════════
 
-def build_flux_dev_workflow(positive: str, width: int = 1024, height: int = 1536, seed: int = None) -> dict:
+def build_flux_dev_workflow(positive: str, width: int = 1024, height: int = 1536,
+                            seed: int = None, steps: int = 28, cfg: float = 4.0,
+                            sampler: str = "dpmpp_2m", scheduler: str = "sgm_uniform") -> dict:
     """Build Flux Dev fp8 T2I workflow from template.
     
-    Uses flux_dev_t2i.json template with:
-    - UNETLoader (node 10) for flux1-dev-fp8
-    - DualCLIPLoader (node 11) for clip_l + t5xxl
-    - VAELoader (node 12) for ae.safetensors
-    - KSampler (node 16): 20 steps, euler/simple, cfg=3.5
-    - SaveImage (node 18): aicf_char prefix
-    
-    Note: Flux Dev doesn't use negative prompt effectively,
-    so node 15 (negative CLIPTextEncode) is left empty.
+    Default params optimized for character reference images:
+    - 28 steps dpmpp_2m/sgm_uniform, cfg=4.0 (not 20 euler/simple)
+    - Flux Dev doesn't use negative prompt, node 15 left empty
     """
     wf = load_workflow("flux_dev_t2i.json")
     return inject_params(wf, {
         "13": {"width": width, "height": height},
         "14": {"text": positive},
-        "15": {"text": ""},  # Flux Dev doesn't use negative prompt effectively
-        "16": {"seed": seed if seed is not None else random.randint(0, 2**32 - 1)},
+        "15": {"text": ""},
+        "16": {
+            "seed": seed if seed is not None else random.randint(0, 2**32 - 1),
+            "steps": steps,
+            "cfg": cfg,
+            "sampler_name": sampler,
+            "scheduler": scheduler,
+        },
         "18": {"filename_prefix": "aicf_char"},
     })
 
@@ -488,6 +511,12 @@ def _run_t2i(args):
     
     Supports both Flux Dev (--gen flux, default) and legacy SDXL (--gen t2i).
     """
+    # Flux Dev optimal params
+    FLUX_STEPS = 28
+    FLUX_CFG = 4.0
+    FLUX_SAMPLER = "dpmpp_2m"
+    FLUX_SCHEDULER = "sgm_uniform"
+
     is_flux = (args.gen == "flux")
     
     # SDXL checkpoint selection (only used when gen=t2i)
@@ -613,6 +642,7 @@ def _run_t2i(args):
                                 results[name] = str(dest)
                         else:
                             results[name] = str(dest)
+                            break  # VL disabled: success = done
                 else:
                     print(f"  ⚠️ No output file found")
                     results[name] = "ERROR: no output"

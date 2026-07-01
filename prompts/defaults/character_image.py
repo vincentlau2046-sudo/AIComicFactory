@@ -99,38 +99,60 @@ def build_flux_ref_prompt(
     Unlike the 4-view prompt (build_full_prompt), this generates a single
     front-view reference image suitable for Flux Dev T2I pipeline.
     Uses natural language instead of Danbooru tags.
+    
+    Key design: CHARACTER-FIRST, BACKGROUND-LAST.
+    Flux Dev over-weights background instructions — if you say "white background"
+    it'll make 75% of the image white. So we put the character description up front
+    and keep background instruction minimal and at the end.
     """
     anchors = visual_anchors or {}
     
-    parts = [f"Character reference sheet of {character_name}."]
-    parts.append("Full body, standing, front view, facing camera, neutral expression.")
-    parts.append("Plain white background, studio lighting.")
+    # ── CHARACTER-FIRST structure ──
+    char_parts = []
     
-    # Inject visual anchors as natural language
+    # Core identity
+    char_parts.append(f"Full body portrait of a character named {character_name}.")
+    
+    # Face & expression — most critical for reference
+    face_parts = []
     if anchors.get("face"):
-        parts.append(f"Face: {anchors['face']}.")
+        face_parts.append(anchors["face"])
     if anchors.get("hair"):
-        parts.append(f"Hair: {anchors['hair']}.")
+        face_parts.append(anchors["hair"])
+    if face_parts:
+        char_parts.append(f"Face and head: {', '.join(face_parts)}. Looking directly at camera with neutral expression.")
+    else:
+        char_parts.append("Looking directly at camera with neutral expression.")
+    
+    # Body & clothing
+    body_parts = []
     if anchors.get("body"):
-        parts.append(f"Body: {anchors['body']}.")
+        body_parts.append(anchors["body"])
     if anchors.get("clothing"):
-        parts.append(f"Clothing: {anchors['clothing']}.")
+        body_parts.append(anchors["clothing"])
+    if body_parts:
+        char_parts.append(f"Body and outfit: {', '.join(body_parts)}.")
+    
     if anchors.get("signature"):
-        parts.append(f"Signature details: {anchors['signature']}.")
+        char_parts.append(f"Signature detail: {anchors['signature']}.")
     
     if visual_hint:
-        parts.append(f"Key visual: {visual_hint}.")
+        char_parts.append(f"Distinctive feature: {visual_hint}.")
     
+    # Pose — fill the frame
+    char_parts.append("Standing straight, facing forward, arms at sides. The figure fills most of the frame from head to toe.")
+    
+    # Style
+    style_str = "detailed, high quality"
     if character_description:
-        # Extract style keywords
         desc_lower = character_description.lower()
         if any(kw in desc_lower for kw in ["写实", "realistic", "photorealistic"]):
-            parts.append("Style: photorealistic, cinematic lighting, high detail.")
+            style_str = "photorealistic, cinematic lighting, sharp focus, high detail"
         elif any(kw in desc_lower for kw in ["动漫", "anime", "漫画", "manga"]):
-            parts.append("Style: anime illustration, vibrant colors, detailed.")
-        else:
-            parts.append("Style: detailed character design, high quality, 8k resolution.")
+            style_str = "anime illustration, vibrant colors, clean linework, detailed"
+    char_parts.append(f"Style: {style_str}.")
     
-    parts.append("Single figure, no other people, no background elements, clean composition.")
+    # Background — LAST and minimal
+    char_parts.append("Simple neutral gray background.")
     
-    return " ".join(parts)
+    return " ".join(char_parts)
