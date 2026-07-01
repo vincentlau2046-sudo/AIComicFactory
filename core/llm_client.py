@@ -35,7 +35,7 @@ MODEL_ALIASES = {
 
 DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_TEMPERATURE = 0.7
-DEFAULT_MAX_TOKENS = 4096
+DEFAULT_MAX_TOKENS = 8192
 
 
 def _get_api_key() -> str:
@@ -128,7 +128,7 @@ class LLMClient:
         req = urllib.request.Request(self.base_url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=300) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 msg = result["choices"][0]["message"]
                 content = msg.get("content", "") or ""
@@ -159,37 +159,64 @@ class LLMClient:
         model: str = None,
         temperature: float = 0.3,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_retries: int = 3,
     ) -> dict:
         """
         Send a chat request expecting JSON output.
         Uses lower temperature and response_format for reliability.
+        Auto-retries on JSON parse failure with increasing temperature.
         """
-        content = self.chat(
-            system=system,
-            user=user,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"},
-        )
+        import re
+        
+        last_error = None
+        for attempt in range(max_retries):
+            current_temp = temperature + (attempt * 0.1)  # Increase temp slightly on retry
+            try:
+                content = self.chat(
+                    system=system,
+                    user=user,
+                    model=model,
+                    temperature=current_temp,
+                    max_tokens=max_tokens,
+                    response_format={"type": "json_object"},
+                )
+            except RuntimeError as e:
+                # Timeout/API errors: don't retry with modified prompt
+                if attempt < max_retries - 1 and "timed" in str(e).lower():
+                    import sys as _sys
+                    print(f"  [API retry {attempt+1}/{max_retries}] {e}", file=_sys.stderr)
+                    continue
+                raise
 
-        # Strip markdown code blocks if present
-        text = content.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            # Remove first and last lines (```json and ```)
-            lines = [l for l in lines if not l.strip().startswith("```")]
-            text = "\n".join(lines)
+            # Strip markdown code blocks if present
+            text = content.strip()
+            if text.startswith("```"):
+                lines = text.split("\n")
+                # Remove first and last lines (```json and ```)
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                text = "\n".join(lines)
 
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            # Try to find JSON in the text
-            import re
-            match = re.search(r'\{[\s\S]*\}', text)
-            if match:
-                return json.loads(match.group())
-            raise RuntimeError(f"LLM output is not valid JSON: {text[:200]}")
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError as e:
+                last_error = (e, text)
+                # Try regex extraction
+                match = re.search(r'\{[\s\S]*\}', text)
+                if match:
+                    try:
+                        return json.loads(match.group())
+                    except json.JSONDecodeError:
+                        pass
+                
+                # Retry with a note about the error
+                if attempt < max_retries - 1:
+                    import sys as _sys
+                    print(f"  [JSON retry {attempt+1}/{max_retries}] parse error: {e}", file=_sys.stderr)
+                    user += f"\n\n[系统提示] 上一次你输出的 JSON 有格式错误: {e}。请确保输出严格合法的 JSON，检查引号、逗号、括号配对。"
+        
+        # All retries exhausted
+        err_text = last_error[1][:500] if last_error else text[:500]
+        raise RuntimeError(f"LLM JSON parse failed after {max_retries} attempts: {last_error[0]}\nPartial output: {err_text}")
 
     def generate_image_prompt(
         self,

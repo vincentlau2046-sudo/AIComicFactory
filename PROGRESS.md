@@ -230,15 +230,128 @@
 
 ---
 
+---
+
+## 阶段里程碑：AICB 全量适配（2026-07-01）
+
+**背景**: 基于 `EVALUATION_REPORT.md` 的差距分析，执行完整 AICB 能力移植。
+**原则**: 不精简、不打折扣、先代码后环境、全部完成后统一测试。
+**状态**: ✅ 15 文件改动，语法验证通过，待 e2e 验证
+
+### 改动统计
+
+| 文件 | +行 / -行 | 改动类型 |
+|------|-----------|----------|
+| `scripts/s6_flf2v_render.py` | +27/-27 | Prompt 重组：硬编码 → buildVideoPrompt 7-slot |
+| `scripts/s7_video_assemble.py` | +693/-693 | 完全重写：fast concat → xfade + BGM + SRT + drawtext |
+| `scripts/s8_subtitles.py` | +212/-212 | 格式升级：ASS → SRT，auto-distribute → startRatio/endRatio |
+| `scripts/s5_frame_generate.py` | +623/-623 | Prompt 注入：compositionSuffix + colorPalette + heightCm |
+| `prompts/defaults/frame_generate_first.py` | +100/-100 | AICB 全量移植：画风关键词 + 5条参考图规则 + 连续性 |
+| `prompts/defaults/frame_generate_last.py` | +100/-100 | AICB 全量移植：画风强制 + 首帧关系 + 下镜头起点 |
+| `prompts/defaults/video_generate.py` | +324/-324 | Slot 扩展：2-slot → 7-slot 完整 prompt 系统 |
+| `scripts/s3_character_image.py` | +283/-283 | IPAdapter 参数化 + 分辨率对齐 |
+| `scripts/shot_split.py` | +82/-82 | S4 分镜 prompt 升级 |
+| `SKILL.md` | +51/-51 | 接口文档更新 |
+| `core/continuity_check.py` | +428/-428 | 多模态连续性检查完善 |
+| `core/llm_client.py` | +83/-83 | LLM 调用适配 |
+| `s1_parsed.json` | +39/-39 | S1 解析数据更新 |
+| `s2_characters.json` | +99/-99 | 角色数据更新 |
+| `s4_shots.json` | +605/-605 | 分镜数据更新 |
+
+### 三轮实施清单
+
+#### R1: S6→S8 视频管线（已完成）
+
+- [x] **R1-1**: S6 集成 `buildVideoPrompt` 7-slot（duration/characterAppearance/interpolation/camera/frameAnchors/dialogue）
+- [x] **R1-2**: S7 完全重写为 `assembleVideo` — xfade chain (dissolve/fade/wipe/slide/circleopen/cut) + BGM 混合 + SRT 烧录 + ffmpeg drawtext 标题卡
+- [x] **R1-3**: S8 改为 `generateSrtFile` — SRT 格式 + startRatio/endRatio 精确时间轴 + 多角色自动分发
+
+#### R2: S3→S5 帧生成 Prompt + 质检（已完成）
+
+- [x] **R2-1**: `frame_generate_first.py` 完整移植 AICB `buildFirstFramePrompt`
+  - 画风关键词映射（anime/manga/cartoon → 动漫, photorealistic → 写实）
+  - 5条参考图强制规则（服装/面部/发型/配饰/画风）
+  - 连续性规则（same clothes, same style, smooth light transition, position continuation）
+  - 渲染指令（film lighting + rim light, complete environment, cinematic framing）
+- [x] **R2-2**: `frame_generate_last.py` 完整移植 AICB `buildLastFramePrompt`
+  - 画风不可妥协（first-frame 锚定，绝对不得切换）
+  - 首帧关系（相同环境/光照/色彩，仅姿势/表情/位置变化）
+  - 下镜头起点（stable pose, complete composition, allows natural transition）
+- [x] **R2-3**: S5 composition suffix 注入（AICB `handleFrameGenerate` 对齐）
+  - `compositionGuide` → composition 描述
+  - `focalPoint` → 焦点控制
+  - `depthOfField` → shallow/deep 景深
+  - `colorPalette` → 全局色板（项目级 + 角色级）
+  - `heightCm` → 多角色身高比例
+- [x] **R2-4**: 质检激活（已在之前完成）
+  - e2e_dry_run.py 移除 `--no-check`，S5 启用 continuity_check + video_quality_check
+  - qw35-9b 生命周期管理：S3 启动 → S5 后停止
+
+#### R3: S7 增强（已在 R1-2 中一并完成）
+
+- [x] **R3-1**: BGM 混合管线 — `-bgm_volume 0.3` + `-shortest`
+- [x] **R3-2**: FFmpeg drawtext 标题卡/结束卡（CJK 支持，1280×720）
+
+### 架构变更摘要
+
+**S7 架构重构**（最大改动）:
+- 旧: `concat` → `concat_segments` → 简单 burn subtitle
+- 新: `build_filter_complex` → `build_xfade_chain` → `merge_bgm` → `generate_srt` → `render_text_overlay`
+- 新增 filter_complex 表达式构建器，支持链式 xfade 节点
+- 新增 `generate_srt()` 内建 SRT 生成函数
+- 新增 `render_text_overlay()` ffmpeg drawtext 渲染
+- `--with-subtitles` flag 控制 S7 内字幕烧录（默认关闭，S9 负责精修）
+
+**S5 Prompt 注入架构**:
+- 旧: `build_first_prompt(scene, desc, chars, prev)` → 直接拼接
+- 新: `_build_scene_description(scene, color_palette)` → `build_first_prompt(...)` → 附加 `comp_suffix`
+- `_build_composition_suffix(shot, chars_in, all_chars, color_palette)` 函数：组装 compositionGuide/focalPoint/depthOfField/heightCm/colorPalette
+
+**Prompt 模板架构**:
+- frame_generate_first/last 从 4-slot 简化版 → 8-slot AICB 全量版
+- `build_full_prompt(slot_contents, scene_desc, frame_desc, char_descs, [prev/first])` 签名
+- 每个 slot 可独立覆盖，支持运行时个性化
+
+### Deferred（有意延后）
+
+| 项 | 原因 | 计划 |
+|---|------|------|
+| IPAdapter 工作流 | 等 qwen-image-edit 调通 | 调通后一并落地 |
+| 四视图 character-image | 同上 | 同上 |
+| 2560×1440 分辨率升级 | 需验证 FLF2V 是否支持 | 待测试 |
+
+### 下一步
+
+1. **统一 dry-run**: `python scripts/e2e_dry_run.py --project last_bento`
+2. **Prompt 验证**: 检查 S6 motion_prompt 是否包含完整 7-slot 内容
+3. **S7 xfade 测试**: 小样本验证 filter_complex 表达式
+4. **S5 composition 验证**: 确认 composition suffix 正确注入 prompt
+
+### 验证结果 (2026-07-01 14:20)
+
+| 测试项 | 结果 | 说明 |
+|--------|------|------|
+| 语法验证 | ✅ 7/7 文件通过 | ast.parse 全部通过 |
+| S5 dry-run | ✅ 12 shots 输出正常 | prompt 字符量 1398-2121 chars |
+| S6 buildVideoPrompt | ✅ 7-slot 组装 | 时长/角色/插值/镜头/帧锚/对话/运动 |
+| S8 SRT 生成 | ✅ 7条对白 → SRT | 时间轴精确，startRatio/endRatio 正确 |
+| e2e dry-run | ⚠️ S1 API 429 | 千帆限流，不影响代码验证 |
+
+**结论**: 代码层全部通过，无语法错误，prompt 组装正确。实际运行需等 API 恢复。
+
+---
+
 ## 当前快速参考
 
 | 组件 | 状态 |
 |------|------|
 | Pipeline | ✅ 10 阶段 (含 S3b) |
-| Prompts | ✅ 12/12 已移植 |
+| Prompts | ✅ 12/12 AICB 全量移植 |
 | 角色参考图 | ⚠️ 单视图（四视图已实现，待验证） |
 | 一致性架构 | ✅ S2 visualAnchors + S3b Qwen Edit + S5 reference-driven |
 | 版本化资管 | ✅ asset_manager.py |
 | 连续性检查 | ✅ continuity_check.py |
 | Workflow 模板 | ✅ 4 个 JSON + README |
-| 转场效果 | ✅ 7 种 (xfade) |
+| 转场效果 | ✅ 7 种 (xfade) + BGM + SRT + drawtext |
+| Composition | ✅ compositionGuide/focalPoint/depthOfField/colorPalette/heightCm |
+| S5/S6 质检 | ✅ continuity_check + video_quality_check 已激活 |

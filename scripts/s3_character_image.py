@@ -3,15 +3,17 @@
 scripts/s3_character_image.py — Stage 3a: 角色参考图生成
 
 从 s2_characters.json 读取角色描述，生成正面全身参考图。
-支持双风格路径：
-  --style realistic (Flux.1 Dev FP8, 默认)
-  --style anime     (Animagine XL 3.1, SDXL)
+支持三风格路径：
+  --style vivid    (xuebiMIX，鲜亮动漫，默认)
+  --style classic  (Animagine XL 3.1，经典动漫)
+  --style concept  (JuggernautXL，写实概念)
 
 Prompt 由 OpenClaw (Nova) 生成并注入，脚本只负责 ComfyUI 调用。
 
 用法:
     python scripts/s3_character_image.py --project last_bento
-    python scripts/s3_character_image.py --project last_bento --style anime
+    python scripts/s3_character_image.py --project last_bento --style classic
+    python scripts/s3_character_image.py --project last_bento --style concept
     python scripts/s3_character_image.py --project last_bento --character 老周
 """
 
@@ -24,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.comfyui_session import ComfyUISession, ComfyUIError
 from core.state_manager import get_state_manager
+from core.character_image_check import CharacterImageChecker
 from core.asset_manager import get_asset_manager
 
 # ═══════════════════════════════════════════════════════════════════
@@ -37,40 +40,144 @@ NEGATIVE_PROMPT = (
     "comic panel, multiple people, group, crowd, duplicate, clone"
 )
 
-QUALITY_TAGS = "masterpiece, best quality, very aesthetic, highres, detailed"
+classic_quality = "masterpiece, best quality, very aesthetic, highres, detailed"
 
 
-def build_char_prompt(character: dict) -> str:
+def build_char_prompt(character: dict, style: str = "vivid") -> str:
     """Build T2I prompt from character visualAnchors.
     
-    Animagine XL responds well to: quality tags, gender/age tags, 
-    comma-separated visual descriptors, parentheses for emphasis.
+    风格映射 (方案 A):
+      vivid   - xuebiMIX 鲜亮动漫 (默认), Danbooru tags + vivid colors
+      classic - Animagine XL 经典动漫, Danbooru tags + year/quality
+      concept - JuggernautXL 写实概念, 自然语言 CG render
     """
-    # Support both "description" (AICB format) and "appearance" (our format)
     desc = character.get("description") or character.get("appearance", "")
     anchors = character.get("visualAnchors", {})
     hint = character.get("visualHint", "")
+    combined_text = f"{desc} {hint}"
 
-    # Use explicit gender field (fall back to text search for old format)
-    if character.get("gender") == "female":
-        gender_tag = "1girl"
-    elif character.get("gender") == "male":
-        gender_tag = "1man, mature male"
+    if style == "concept":
+        return _build_concept_prompt(character, desc, anchors, hint, combined_text)
+    elif style == "classic":
+        return _build_classic_prompt(character, desc, anchors, hint, combined_text)
     else:
-        is_female = "女" in desc[:80] or "女性" in desc[:80]
-        gender_tag = "1girl" if is_female else "1man, mature male"
+        return _build_vivid_prompt(character, desc, anchors, hint, combined_text)
+
+
+def _build_concept_prompt(character, desc, anchors, hint, combined_text):
+    """CG render style (JuggernautXL SDXL base). 
+    
+    Key difference from anime: uses photorealism tags + detailed age/feature descriptors
+    to avoid the 'everyone looks like a handsome young idol' problem.
+    """
+    # Age — use stronger descriptors for older characters
+    age_visual = ""
+    for kw, tag in [
+        (["老年", "老头", "退休", "爷爷", "年老", "6[0-9]岁"], "elderly, wrinkled face, weathered skin"),
+        (["中年", "师傅", "工头", "大姐", "阿姨", "大叔", "4[0-9]岁", "5[0-9]岁", "鱼尾纹", "灰白", "发际线后退"], "middle-aged, mature face, laugh lines, crow's feet"),
+        (["年轻", "小伙", "青年", "2[0-9]岁", "新手", "大学生", "学生", "清澈"], "young adult"),
+    ]:
+        if any(k in combined_text for k in kw):
+            age_visual = tag
+            break
+    
+    # Gender
+    if character.get("gender") == "female":
+        gender_term = "woman"
+    elif character.get("gender") == "male":
+        gender_term = "man"
+    else:
+        gender_term = "woman" if ("女" in combined_text[:80] or "女性" in combined_text[:80]) else "man"
+    
+    age_prefix = f"{age_visual}, " if age_visual else ""
+    
+    # Build visual details from anchors
+    face = anchors.get("face", "").replace("，", ", ")
+    hair = anchors.get("hair", "").replace("，", ", ")
+    body = anchors.get("body", "").replace("，", ", ")
+    clothing = anchors.get("clothing", "").replace("，", ", ")
+    
+    # Build prompt: CG style + realistic details
+    prompt = (
+        f"CG render, character concept art, character reference sheet, "
+        f"{age_prefix}Chinese {gender_term}, full body, standing, front view, "
+        f"plain white background. "
+        f"Face: {face}. Hair: {hair}. "
+        f"Body: {body}. Clothing: {clothing}. "
+        f"Style: semi-realistic CG, detailed character design, "
+        f"high quality, 8k, sharp focus. "
+        f"{hint}"
+    )
+    return prompt
+
+
+def _build_vivid_prompt(character, desc, anchors, hint, combined_text):
+    """xuebiMIX vibrant anime style. Similar to anime but with xuebi-specific quality tags."""
+    # xuebiMIX quality tags
+    vivid_quality = "masterpiece, best quality, very aesthetic, ultra detailed, highres"
+    
+    age_tags = ""
+    for kw, tag in [
+        (["老年", "老头", "退休", "爷爷", "年老", "6[0-9]岁"], "old"),
+        (["中年", "师傅", "工头", "大姐", "阿姨", "大叔", "4[0-9]岁", "5[0-9]岁", "鱼尾纹", "灰白", "发际线后退"], "mature"),
+        (["年轻", "小伙", "青年", "2[0-9]岁", "新手", "大学生", "学生", "清澈"], "young"),
+    ]:
+        if any(k in combined_text for k in kw):
+            age_tags = {"old": "old, elderly", "mature": "mature, middle-aged", "young": "young"}.get(tag, "")
+            break
+
+    if character.get("gender") == "female":
+        gender_tag = f"1girl, {age_tags}" if age_tags else "1girl"
+    elif character.get("gender") == "male":
+        gender_tag = f"1man, {age_tags}" if age_tags else "1man"
+    else:
+        is_female = "女" in combined_text[:80] or "女性" in combined_text[:80]
+        base_gender = "1girl" if is_female else "1man"
+        gender_tag = f"{base_gender}, {age_tags}" if age_tags else base_gender
 
     base = (
-        f"{QUALITY_TAGS}, "
+        f"{vivid_quality}, "
         f"{gender_tag}, "
         "solo, full body, standing, front view, character reference sheet, "
-        "white background, simple background, "
-        "detailed clothing, detailed face, detailed eyes, "
+        "white background, simple background, vivid colors, detailed eyes"
     )
+    return _inject_anchors(base, anchors, desc, hint)
 
-    # Inject ALL visual anchors — support both key naming conventions
+
+def _build_classic_prompt(character, desc, anchors, hint, combined_text):
+    """SDXL/Danbooru tag style prompt."""
+    age_tags = ""
+    for kw, tag in [
+        (["老年", "老头", "退休", "爷爷", "年老", "6[0-9]岁"], "old"),
+        (["中年", "师傅", "工头", "大姐", "阿姨", "大叔", "4[0-9]岁", "5[0-9]岁", "鱼尾纹", "灰白", "发际线后退"], "mature"),
+        (["年轻", "小伙", "青年", "2[0-9]岁", "新手", "大学生", "学生", "清澈"], "young"),
+    ]:
+        if any(k in combined_text for k in kw):
+            age_tags = {"old": "old, elderly", "mature": "mature, middle-aged", "young": "young"}.get(tag, "")
+            break
+
+    if character.get("gender") == "female":
+        gender_tag = f"1girl, {age_tags}" if age_tags else "1girl"
+    elif character.get("gender") == "male":
+        gender_tag = f"1man, {age_tags}" if age_tags else "1man"
+    else:
+        is_female = "女" in combined_text[:80] or "女性" in combined_text[:80]
+        base_gender = "1girl" if is_female else "1man"
+        gender_tag = f"{base_gender}, {age_tags}" if age_tags else base_gender
+
+    base = (
+        f"{classic_quality}, "
+        f"{gender_tag}, "
+        "solo, full body, standing, front view, character reference sheet, "
+        "white background, simple background"
+    )
+    return _inject_anchors(base, anchors, desc, hint)
+
+
+def _inject_anchors(base, anchors, desc, hint):
+    """Inject visual anchors into prompt."""
     anchor_parts = []
-    for old_key, new_key in [("face", "face_shape"), ("hair", "hair_eyes"), 
+    for old_key, new_key in [("face", "face_shape"), ("hair", "hair_eyes"),
                                ("body", "build_posture"), ("clothing", "clothing"),
                                ("signature", "distinctive")]:
         val = anchors.get(old_key, "") or anchors.get(new_key, "")
@@ -83,108 +190,15 @@ def build_char_prompt(character: dict) -> str:
         sentences = [s.strip() for s in desc.replace("，", ",").split("。") if len(s.strip()) > 10]
         visual = ", ".join(sentences[:6])
 
-    prompt = base + visual
-
+    prompt = base + ", " + visual
     if hint:
         prompt += f", ({hint})"
-
     return prompt
 
 
-def build_workflow(checkpoint: str, positive: str, width: int = 1280, height: int = 1280, seed: int = None, style: str = "anime") -> dict:
-    """Build T2I workflow. Dispatches to Flux or SDXL based on style."""
-    if style == "realistic":
-        return build_flux_workflow(positive, width, height, seed)
-    else:
-        return build_sdxl_workflow(checkpoint, positive, width, height, seed)
-
-
-def build_flux_workflow(positive: str, width: int = 1280, height: int = 1280, seed: int = None) -> dict:
-    """Build Flux.1 Dev FP8 T2I workflow.
-    
-    Flux uses:
-      - DualCLIPLoader (clip_l + t5xxl)
-      - FluxGuidance (guidance scale, replaces CFG in KSampler)
-      - KSampler with cfg=1.0 (Flux handles guidance internally)
-      - UNETLoader for fp8 unet
-    """
-    import random
-    if seed is None:
-        seed = random.randint(0, 2**32 - 1)
-    
-    return {
-        # Load CLIP (dual: clip_l + t5xxl)
-        "10": {
-            "class_type": "DualCLIPLoader",
-            "inputs": {
-                "clip_name1": "clip_l.safetensors",
-                "clip_name2": "t5xxl_fp8_e4m3fn_scaled.safetensors",
-                "type": "flux",
-            }
-        },
-        # Load UNet (Flux.1 Dev FP8)
-        "11": {
-            "class_type": "UNETLoader",
-            "inputs": {
-                "unet_name": "flux1-dev-fp8.safetensors",
-                "weight_dtype": "fp8_e4m3fn_fast",
-            }
-        },
-        # Load VAE
-        "12": {
-            "class_type": "VAELoader",
-            "inputs": {"vae_name": "ae.safetensors"}
-        },
-        # FluxGuidance (replaces CFG — Flux uses guidance internally)
-        "13": {
-            "class_type": "FluxGuidance",
-            "inputs": {
-                "guidance": 3.5,
-                "conditioning": ["10", 0],  # Will be linked to CLIP encode
-            }
-        },
-        # Encode positive prompt
-        "6": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {"text": positive, "clip": ["10", 0]}
-        },
-        # Empty negative (Flux doesn't use negative prompts)
-        "7": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {"text": "", "clip": ["10", 0]}
-        },
-        # Empty latent
-        "5": {
-            "class_type": "EmptyLatentImage",
-            "inputs": {"width": width, "height": height, "batch_size": 1}
-        },
-        # KSampler (cfg=1.0 for Flux)
-        "3": {
-            "class_type": "KSampler",
-            "inputs": {
-                "seed": seed,
-                "steps": 20,
-                "cfg": 1.0,
-                "sampler_name": "euler",
-                "scheduler": "normal",
-                "denoise": 1.0,
-                "model": ["11", 0],
-                "positive": ["6", 0],
-                "negative": ["7", 0],
-                "latent_image": ["5", 0],
-            }
-        },
-        # VAE Decode
-        "8": {
-            "class_type": "VAEDecode",
-            "inputs": {"samples": ["3", 0], "vae": ["12", 0]}
-        },
-        # Save
-        "9": {
-            "class_type": "SaveImage",
-            "inputs": {"filename_prefix": "aicf_char", "images": ["8", 0]}
-        },
-    }
+def build_workflow(checkpoint: str, positive: str, width: int = 1024, height: int = 1536, seed: int = None, style: str = "vivid") -> dict:
+    """Build SDXL T2I workflow. All three styles use SDXL architecture."""
+    return build_sdxl_workflow(checkpoint, positive, width, height, seed)
 
 
 def build_sdxl_workflow(checkpoint: str, positive: str, width: int = 1280, height: int = 1280, seed: int = None) -> dict:
@@ -220,23 +234,25 @@ def build_sdxl_workflow(checkpoint: str, positive: str, width: int = 1280, heigh
 def main():
     parser = argparse.ArgumentParser(description="S3: Character Image Generation")
     parser.add_argument("--project", "-p", required=True, help="Project name")
-    parser.add_argument("--style", default="anime", choices=["anime", "realistic"],
-                        help="Image style: realistic=Flux.1 Dev, anime=Animagine XL SDXL")
+    parser.add_argument("--style", default="vivid", choices=["vivid", "classic", "concept"],
+                        help="vivid=xuebiMIX (default), classic=Animagine XL, concept=JuggernautXL")
     parser.add_argument("--character", "-c", help="Specific character name")
     parser.add_argument("--checkpoint", default=None,
                         help="Override checkpoint (auto-selected by --style)")
-    parser.add_argument("--width", type=int, default=1280)
-    parser.add_argument("--height", type=int, default=1280)
+    parser.add_argument("--width", type=int, default=1024)
+    parser.add_argument("--height", type=int, default=1536)
     parser.add_argument("--prompt", help="Override prompt (skip build_char_prompt)")
     parser.add_argument("--prompts-file", help="Path to pre-generated prompts JSON")
     args = parser.parse_args()
 
-    # Auto-select checkpoint based on style
+    # Auto-select checkpoint based on style (方案 A: vivid/classic/concept)
+    CHECKPOINT_MAP = {
+        "vivid": "animexl_xuebiMIX_v60.safetensors",
+        "classic": "animagine-xl-3.1.safetensors",
+        "concept": "juggernautXL_v10.safetensors",
+    }
     if args.checkpoint is None:
-        if args.style == "anime":
-            args.checkpoint = "animagine-xl-3.1.safetensors"
-        else:
-            args.checkpoint = "flux"  # Flux uses UNETLoader, not CheckpointLoader
+        args.checkpoint = CHECKPOINT_MAP.get(args.style, CHECKPOINT_MAP["vivid"])
 
     project_dir = Path(__file__).parent.parent / "projects" / args.project
     chars_path = project_dir / "s2_characters.json"
@@ -260,6 +276,7 @@ def main():
 
     session = ComfyUISession()
     results = {}
+    vl_results_list = []
 
     for i, char in enumerate(characters):
         name = char["name"]
@@ -274,7 +291,7 @@ def main():
         elif args.prompt:
             prompt = args.prompt
         else:
-            prompt = build_char_prompt(char)
+            prompt = build_char_prompt(char, args.style)
 
         print(f"\nCharacter {i+1}/{len(characters)}: {name} ({hint})")
         print(f"  Prompt ({len(prompt)}c): {prompt[:120]}...")
@@ -301,6 +318,13 @@ def main():
                 dest = ref_dir / f"{name}.png"
                 if dest.exists():
                     print(f"  ✅ {dest} ({dest.stat().st_size//1024}KB)")
+                    # P1-2: VL 质检
+                    checker = CharacterImageChecker()
+                    vl_result = checker.check(str(dest), char)
+                    icon = "✅" if vl_result["pass"] else "⚠️"
+                    print(f"  VL质检: {icon} {vl_result['score']}/10 {vl_result['summary'][:60]}")
+                    vl_result["generated_at"] = str(dest.stat().st_mtime)
+                    vl_results_list.append(vl_result)
                 results[name] = str(dest)
             else:
                 print(f"  ⚠️ No output file found")
@@ -315,6 +339,13 @@ def main():
         "resolution": f"{args.width}x{args.height}",
         "characters": results,
     }
+    # P1-2: Save VL quality report
+    if vl_results_list:
+        vl_report_path = ref_dir / "vl_quality_report.json"
+        with open(vl_report_path, "w") as f:
+            json.dump(vl_results_list, f, ensure_ascii=False, indent=2)
+        print(f"\n  VL质检报告: {vl_report_path}")
+
     with open(ref_dir / "manifest.json", "w") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 

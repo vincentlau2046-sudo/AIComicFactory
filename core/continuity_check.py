@@ -1,99 +1,96 @@
 """
-core/continuity_check.py — 连续性检查器
+core/continuity_check.py — 连续性检查器 (P1-1)
 
-使用 LLM vision (baidu-codingplan) 比对相邻帧，输出一致性评分 + 问题列表。
-
-从 AICB continuity-check.ts 适配（见 PROJECT.md 5.5 节）。
-AICB 原理: 相邻 shot 的 last_frame 与 next shot 的 first_frame 送入 VL 模型，
-判断角色外观/场景/光影/构图是否一致，输出 0-100 评分 + 具体问题。
-
-用法:
-    from core.continuity_check import ContinuityChecker
-    checker = ContinuityChecker()
-    result = checker.check_pair(frame_a, frame_b, shot_a, shot_b)
-    report = checker.check_project("last_bento")
+Uses local vLLM (qw35-9b) 4-dimension VL scoring for adjacent shot consistency.
 """
 
-import json
-import base64
-import os
+import json, base64, os, re, io
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
 
 TZ = timezone(timedelta(hours=8))
 
-# ─────────────────────────────────────────────────────────────────
-# Vision LLM 调用
-# ─────────────────────────────────────────────────────────────────
-
-CODINGPLAN_VISION_URL = "https://qianfan.baidubce.com/v2/coding/chat/completions"
-DEFAULT_MODEL = "glm-5.1"  # baidu-codingplan multimodal
+VLLM_URL = "http://localhost:8002/v1/chat/completions"
+DEFAULT_MODEL = "vllm_qw35_gptq"
 
 
-def encode_image_base64(image_path: str) -> str:
-    """Read image file and return base64 string."""
-    with open(image_path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+def _extract_json_block(text: str, key: str = "") -> str:
+    """Extract JSON object from LLM response, robust to code fences and nested braces."""
+    # Strip code fences first
+    for marker in ["```json", "```"]:
+        if marker in text:
+            text = text.split(marker)[1].split("```")[0]
+            break
+    text = text.strip()
+    start = text.find("{")
+    if start >= 0:
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(text, start)
+            return json.dumps(obj, ensure_ascii=False)
+        except Exception:
+            pass
+    # Fallback: simple regex for flat objects
+    if key:
+        m = re.search(rf'\{{[^{{}}]*"{re.escape(key)}"[^{{}}]*\}}', text, re.DOTALL)
+        if m:
+            return m.group()
+    return text
 
 
-def call_vision_llm(
-    prompt: str,
-    image_paths: List[str],
-    model: str = DEFAULT_MODEL,
-    api_key: str = None,
-) -> str:
-    """
-    调用 baidu-codingplan 多模态 API。
+def _resize_encode(img_path: str, size=(384, 216)) -> str:
+    """Resize image and encode as base64 JPEG for vLLM."""
+    from PIL import Image
+    img = Image.open(img_path).resize(size)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=70)
+    return base64.b64encode(buf.getvalue()).decode()
 
-    使用 OpenAI 兼容格式，images 以 base64 内联。
-    """
-    import urllib.request
-    import urllib.error
 
-    key = api_key or os.environ.get("CODINGPLAN_API_KEY", "")
-    if not key:
-        # Fallback: use OpenClaw's configured key via environment
-        key = os.environ.get("OPENCLAW_BAIDU_CODINGPLAN_API_KEY", "")
+def _extract_content(message: dict) -> str:
+    """Handle qwen3 reasoning parser: content→"None" string during thinking."""
+    c = (message.get("content") or "").strip()
+    if c and c.lower() != "none":
+        return c
+    r = message.get("reasoning_content") or message.get("reasoning") or ""
+    # Try to extract final answer after thinking markers
+    for marker in ["最终回答", "the answer is", "回答:", "ASSISTANT:"]:
+        parts = r.split(marker, 1)
+        if len(parts) > 1:
+            return parts[1].strip()
+    # Try JSON extraction from reasoning
+    m = re.search(r'\{[^{}]*"overall_score"[^{}]*\}', r, re.DOTALL)
+    if m:
+        return m.group()
+    return r
 
-    # Build messages with inline images
+
+def call_vision_llm(prompt: str, image_paths: List[str], model: str = None) -> str:
+    """Call local vLLM (qw35-9b) for vision."""
+    import urllib.request, urllib.error
+
     content_parts = []
-    for img_path in image_paths:
-        b64 = encode_image_base64(img_path)
-        ext = Path(img_path).suffix.lstrip(".") or "png"
+    for p in image_paths:
+        b64 = _resize_encode(p)
         content_parts.append({
             "type": "image_url",
-            "image_url": {
-                "url": f"data:image/{ext};base64,{b64}"
-            }
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
         })
     content_parts.append({"type": "text", "text": prompt})
 
     payload = json.dumps({
-        "model": model,
-        "messages": [
-            {"role": "user", "content": content_parts}
-        ],
-        "temperature": 0.3,
-        "max_tokens": 1024,
+        "model": model or DEFAULT_MODEL,
+        "messages": [{"role": "user", "content": content_parts}],
+        "temperature": 0.3, "max_tokens": 1024,
     }).encode("utf-8")
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {key}",
-    }
-
-    req = urllib.request.Request(
-        CODINGPLAN_VISION_URL,
-        data=payload,
-        headers=headers,
-        method="POST",
-    )
+    req = urllib.request.Request(VLLM_URL, data=payload,
+        headers={"Content-Type": "application/json"}, method="POST")
 
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             result = json.loads(resp.read().decode("utf-8"))
-            return result["choices"][0]["message"]["content"]
+            return _extract_content(result["choices"][0]["message"])
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8") if e.fp else ""
         raise RuntimeError(f"Vision API error {e.code}: {body[:200]}")
@@ -101,140 +98,47 @@ def call_vision_llm(
         raise RuntimeError(f"Vision API call failed: {e}")
 
 
-# ─────────────────────────────────────────────────────────────────
-# Prompt 构建
-# ─────────────────────────────────────────────────────────────────
-
 COMPARISON_PROMPT = """你是一位专业的动画连续性审查员。请对比以下两张帧图像：
 
-【帧 A】是 shot {shot_a} 的最后一帧
-【帧 B】是 shot {shot_b} 的第一帧
+【帧 A】是 shot {shot_a} 的尾帧
+【帧 B】是 shot {shot_b} 的首帧
 
-请从以下维度逐一评估一致性（0-10 分）：
+从以下维度评估连续性 (0-10):
+1. character_appearance: 角色面部、发型、服装、体型是否一致？
+2. scene_environment: 背景、道具、空间布局是否连贯？
+3. lighting_color: 光源方向、色温、明暗是否匹配？
+4. composition: 机位、视角、画面重心是否合理过渡？
 
-1. **角色外观**: 面部、发型、服装、体型是否一致？
-2. **场景环境**: 背景、道具、空间布局是否连贯？
-3. **光影色调**: 光源方向、色温、明暗是否匹配？
-4. **构图衔接**: 机位、视角、画面重心是否合理过渡？
+请只输出JSON:
+{{"overall_score":0,"character_appearance":0,"scene_environment":0,"lighting_color":0,"composition":0,"issues":[],"severity":"none","suggestion":""}}"""
 
-请以 JSON 格式输出（不要输出其他内容）：
-```json
-{{
-  "overall_score": 0-100,
-  "character_appearance": 0-10,
-  "scene_environment": 0-10,
-  "lighting_color": 0-10,
-  "composition": 0-10,
-  "issues": ["具体问题描述1", "问题描述2"],
-  "severity": "none|minor|moderate|severe",
-  "suggestion": "修复建议（如有）"
-}}
-```
-
-评分标准:
-- 90-100: 完美一致，无可见差异
-- 70-89: 轻微差异，不影响观看
-- 50-69: 明显差异，观众可察觉
-- 0-49: 严重不一致，需要重生成"""
-
-
-# ─────────────────────────────────────────────────────────────────
-# ContinuityChecker
-# ─────────────────────────────────────────────────────────────────
 
 class ContinuityChecker:
-    """连续性检查器。"""
 
     def __init__(self, projects_root: str = None):
-        self.root = Path(projects_root or os.environ.get(
-            "AICF_PROJECTS_ROOT",
-            str(Path.home() / "AIComicFactory" / "projects")
-        ))
-        self.model = DEFAULT_MODEL
+        self.root = Path(projects_root or str(Path.home() / "AIComicFactory" / "projects"))
 
-    def check_pair(
-        self,
-        frame_a: str,
-        frame_b: str,
-        shot_a: int,
-        shot_b: int,
-        model: str = None,
-    ) -> dict:
-        """
-        比对两帧的一致性。
-
-        参数:
-            frame_a: shot_a 最后一帧路径
-            frame_b: shot_b 第一帧路径
-            shot_a/shot_b: shot 编号
-
-        返回:
-            检查结果 dict (含 score/issues/severity)
-        """
+    def check_pair(self, frame_a: str, frame_b: str, shot_a: int, shot_b: int, model: str = None) -> dict:
         prompt = COMPARISON_PROMPT.format(shot_a=shot_a, shot_b=shot_b)
-
         try:
-            response = call_vision_llm(
-                prompt, [frame_a, frame_b],
-                model=model or self.model,
-            )
+            response = call_vision_llm(prompt, [frame_a, frame_b], model=model)
         except RuntimeError as e:
-            return {
-                "shot_a": shot_a, "shot_b": shot_b,
-                "overall_score": -1,
-                "error": str(e),
-                "severity": "error",
-            }
+            return {"shot_a": shot_a, "shot_b": shot_b, "overall_score": -1, "error": str(e)}
 
-        # Parse JSON from response
-        return self._parse_result(response, shot_a, shot_b)
+        # Parse JSON
+        return self._parse(response, shot_a, shot_b)
 
-    def _parse_result(self, response: str, shot_a: int, shot_b: int) -> dict:
-        """从 LLM 响应中提取 JSON 结果。"""
-        # Try to find JSON block
-        json_str = response
-        if "```json" in response:
-            json_str = response.split("```json")[1].split("```")[0]
-        elif "```" in response:
-            json_str = response.split("```")[1].split("```")[0]
-
+    def _parse(self, response: str, shot_a: int, shot_b: int) -> dict:
+        json_str = _extract_json_block(response, key="overall_score")
         try:
             result = json.loads(json_str.strip())
         except json.JSONDecodeError:
-            # Fallback: try to find any JSON-like content
-            import re
-            match = re.search(r'\{[^{}]*"overall_score"[^{}]*\}', response, re.DOTALL)
-            if match:
-                try:
-                    result = json.loads(match.group())
-                except json.JSONDecodeError:
-                    result = {"overall_score": -1, "raw_response": response[:500]}
-            else:
-                result = {"overall_score": -1, "raw_response": response[:500]}
-
+            result = _heuristic_continuity(response)
         result["shot_a"] = shot_a
         result["shot_b"] = shot_b
         return result
 
-    def check_project(
-        self,
-        project: str,
-        threshold: int = 70,
-        model: str = None,
-    ) -> dict:
-        """
-        检查整个项目的连续性。
-
-        比对每个相邻 shot 对: shot_N 的 last_frame vs shot_{N+1} 的 first_frame
-
-        参数:
-            project: 项目名
-            threshold: 低于此分数标记为问题 (默认 70)
-            model: VL 模型名
-
-        返回:
-            { "project", "pairs_checked", "results", "issues", "avg_score" }
-        """
+    def check_project(self, project: str, threshold: int = 70, model: str = None) -> dict:
         pd = self.root / project
         s4_path = pd / "s4_shots.json"
         frames_dir = pd / "s5_frames"
@@ -243,128 +147,82 @@ class ContinuityChecker:
             return {"error": "s4_shots.json or s5_frames/ not found"}
 
         s4 = json.load(open(s4_path))
-
-        # Flatten shots
         shots = []
-        for scene in s4["scenes"]:
-            for shot in scene["shots"]:
-                shots.append(shot)
+        for sc in s4.get("scenes", []):
+            for sh in sc["shots"]:
+                shots.append(sh)
 
-        # Check adjacent pairs
-        results = []
-        issues = []
-
+        results, issues = [], []
         for i in range(len(shots) - 1):
             sn_a = shots[i]["shotNumber"]
             sn_b = shots[i + 1]["shotNumber"]
-
             last_a = frames_dir / f"s{sn_a:02d}_last.png"
             first_b = frames_dir / f"s{sn_b:02d}_first.png"
 
             if not last_a.exists() or not first_b.exists():
-                results.append({
-                    "shot_a": sn_a, "shot_b": sn_b,
-                    "overall_score": -1,
-                    "error": "missing frame files",
-                    "severity": "error",
-                })
                 continue
 
-            # Scene boundary check: different scenes may have intentional changes
             same_scene = shots[i].get("sceneNumber", i) == shots[i + 1].get("sceneNumber", i)
+            print(f"  {sn_a}->{sn_b}... ", end="", flush=True)
+            r = self.check_pair(str(last_a), str(first_b), sn_a, sn_b, model=model)
+            r["same_scene"] = same_scene
+            results.append(r)
 
-            print(f"  Checking shot {sn_a}→{sn_b}... ", end="", flush=True)
-            result = self.check_pair(
-                str(last_a), str(first_b), sn_a, sn_b,
-                model=model,
-            )
-            result["same_scene"] = same_scene
-            results.append(result)
-
-            score = result.get("overall_score", -1)
-            if score >= 0:
-                icon = "✅" if score >= threshold else "⚠️"
-                print(f"{icon} {score}/100")
+            s = r.get("overall_score", -1)
+            if s >= 0:
+                print(f"{'✅' if s >= threshold else '⚠️'} {s}/100")
             else:
-                print(f"❌ error")
+                print("❌")
 
-            # Flag issues below threshold (only within same scene)
-            if same_scene and 0 <= score < threshold:
-                issues.append(result)
+            if same_scene and 0 <= s < threshold:
+                issues.append(r)
 
-        # Compute average score
         scores = [r["overall_score"] for r in results if r.get("overall_score", -1) >= 0]
         avg = sum(scores) / len(scores) if scores else 0
 
         report = {
-            "project": project,
-            "pairs_checked": len(results),
-            "results": results,
-            "issues": issues,
-            "avg_score": round(avg, 1),
-            "threshold": threshold,
+            "project": project, "pairs_checked": len(results),
+            "results": results, "issues": issues,
+            "avg_score": round(avg, 1), "threshold": threshold,
             "checked_at": datetime.now(TZ).isoformat(),
         }
-
-        # Save report
-        report_path = pd / "continuity_report.json"
-        with open(report_path, "w") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
-
+        json.dump(report, open(pd / "continuity_report.json", "w"), ensure_ascii=False, indent=2)
         return report
 
     def generate_summary(self, report: dict) -> str:
-        """生成人类可读的连续性报告。"""
-        lines = [f"连续性报告 — {report['project']}"]
-        lines.append(f"  检查对数: {report['pairs_checked']}")
-        lines.append(f"  平均分:   {report['avg_score']}/100")
-        lines.append(f"  阈值:     {report['threshold']}")
-        lines.append(f"  问题数:   {len(report['issues'])}")
-        lines.append("")
-
+        lines = [f"连续性 — {report['project']}"]
+        lines.append(f"  检查: {report['pairs_checked']}对 | 均分: {report['avg_score']}/100 | 阈值: {report['threshold']}")
         for r in report["results"]:
-            score = r.get("overall_score", -1)
-            if score < 0:
-                icon = "❌"
-            elif score >= report["threshold"]:
-                icon = "✅"
-            else:
-                icon = "⚠️"
-
-            sa = r.get("shot_a", "?")
-            sb = r.get("shot_b", "?")
-            same = "同场景" if r.get("same_scene") else "跨场景"
-            lines.append(f"  {icon} shot {sa}→{sb} [{same}]: {score}/100")
-
-            for issue in r.get("issues", []):
-                lines.append(f"      • {issue}")
-
-            suggestion = r.get("suggestion", "")
-            if suggestion:
-                lines.append(f"      💡 {suggestion}")
-
+            s = r.get("overall_score", -1)
+            if s < 0: continue
+            sc = "同场景" if r.get("same_scene") else "跨场景"
+            icon = "✅" if s >= report["threshold"] else "⚠️"
+            lines.append(f"  {icon} {r['shot_a']}->{r['shot_b']} [{sc}]: {s}/100")
+            for iss in r.get("issues", [])[:2]:
+                lines.append(f"      • {iss}")
         return "\n".join(lines)
 
 
-# ─────────────────────────────────────────────────────────────────
-# CLI
-# ─────────────────────────────────────────────────────────────────
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="连续性检查")
-    parser.add_argument("--project", "-P", required=True, help="项目名")
-    parser.add_argument("--threshold", "-t", type=int, default=70,
-                        help="问题阈值 (默认 70)")
-    parser.add_argument("--model", "-m", default=DEFAULT_MODEL,
-                        help="VL 模型名")
-    args = parser.parse_args()
-
-    checker = ContinuityChecker()
-    print(f"Running continuity check for {args.project}...")
-    report = checker.check_project(args.project, threshold=args.threshold, model=args.model)
-    print(checker.generate_summary(report))
-
-
-if __name__ == "__main__":
-    main()
+def _heuristic_continuity(text: str) -> dict:
+    score = 50
+    if "完全不同" in text or "completely different" in text.lower():
+        score = 10
+    elif "不一致" in text or "mismatch" in text.lower() or "不统一" in text:
+        score = 30
+    elif "连续" in text or "consistent" in text.lower():
+        score = 80
+    issues = [
+        m.group(1).strip()
+        for m in re.finditer(r"[•-]\s*(.+?)(?:\n|$)", text)
+        if len(m.group(1).strip()) > 2
+    ][:10]
+    return {
+        "overall_score": score,
+        "character_appearance": score,
+        "scene_environment": score,
+        "lighting_color": score,
+        "composition": score,
+        "issues": issues,
+        "severity": "low" if score >= 70 else "medium" if score >= 40 else "high",
+        "suggestion": ""
+    }

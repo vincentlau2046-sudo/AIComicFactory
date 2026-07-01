@@ -1,8 +1,9 @@
 """
-prompts/defaults/frame_generate_first.py — 首帧生成 Prompt
+prompts/defaults/frame_generate_first.py — 首帧生成 Prompt (AICB Full)
 
-从 AICB registry.ts frameGenerateFirstDef 原样移植。
-Slot: style_matching / reference_rules / rendering_quality / continuity_rules
+完整移植 AICB buildFirstFramePrompt from src/lib/ai/prompts/frame-generate.ts
+Slot: style_matching / scene_environment / frame_description / character_descriptions /
+      reference_rules / continuity_rules / rendering_quality
 """
 
 PROMPT_KEY = "frame_generate_first"
@@ -12,58 +13,67 @@ SLOTS = {
     "style_matching": {
         "key": "style_matching",
         "editable": True,
-        "defaultContent": """=== 关键：画风匹配（最高优先级）===
-仔细阅读下方的角色描述和场景描述。它们指定或暗示了画风。
-你必须精确匹配该画风。不要默认使用写实风格。
-- 如果附有参考图，参考图的视觉风格就是真理——精确匹配
-- 输出的画风必须与角色设定图一致
+        "defaultContent": """=== 关键：画风（最高优先级）===
+阅读下方的角色描述和场景描述，它们指定或暗示了一种画风。
+你必须完全匹配该画风。不得默认使用写实风格。
+- 如果描述中提到 动漫/漫画/anime/manga/卡通/cartoon → 生成动漫/漫画风格插画
+- 如果描述中提到 写实/真人/photorealistic → 生成写实风格图像
+- 如果附有参考图，其视觉风格即为标准——必须精确匹配
+- 输出的画风必须与角色参考图保持一致""",
+    },
 
-=== 画风映射 ===
-- 古风/武侠/仙侠 → 动漫/插画风格，中国古风美学
-- 现代/都市/校园 → 写实或半写实风格
-- 科幻/未来 → 写实+特效风格
-- 奇幻/魔幻 → 动漫/概念艺术风格
+    "scene_environment": {
+        "key": "scene_environment",
+        "editable": False,
+        "defaultContent": "",
+    },
 
-=== 物理常识 ===
-- 严禁比喻动词（"飞起如箭"→"快速跃起"）
-- 严禁反物理行为（人不会凭空悬浮）
-- 重力、惯性、碰撞遵循现实物理""",
+    "frame_description": {
+        "key": "frame_description",
+        "editable": False,
+        "defaultContent": "",
+    },
+
+    "character_descriptions": {
+        "key": "character_descriptions",
+        "editable": False,
+        "defaultContent": "",
     },
 
     "reference_rules": {
         "key": "reference_rules",
         "editable": True,
         "defaultContent": """=== 参考图（角色设定图）===
-每张附带的参考图是一张角色设定图，展示4个视角（正面、四分之三侧面、侧面、背面）。
-角色的名字印在每张设定图底部——用它来识别对应的角色。
+每张附带的参考图是一张角色设定图，展示 4 个视角（正面、四分之三侧面、侧面、背面）。
+角色名印在每张设定图底部——用它来识别对应的角色。
 强制一致性规则：
-- 将设定图中的角色名与场景描述中的角色名对应
-- 服装必须与参考图完全一致——相同的衣物类型、颜色、材质、配饰。不要替换（如不要把青色常服换成龙袍）
-- 面孔、发型、发色、体型、肤色必须精确匹配
-- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）必须出现
+- 将设定图中的角色名与场景描述中的角色名匹配
+- 服装必须与参考完全一致——相同的衣物类型、颜色、材质、配饰。不得替换（例如：不得将青色常服替换为龙袍）
+- 面部、发型、发色、体型、肤色必须精确匹配
+- 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）都必须出现
 - 画风必须与参考图精确匹配""",
-    },
-
-    "rendering_quality": {
-        "key": "rendering_quality",
-        "editable": True,
-        "defaultContent": """=== 渲染 ===
-材质：符合画风的丰富细节
-光线：具有动机的电影级布光。使用轮廓光分离角色。
-背景：完整渲染的详细环境。不要空白或抽象背景。
-角色：精确匹配参考图的外貌和画风。表情生动，姿态自然有动感。
-构图：电影级取景，明确的视觉焦点和景深。""",
     },
 
     "continuity_rules": {
         "key": "continuity_rules",
         "editable": True,
         "defaultContent": """=== 连续性要求 ===
-此镜头紧接上一个镜头。附带的参考中包含上一个镜头的尾帧。保持视觉连续性：
-- 相同的角色必须穿着一致的服装和比例
-- 画风相同——不要在动漫和写实之间切换
-- 环境光线和色温应平滑过渡
-- 角色位置应从上一个镜头结束时的位置逻辑延续""",
+该镜头紧接上一个镜头。附带的参考包含上一个镜头的末帧。保持视觉连续性：
+- 相同角色必须穿着一致的服装并保持一致的比例
+- 相同画风——不得在动漫和写实之间切换
+- 环境光照和色温应平滑过渡
+- 角色位置应从上一个镜头结束时的位置自然延续""",
+    },
+
+    "rendering_quality": {
+        "key": "rendering_quality",
+        "editable": True,
+        "defaultContent": """=== 渲染 ===
+质感：与画风相称的丰富细节
+光照：电影级打光，具有合理的光源。使用轮廓光分离角色。
+背景：完整渲染、细节丰富的环境。不得使用空白或抽象背景。
+角色：外观和画风精确匹配参考图。表情生动，姿势自然动感。
+构图：电影式取景，具有清晰的焦点和景深。""",
     },
 }
 
@@ -75,7 +85,11 @@ def build_full_prompt(
     character_descriptions: str = "",
     previous_last_frame: str = "",
 ) -> str:
-    """Build full prompt for first frame generation."""
+    """
+    Build full first-frame prompt (AICB buildFirstFramePrompt).
+    
+    Uses slot system for customizable sections.
+    """
     sc = slot_contents or {}
 
     def resolve(key: str) -> str:
@@ -84,13 +98,13 @@ def build_full_prompt(
             return override
         return SLOTS[key]["defaultContent"]
 
-    lines = ["生成此镜头的首帧，作为一张高质量图像。", ""]
+    lines = ["生成该镜头的开场帧，作为一张高质量图像。", ""]
     lines.append(resolve("style_matching"))
     lines.append("")
     lines.append("=== 场景环境 ===")
     lines.append(scene_description)
     lines.append("")
-    lines.append("=== 帧描述 ===")
+    lines.append("=== 画面描述 ===")
     lines.append(start_frame_desc)
     lines.append("")
     lines.append("=== 角色描述 ===")

@@ -63,7 +63,7 @@ cp /path/to/source.txt projects/{project}/source.txt
 每阶段完成后自动更新 state.json，下一阶段根据依赖关系自动触发。
 
 ```
-source.txt → s1_parse → s2_character_extract → s3_character_image → s3b_four_view → s4_shot_split → s5_frame_generate → s6_video_generate → s7_assemble → s8_subtitles → s9_tts_audio
+source.txt → s1_parse → s2_character_extract → s3_character_image → s3b_four_view → s4_shot_split → s5_frame_generate → s5b_dialogue_timing → s6_video_generate → s7_assemble → s8_subtitles → s9_tts_audio
 ```
 
 ---
@@ -110,12 +110,32 @@ source.txt → s1_parse → s2_character_extract → s3_character_image → s3b_
 
 ### S5: 关键帧生成 (frame_generate)
 
-**引擎**: ComfyUI (Qwen Image Edit 2511, reference-driven)
-**输入**: `s4_shots.json` + 角色参考图 (S3/S3b)
+**引擎**: ComfyUI (Animagine XL 3.1 + IPAdapter Plus, img2img)
+**输入**: `s4_shots.json` + 角色四视图参考图 (S3b `s3b_four_views/`)
 **输出**: `s5_frames/s{NN}_first.png` + `s5_frames/s{NN}_last.png`
-**脚本**: `scripts/s5_frame_generate.py --project {project} [--mode first|last|both]`
-**T4 重构**: 首帧从角色参考图生成，尾帧基于首帧生成，保证首尾帧逻辑关联
-**分辨率**: 1024×576 (16:9 landscape，与 S6 完全匹配)
+**脚本**: `scripts/s5_frame_generate.py --project {project} [--gen ipadapter|t2i] [--frames first|last|both]`
+**P0 重构**: 
+  - prompt 构建链标准化: 用 `frame_generate_first/last.build_full_prompt()` (对齐 AICB)
+  - IPAdapter 升级: 纯 T2I → img2img+IPAdapter, S3b 四视图作 visual condition 注入
+  - 消费链补全: colorPalette/performanceStyle/visualAnchors/scene-level 数据全量注入
+  - 前 shot 尾帧 → 下一 shot 连续性参考 (AICB continuity_rules)
+**分辨率**: 1280×720 (16:9 landscape)
+**模式**:
+  - `--gen ipadapter` (默认): IPAdapter 四视图驱动，角色一致性最佳
+  - `--gen t2i`: 纯文本 prompt 驱动，回退模式
+  - `--frames both` (默认): 生成首帧+尾帧
+  - `--frames first|last`: 仅生成首帧或尾帧
+
+### S5b: 对白时间轴 (dialogue_timing) ⏳ NEW
+
+**引擎**: qw35-9b (vllm_qw35_gptq @ localhost:8002) vision 分析
+**输入**: `s4_shots.json` + `s5_frames/` 首尾帧
+**输出**: `s4_shots.json` (更新 dialogues 增加 startRatio/endRatio)
+**脚本**: `scripts/dialogue_timing.py --project {project} [--no-vision]`
+**原理**: LLM 观察首尾帧中角色口型/表情/动作，推导每句对白在 shot 时间线中的位置
+**模式**:
+  - vision (默认): qw35-9b 多模态分析
+  - uniform (--no-vision): 均匀分布 fallback
 
 ### S6: FLF2V 视频渲染 (video_generate)
 
@@ -159,7 +179,7 @@ source.txt → s1_parse → s2_character_extract → s3_character_image → s3b_
 | D4 | 结构化输出 | 纯 prompt 约束（GPT-4 级不须 guided_json） |
 | D8 | 数据持久化 | 文件系统 JSON（projects/{project}/state.json） |
 | D9 | UI | 无（OpenClaw 对话调度） |
-| D10 | 角色一致性 | Qwen Image Edit 2511 (S3b 四视图 + S5 参考图驱动) |
+| D10 | 角色一致性 | IPAdapter Plus (ip-adapter-plus_sdxl_vit-h) 四视图 visual condition 注入 + prompt 文本锚点 (visualHint/visualAnchors/colorPalette/performanceStyle) |
 | D11 | 风格 | comic (Animagine XL 3.1) / realist (Juggernaut XL v2) |
 
 详见 `PROJECT.md` 第七章。
@@ -194,7 +214,9 @@ projects/
 
 | 用途 | 模型文件 | 路径 |
 |------|---------|------|
-| S3 T2I (comic) | animagine-xl-3.1.safetensors | models/checkpoints/ |
+| S3/S5 vivid (默认) | animexl_xuebiMIX_v40.safetensors | models/checkpoints/ |
+| S3/S5 classic | animagine-xl-3.1.safetensors | models/checkpoints/ |
+| S3/S5 concept | juggernautXL_v10.safetensors | models/checkpoints/ |
 | S3b/S5 Qwen Edit | qwen_image_edit_2511_fp8mixed.safetensors | models/diffusion_models/ |
 | S3b/S5 VAE | qwen_image_vae.safetensors | models/vae/ |
 | S3b LoRA (可选) | Qwen-Image-Edit-2511-Lightning-8steps-V1.0-fp32.safetensors | models/loras/ |
@@ -217,11 +239,10 @@ projects/
 
 ## 风格切换
 
-Comic 和 Realist 两套风格通过 `--checkpoint` + `--style` 参数切换：
+三套风格通过 `--style` 参数切换（方案 A）：
 
-| 风格 | S3 Checkpoint | S5/S3b Checkpoint | 风格参数 |
-|------|--------------|-------------------|---------|
-| comic | animagine-xl-3.1.safetensors | qwen_image_edit_2511_fp8mixed.safetensors | --style comic |
-| realist | juggernautXL_v10.safetensors | qwen_image_edit_2511_fp8mixed.safetensors | --style realist |
-
-**注意**: Qwen Image Edit 模型通用，风格通过 prompt 中的风格标签控制。
+| 风格 | --style | S3/S5 Checkpoint | Prompt 流派 | 说明 |
+|------|---------|-----------------|-------------|------|
+| **vivid** (默认) | `vivid` | `animexl_xuebiMIX_v40.safetensors` | Danbooru + vivid colors | 鲜亮动漫，全彩漫剧主线 |
+| **classic** | `classic` | `animagine-xl-3.1.safetensors` | Danbooru + year/quality | 经典动漫，传统赛璐璐 |
+| **concept** | `concept` | `juggernautXL_v10.safetensors` | 自然语言 CG render | 写实概念，角色设计预演 |

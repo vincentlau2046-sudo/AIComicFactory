@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.comfyui_session import ComfyUISession, ComfyUIError
 from core.state_manager import get_state_manager
 from core.asset_manager import get_asset_manager
+from prompts.defaults.video_generate import build_video_prompt
 
 # ═══════════════════════════════════════
 # Config
@@ -33,7 +34,7 @@ STEPS = 4
 CFG = 1.0
 SHIFT = 5.0
 FPS = 25
-W, H = 1024, 576  # 16:9 landscape, matches S5 frame resolution
+W, H = 1280, 720  # 16:9 landscape, matches S5 frame resolution (unified 2026-07-01)
 
 MAX_FLF2V_FRAMES = 125   # FLF2V 有效窗口 ~5s@25fps
 
@@ -50,7 +51,8 @@ MID_NEG = "low quality, worst quality, bad anatomy, bad hands, blurry, watermark
 
 
 def build_flf2v_workflow(start_image: str, end_image: str, motion_prompt: str,
-                          duration_frames: int, seed: int = 42) -> dict:
+                          duration_frames: int, seed: int = 42,
+                          width: int = 1280, height: int = 720) -> dict:
     """Build FLF2V workflow. duration_frames = requested output frames at FPS."""
     return {
         "1":  {"class_type": "UNETLoader", "inputs": {"unet_name": UNET_HIGH, "weight_dtype": "default"}},
@@ -74,7 +76,7 @@ def build_flf2v_workflow(start_image: str, end_image: str, motion_prompt: str,
             "positive": ["6a", 0], "negative": ["6b", 0], "vae": ["3", 0],
             "clip_vision_start_image": ["10", 0], "clip_vision_end_image": ["11", 0],
             "start_image": ["7", 0], "end_image": ["8", 0],
-            "width": W, "height": H, "length": duration_frames, "batch_size": 1,
+            "width": width, "height": height, "length": duration_frames, "batch_size": 1,
         }},
         "13": {"class_type": "KSampler", "inputs": {
             "model": ["cache", 0],
@@ -96,7 +98,7 @@ def build_flf2v_workflow(start_image: str, end_image: str, motion_prompt: str,
 # Mid-frame generator (T2I, reused from S5 pattern)
 # ═══════════════════════════════════════
 
-def build_midframe_workflow(prompt: str, seed: int) -> dict:
+def build_midframe_workflow(prompt: str, seed: int, width: int = 1280, height: int = 720) -> dict:
     """Generate a single mid-frame via T2I."""
     return {
         "3": {"class_type": "KSampler", "inputs": {
@@ -107,7 +109,7 @@ def build_midframe_workflow(prompt: str, seed: int) -> dict:
             "latent_image": ["5", 0],
         }},
         "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": MID_CKPT}},
-        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": W, "height": H, "batch_size": 1}},
+        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
         "6": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["4", 1]}},
         "7": {"class_type": "CLIPTextEncode", "inputs": {"text": MID_NEG, "clip": ["4", 1]}},
         "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
@@ -191,7 +193,10 @@ def main():
     parser.add_argument("--project", "-P", required=True)
     parser.add_argument("--shot", "-s", type=int)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--width", type=int, default=1280, help="FLF2V frame width (default 1280)")
+    parser.add_argument("--height", type=int, default=720, help="FLF2V frame height (default 720)")
     args = parser.parse_args()
+    frame_width, frame_height = args.width, args.height
 
     pd = Path(__file__).parent.parent / "projects" / args.project
     s4 = json.load(open(pd / "s4_shots.json"))
@@ -225,7 +230,24 @@ def main():
 
         duration = shot.get("duration", 5.0)
         total_frames = int(duration * FPS)
-        motion = shot.get("videoScript", shot.get("motionScript", ""))
+        # ── AICB buildVideoPrompt: full 7-slot assembly ──
+        shot_chars = []
+        for cn in shot.get("characters", []):
+            for c in chars:
+                if c["name"] == cn:
+                    shot_chars.append({"name": c["name"], "visualHint": c.get("visualHint")})
+                    break
+
+        motion = build_video_prompt(
+            video_script=shot.get("videoScript", shot.get("motionScript", "")),
+            camera_direction=shot.get("cameraDirection", "静态"),
+            start_frame_desc=shot.get("startFrameDesc", ""),
+            end_frame_desc=shot.get("endFrameDesc", ""),
+            duration=duration,
+            characters=shot_chars,
+            dialogues=shot.get("dialogues", []),
+            aspect_ratio="16:9",
+        )
 
         # Build T2I prompt for mid-frame generation (same as S5 prompt)
         t2i_prompt = f"{MID_QUALITY}, {shot.get('prompt', '')}"
@@ -243,7 +265,7 @@ def main():
 
             print(f"\nShot {sn}/{len(shots)}: {total_frames}f ({duration}s) | {motion[:60]}...")
 
-            wf = build_flf2v_workflow(start_name, end_name, motion, total_frames, args.seed + sn)
+            wf = build_flf2v_workflow(start_name, end_name, motion, total_frames, args.seed + sn, frame_width, frame_height)
             wf["16"]["inputs"]["filename_prefix"] = f"aicf_flf2v_s{sn:02d}"
 
             try:

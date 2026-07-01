@@ -130,7 +130,9 @@ OUTPUT_FORMAT = """输出格式 — 仅JSON对象：
           "dialogues": [
             {
               "character": "角色名",
-              "text": "对白内容 — 必须与剧本逐字一致"
+              "text": "对白内容 — 必须与剧本逐字一致",
+              "startRatio": 0.2,
+              "endRatio": 0.5
             }
           ],
           "soundDesign": "声音设计描述 — 环境音、音效",
@@ -154,11 +156,48 @@ CONSISTENCY = """=== 角色一致性保障 ===
 
 这确保下游图像/视频生成模型在不同shot中识别同一角色。"""
 
+RELATIONSHIPS_CONSTRAINT = """=== 角色关系约束 ===
+
+每个shot涉及多个角色时，必须根据角色关系约束空间布局：
+- ally (盟友): 并肩站位，视线方向一致，距离近(1-2m)
+- enemy (敌对): 对峙站位，视线相对，距离中远(3-5m)，画面张力
+- lover (恋人): 亲密距离(<1m)，身体朝向互相，眼神柔和
+- family (家人): 自然站位，距离适中，肢体语言亲近
+- mentor (师徒): 纵向站位(师高徒低或平视)，目光交流倾斜
+- rival (对手): 平行站位，距离中等，视线交错，竞争感
+- stranger (陌生人): 距离远，无视线交流
+- neutral (中性): 无特殊约束
+
+多角色同框时：
+- 主要关系对决定构图重心
+- 次要角色按关系类型排列在周围
+- 站位必须符合角色身份(地位高的角色居中或高处)
+
+每个shot涉及多角色时，在 cameraDirection 和 focalPoint 中体现关系约束。
+在 motionScript 中描述角色的空间关系动态。"""
+
+PERFORMANCE_STYLE_INJECTION = """=== 角色标志动作约束 ===
+
+每个角色有 performanceStyle（标志动作）字段。在生成 motionScript 时必须：
+1. 至少在一个3秒分段中包含该角色的标志动作
+2. 标志动作要自然融入该shot的剧情语境(不是机械复制)
+3. 如果 performanceStyle 包含情绪表达模式，shot的情绪高潮处必须体现
+4. 标志动作描述优先使用剧本原文的动词和姿态词
+
+示例：
+- performanceStyle: \"常见动作是蹲下身子缩成一团，双手紧紧攥住随身的铁箍放在胸前仰望说话者\"
+  → motionScript中必须包含蹲下+攥铁箍+仰望的组合动作
+- performanceStyle: \"说话时习惯挥右手强调重点，大笑时仰头拍桌面\"
+  → 对白shot中包含挥手动作，喜剧shot中包含仰头拍桌"""
+
 LANGUAGE = """【关键语言规则】
 - prompt 字段: 必须英文（图像/视频模型需要英文 prompt）
 - motionScript 字段: 中文散文
 - videoScript 字段: 中文散文
 - 其他所有字段: 与剧本语言一致
+
+【重要】输出格式与输入格式完全不同！输入是简单剧本（scenes+dialogues），输出是详细分镜（scenes+shots数组）。每个scene必须有"shots"数组，每个shot包含prompt/motionScript/videoScript/cameraDirection等完整字段。不要返回输入格式的结构！
+
 仅返回有效JSON。不要markdown。不要评论。"""
 
 
@@ -182,6 +221,8 @@ class ShotSplitPrompt(PromptDefinition):
             slot("transition", TRANSITION, editable=True),
             slot("output_format", OUTPUT_FORMAT, editable=False),
             slot("consistency", CONSISTENCY, editable=True),
+            slot("relationships_constraint", RELATIONSHIPS_CONSTRAINT, editable=True),
+            slot("performance_style", PERFORMANCE_STYLE_INJECTION, editable=True),
             slot("language", LANGUAGE, editable=False),
         ]
     
@@ -197,6 +238,8 @@ class ShotSplitPrompt(PromptDefinition):
             r("transition"),
             r("output_format"),
             r("consistency"),
+            r("relationships_constraint"),
+            r("performance_style"),
             r("language"),
         ])
     
@@ -206,15 +249,40 @@ class ShotSplitPrompt(PromptDefinition):
         for c in characters:
             hint = f"（{c.get('visualHint', '')}）" if c.get('visualHint') else ""
             desc = c.get('description', '')[:100]
-            char_summary.append(
-                f"- {c['name']}{hint}: {desc}..."
-            )
+            ps = c.get('performanceStyle', '')
+            summary_line = f"- {c['name']}{hint}: {desc}..."
+            if ps:
+                summary_line += f"\n  标志动作: {ps}"
+            char_summary.append(summary_line)
+        
+        # P0-3: 关系网络数据
+        relationships = []
+        if isinstance(parsed_script, dict):
+            relationships = parsed_script.get("relationships", [])
+        if not relationships and characters:
+            for c in characters:
+                rels = c.get("relationships", [])
+                for r in rels:
+                    relationships.append(r)
+        
+        rel_lines = []
+        for r in relationships:
+            a = r.get("characterA", r.get("source", ""))
+            b = r.get("characterB", r.get("target", ""))
+            rt = r.get("relationType", r.get("type", ""))
+            desc = r.get("description", "")
+            if a and b and rt:
+                rel_lines.append(f"  {a} ←→ {b}: {rt}" + (f" ({desc})" if desc else ""))
+        
+        rel_section = ""
+        if rel_lines:
+            rel_section = f"\n--- 角色关系 ---\n" + "\n".join(rel_lines) + "\n"
         
         return f"""请将以下结构化剧本拆分为详细分镜序列。
 
 --- 角色规格 ---
 {chr(10).join(char_summary)}
-
+{rel_section}
 --- 结构化剧本 ---
 {json.dumps(parsed_script, ensure_ascii=False, indent=2)}
 --- 结束 ---
@@ -223,7 +291,9 @@ class ShotSplitPrompt(PromptDefinition):
 - 每个scene拆分为3-8个shot
 - 每个shot最长{max_duration_per_shot}秒
 - 对白必须逐字保持不变
-- prompt字段必须英文，motionScript和videoScript用中文散文"""
+- prompt字段必须英文，motionScript和videoScript用中文散文
+- 多角色shot必须参考角色关系约束确定站位和视线
+- 每个shot的motionScript必须包含涉及角色的标志动作（performanceStyle）"""
 
 
 def build_shot_split(parsed_script: dict, characters: list, overrides: Optional[Dict[str, str]] = None, max_duration: float = 8.0) -> dict:

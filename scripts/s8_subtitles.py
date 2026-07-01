@@ -1,139 +1,157 @@
 #!/usr/bin/env python3
-"""scripts/s8_subtitles.py — Stage 8: 字幕生成与烧录
+"""scripts/s8_subtitles.py — Stage 8: SRT Subtitle Generation (AICB generateSrtFile)
 
-从 s4_shots.json 提取对话时间轴,生成 ASS 字幕并烧入视频。
+Extracts dialogue timing from s4_shots.json with startRatio/endRatio support,
+generates SRT file matching AICB format.
 
-用法:
+Usage:
     python scripts/s8_subtitles.py --project last_bento
-    python scripts/s8_subtitles.py --project last_bento --input s7_assembled.mp4
+    python scripts/s8_subtitles.py --project last_bento --output subtitles.srt
 """
 
-import json, sys, argparse, subprocess
+import json, sys, argparse
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.state_manager import get_state_manager
 
-W, H = 896, 512
-FPS = 25
 
-
-def fmt_time(sec: float) -> str:
-    """Format seconds to ASS time string H:MM:SS.xx"""
-    h = int(sec // 3600)
-    m = int((sec % 3600) // 60)
-    s = sec % 60
-    return f"{h}:{m:02d}:{s:05.2f}"
+def fmt_srt_time(seconds: float) -> str:
+    """Format seconds to SRT time: HH:MM:SS,mmm."""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int((seconds % 1) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
 def clean_text(text: str) -> str:
-    """Clean dialogue text for ASS (remove characters that break rendering)."""
+    """Clean dialogue text for TTS/subtitle consistency."""
+    # TTS bans: ellipsis, em-dash, enumeration comma
     return text.replace("……", ",").replace("——", ",").replace("、", ",")
 
 
-def extract_dialogues(project_dir: Path, title_offset: float = 3.0) -> list:
+def generate_srt(dialogues: list, shot_start_times: list, shot_durations: list,
+                 output_path: Path):
     """
-    Extract dialogues from s4_shots.json with cumulative timing.
-    Returns list of {character, text, start, end}.
+    Generate SRT file with precise shot-level timing (AICB generateSrtFile).
+    
+    dialogues: list of {shotSequence, text, character, dialogueSequence, dialogueCount, startRatio?, endRatio?}
+    shot_start_times: cumulative start time of each shot
+    shot_durations: duration of each shot
     """
-    s4 = json.load(open(project_dir / "s4_shots.json"))
-    s1 = json.load(open(project_dir / "s1_parsed.json"))
+    entries = []
+    index = 1
 
-    current_time = title_offset
+    for sub in dialogues:
+        shot_idx = sub["shotSequence"] - 1  # 0-based
+        if shot_idx < 0 or shot_idx >= len(shot_durations):
+            continue
+
+        shot_start = shot_start_times[shot_idx]
+        shot_dur = shot_durations[shot_idx]
+
+        if sub.get("startRatio") is not None and sub.get("endRatio") is not None:
+            # Precise timing from shot data
+            start_time = shot_start + shot_dur * sub["startRatio"]
+            end_time = shot_start + shot_dur * sub["endRatio"]
+        else:
+            # Auto-distribute within shot duration
+            count = sub.get("dialogueCount", 1) or 1
+            seq = sub.get("dialogueSequence", 0)
+            segment_dur = shot_dur / count
+            start_time = shot_start + segment_dur * seq
+            end_time = start_time + segment_dur
+
+        text = clean_text(sub["text"])
+        entries.append(
+            f"{index}\n"
+            f"{fmt_srt_time(start_time)} --> {fmt_srt_time(end_time)}\n"
+            f"{sub['character']}: {text}\n"
+        )
+        index += 1
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(entries) + "\n")
+
+    return output_path
+
+
+def extract_dialogues_from_shots(s4_data: dict, title_offset: float = 0.0) -> tuple:
+    """
+    Extract dialogues and shot timing from s4_shots.json.
+    
+    Returns (dialogues_list, shot_start_times, shot_durations)
+    """
     dialogues = []
+    shot_durations = []
+    current_time = title_offset
 
-    for scene in s4["scenes"]:
-        for shot in scene["shots"]:
+    for scene in s4_data.get("scenes", []):
+        for shot in scene.get("shots", []):
             dur = shot.get("duration", 5.0)
-            for d in shot.get("dialogues", []):
+            shot_durations.append(dur)
+
+            shot_index = shot.get("shotNumber", 0)
+            shot_dialogues = shot.get("dialogues", [])
+
+            for di, d in enumerate(shot_dialogues):
                 dialogues.append({
-                    "character": d["character"],
-                    "text": d["text"],
-                    "start": current_time,
-                    "end": current_time + dur,
+                    "shotSequence": shot_index,
+                    "character": d.get("character", d.get("characterName", "")),
+                    "text": d.get("text", ""),
+                    "dialogueSequence": di,
+                    "dialogueCount": len(shot_dialogues),
+                    "startRatio": d.get("startRatio"),
+                    "endRatio": d.get("endRatio"),
                 })
-            current_time += dur
 
-    return dialogues
+    # Calculate cumulative start times
+    shot_start_times = []
+    cumulative = title_offset
+    for dur in shot_durations:
+        shot_start_times.append(cumulative)
+        cumulative += dur
 
-
-def generate_ass(dialogues: list, output_path: Path, title: str = ""):
-    """Generate ASS subtitle file from dialogue list."""
-    with open(output_path, "w") as f:
-        f.write(f"""[Script Info]
-Title: {title}
-ScriptType: v4.00+
-PlayResX: {W}
-PlayResY: {H}
-
-[V4+ Styles]
-Format: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
-Style: D,Noto Sans CJK SC,28,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0,2,20,20,30,1
-
-[Events]
-Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
-""")
-        for d in dialogues:
-            text = clean_text(d["text"])
-            f.write(
-                f"Dialogue: 0,{fmt_time(d['start'])},{fmt_time(d['end'])},"
-                f"D,{d['character']},0,0,0,,{text}\n"
-            )
-
-
-def burn_subtitles(video_path: Path, ass_path: Path, output_path: Path):
-    """Burn ASS subtitles into video using ffmpeg."""
-    subprocess.run([
-        "ffmpeg", "-y", "-i", str(video_path),
-        "-vf", f"ass={ass_path}",
-        "-c:v", "libx264", "-crf", "23", "-preset", "fast",
-        "-c:a", "copy", str(output_path),
-    ], check=True)
+    return dialogues, shot_start_times, shot_durations
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Stage 8: 字幕生成与烧录")
+    parser = argparse.ArgumentParser(description="Stage 8: SRT 字幕生成 (AICB)")
     parser.add_argument("--project", "-P", required=True, help="项目名")
-    parser.add_argument("--input", default="s7_assembled.mp4", help="输入视频文件名")
-    parser.add_argument("--ass-only", action="store_true", help="只生成 ASS，不烧录")
+    parser.add_argument("--output", "-o", default=None, help="输出 SRT 文件路径 (默认: s8_subtitles.srt)")
     parser.add_argument("--title-offset", type=float, default=3.0,
-                        help="标题卡时长(秒) — 对话时间轴偏移量")
+                        help="标题卡时长(秒) — 时间轴偏移量")
     args = parser.parse_args()
 
     pd = Path(__file__).parent.parent / "projects" / args.project
-    video_path = pd / args.input
-
-    if not video_path.exists():
-        print(f"❌ Input video not found: {video_path}")
+    s4_path = pd / "s4_shots.json"
+    if not s4_path.exists():
+        print(f"❌ {s4_path} not found. Run S4 first.")
         sys.exit(1)
 
     sm = get_state_manager()
     sm.mark_running(args.project, "s8_subtitles")
 
-    # Extract dialogues with timing
-    dialogues = extract_dialogues(pd, title_offset=args.title_offset)
-    print(f"Dialogues: {len(dialogues)}")
-    for d in dialogues:
-        print(f"  {d['start']:.1f}-{d['end']:.1f}s: {d['character']}: {clean_text(d['text'])[:50]}")
+    s4 = json.load(open(s4_path))
+    dialogues, shot_start_times, shot_durations = extract_dialogues_from_shots(
+        s4, title_offset=args.title_offset
+    )
 
-    # Generate ASS
-    s4 = json.load(open(pd / "s4_shots.json"))
-    ass_path = pd / "s8_subtitles.ass"
-    generate_ass(dialogues, ass_path, title=s4.get("title", args.project))
-    print(f"ASS: {ass_path}")
+    output = Path(args.output) if args.output else pd / "s8_subtitles.srt"
+    generate_srt(dialogues, shot_start_times, shot_durations, output)
 
-    if args.ass_only:
-        sm.mark_completed(args.project, "s8_subtitles", tts="ass_only")
-        return
+    # Print summary
+    total_duration = shot_start_times[-1] + shot_durations[-1] if shot_start_times else 0
+    print(f"✅ S8: {len(dialogues)} dialogues → {output}")
+    print(f"   Duration: {total_duration:.1f}s")
+    for d in dialogues[:5]:
+        print(f"   [{d['shotSequence']}] {fmt_srt_time(shot_start_times[d['shotSequence']-1] + shot_durations[d['shotSequence']-1] * (d.get('startRatio') or 0))}: {d['character']}: {clean_text(d['text'])[:50]}")
+    if len(dialogues) > 5:
+        print(f"   ... +{len(dialogues) - 5} more")
 
-    # Burn into video
-    output = pd / "s7_with_subtitles.mp4"
-    print(f"Burning subtitles → {output}...")
-    burn_subtitles(video_path, ass_path, output)
-
-    size_mb = output.stat().st_size / (1024 * 1024)
-    print(f"✅ S8: {size_mb:.1f}MB → {output}")
-
-    sm.mark_completed(args.project, "s8_subtitles", tts="subtitles_burned", size_mb=f"{size_mb:.1f}")
+    sm.mark_completed(args.project, "s8_subtitles",
+                      dialogues=len(dialogues),
+                      duration=f"{total_duration:.1f}s")
 
 
 if __name__ == "__main__":
