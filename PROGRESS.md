@@ -16,6 +16,8 @@
 | 2026-07-01 | S7 xfade offset bug 修复, S6 stdout 缓冲修复, 多角色一致性决策 (TIV), VL 质检生命周期 |
 | 2026-07-02 | qwen-image-edit ReferenceLatent 工作流调通 (v9), SageAttention 兼容性确认, S3 --gen qedit 合入版本 |
 | 2026-07-02 | **工具链统一实施**: S3 Flux Dev 替换, S5 多角色+前帧增强, S4b 独立 stage, shot_split 增强 |
+| 2026-07-02 | **qwen-image-edit 工作流 v2.0 修正**: 对齐官方 Vantage 工作流，移除 ReferenceLatent/FluxKontext 节点，euler/simple 采样器，negative 共享参考图 |
+| 2026-07-02 | **决策关闭**: IPAdapter 方案取消（走 qedit 多参考图），Reference 视频模式取消（仅 Keyframe 模式） |
 
 ---
 

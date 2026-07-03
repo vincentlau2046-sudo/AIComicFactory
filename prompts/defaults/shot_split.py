@@ -156,7 +156,7 @@ OUTPUT_FORMAT = """输出格式 — 仅JSON对象：
           "depthOfField": "shallow | medium | deep",
           "transitionIn": "cut | dissolve | fade_in | wipe_left | wipe_right",
           "transitionOut": "cut | dissolve | fade_out | wipe_left | wipe_right",
-          "duration": 5.0,
+          "duration": 5.0,  // ⚠️ 必须≤6.0，超时将被截断
           "characters": ["角色名1", "角色名2"],
           "dialogues": [
             {
@@ -167,12 +167,29 @@ OUTPUT_FORMAT = """输出格式 — 仅JSON对象：
             }
           ],
           "soundDesign": "声音设计描述 — 环境音、音效",
-          "musicCue": "音乐提示 — 情绪/节奏变化"
+          "musicCue": "音乐提示 — 情绪/节奏变化",
+          "costumeOverrides": {
+            "角色名": "costume_id"
+          },
+          "sceneDescription": "场景视觉描述 — 中文，此镜头的场景环境/氛围/光线/色调，供 S5/S6 消费",
+          "videoPrompt": "视频生成专用prompt — 中文散文，供 S6 直接使用（如为空则 S6 自动拼装）",
+          "generationMode": "keyframe | reference — 默认 keyframe"
         }
       ]
     }
   ]
 }"""
+
+COSTUME_OVERRIDE = """=== 服饰覆盖规则 (costumeOverrides) ===
+每个 shot 可选指定 costumeOverrides 字段，格式: { "角色名": "costume_id" }。
+- costume_id 必须来自 S2 角色定义中的 costumes[].id
+- 如果 shot 中的角色换装了（如从工装→便装）→ 在这里指定
+- 如果 shot 中的角色维持 default 服饰 → 可以省略该字段
+- 如果 shot 中所有角色都维持 default → 可以省略整个 costumeOverrides
+- 场景切换（如工地→家里→餐厅）往往触发换装，务必检查并指定
+- 同一场景内一般不换装，除非剧本明确描述（如角色脱外套）
+- 如果 costumeOverrides 中某个角色不存在于 characters[] 中 → 忽略该条目
+"""
 
 CONSISTENCY = """=== 角色一致性保障 ===
 
@@ -276,7 +293,7 @@ class ShotSplitPrompt(PromptDefinition):
             r("language"),
         ])
     
-    def build_user_prompt(self, parsed_script: dict, characters: list, max_duration_per_shot: float = 8.0) -> str:
+    def build_user_prompt(self, parsed_script: dict, characters: list, max_duration_per_shot: float = 5.0) -> str:
         """构建 user prompt — 传入解析后的剧本 JSON 和角色列表"""
         char_summary = []
         for c in characters:
@@ -322,14 +339,14 @@ class ShotSplitPrompt(PromptDefinition):
 
 规则：
 - 每个scene拆分为3-8个shot
-- 每个shot最长{max_duration_per_shot}秒
+- ⚠️ 硬性约束：每个shot的duration字段必须 ≤ {max_duration_per_shot}秒，超过此值的duration将被强制截断
 - 对白必须逐字保持不变
 - prompt字段必须英文，motionScript和videoScript用中文散文
 - 多角色shot必须参考角色关系约束确定站位和视线
 - 每个shot的motionScript必须包含涉及角色的标志动作（performanceStyle）"""
 
 
-def build_shot_split(parsed_script: dict, characters: list, overrides: Optional[Dict[str, str]] = None, max_duration: float = 8.0) -> dict:
+def build_shot_split(parsed_script: dict, characters: list, overrides: Optional[Dict[str, str]] = None, max_duration: float = 5.0) -> dict:
     """一站式：返回 {'system': str, 'user': str}"""
     p = ShotSplitPrompt()
     return {

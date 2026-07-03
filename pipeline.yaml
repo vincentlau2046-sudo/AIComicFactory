@@ -1,0 +1,154 @@
+# AICF Pipeline Definition
+# 声明式管线定义：每个 stage 的依赖、资源需求、执行方式
+# e2e_dry_run.py 从此文件读取并自动编排执行顺序
+#
+# GPU 调度规则：
+#   comfyui: 需要 ComfyUI 运行 (shared 模式，与其他 comfyui stage 互斥但不互杀)
+#   qw35_vl: 需要 qw35-9b 运行 (exclusive 模式，与 comfyui GPU 互斥)
+#             管线会自动在需要时启动、用完立即释放
+#   none: 纯 CPU/API，无 GPU 需求
+
+stages:
+  # ── 文本链路 (LLM) ──
+  s1_script_parse:
+    order: 1
+    requires: [source.txt]
+    produces: [s1_parsed.json]
+    gpu: none
+    runner: llm
+    model: DEEPSEEK_PRO
+    prompt_builder: run_script_parse
+    description: "剧本解析 → 结构化 JSON"
+
+  s2_character_extract:
+    order: 2
+    requires: [s1_parsed.json]
+    produces: [s2_characters.json]
+    gpu: none
+    runner: llm
+    model: DEEPSEEK_PRO
+    prompt_builder: run_character_extract
+    description: "角色提取 → visualAnchors + visualHint"
+
+  s2b_wardrobe_extract:
+    order: 3
+    requires: [s2_characters.json]
+    produces: [s2_characters.json]  # 就地更新 costumes[]
+    gpu: none
+    runner: script
+    script: scripts/wardrobe_extract.py
+    description: "零 LLM 服饰提取 → costumes[] + defaultCostume"
+
+  # ── 分镜链路 (LLM) ──
+  s4_shot_split:
+    order: 4
+    requires: [s1_parsed.json, s2_characters.json]
+    produces: [s4_shots.json]
+    gpu: none
+    runner: llm
+    model: DEEPSEEK_PRO
+    prompt_builder: run_shot_split
+    max_tokens: 16384
+    description: "分镜拆解 → shots[] with cameraDirection, videoScript"
+
+  s4b_keyframe_assets:
+    order: 5
+    requires: [s4_shots.json, s2_characters.json]
+    produces: [s4b_keyframe_assets.json]
+    gpu: none
+    runner: script
+    script: scripts/s4b_keyframe_assets.py
+    description: "关键帧 prompt 预构建 + duration 审核"
+
+  # ── 图像链路 (ComfyUI) ──
+  s3_character_image:
+    order: 6
+    requires: [s2_characters.json]
+    produces: [s3_character_refs/manifest.json]
+    gpu: comfyui
+    runner: script
+    script: scripts/s3_character_image.py
+    args: [--style, vivid, --no-check]
+    vl_check: post        # 完成后启动 qw35 做质检，用完释放
+    description: "角色参考图 (Flux Dev T2I)"
+
+  s3b_four_view:
+    order: 7
+    requires: [s3_character_refs/manifest.json]
+    produces: [s3b_four_views/manifest.json]
+    gpu: comfyui
+    runner: script
+    script: scripts/s3b_four_view.py
+    args: [--style, realist, --no-check]
+    vl_check: post        # 完成后启动 qw35 做质检，用完释放
+    description: "四视图参考图 (Qwen Image Edit)"
+
+  s5_frame_generate:
+    order: 8
+    requires: [s4b_keyframe_assets.json, s3_character_refs/, s3b_four_views/]
+    produces: [s5_frames/*.png]
+    gpu: comfyui
+    runner: script
+    script: scripts/s5_frame_generate.py
+    args: [--frames, both, --no-check]
+    vl_check: post        # 完成后启动 qw35 做质检，用完释放
+    skip_existing: true   # 跳过已生成的帧
+    description: "关键帧生成 (qedit, 首尾帧)"
+
+  # ── 视频链路 (ComfyUI + FFmpeg) ──
+  s6_flf2v_render:
+    order: 9
+    requires: [s5_frames/, s4b_keyframe_assets.json]
+    produces: [s6_videos/*.mp4]
+    gpu: comfyui
+    runner: script
+    script: scripts/s6_flf2v_render.py
+    timeout: 600           # per-shot timeout
+    skip_existing: true
+    description: "FLF2V 视频渲染 (Wan 2.2)"
+
+  s7_video_assemble:
+    order: 10
+    requires: [s6_videos/]
+    produces: [s7_assembled.mp4]
+    gpu: none
+    runner: script
+    script: scripts/s7_video_assemble.py
+    description: "视频拼接 (FFmpeg xfade)"
+
+  s8_subtitles:
+    order: 11
+    requires: [s7_assembled.mp4, s4_shots.json]
+    produces: [s8_subtitles.ass]
+    gpu: none
+    runner: script
+    script: scripts/s8_subtitles.py
+    description: "ASS 字幕生成"
+
+  s9_tts_audio:
+    order: 12
+    requires: [s7_assembled.mp4, s4_shots.json]
+    produces: [s9_final.mp4]
+    gpu: comfyui           # Qwen3-TTS via ComfyUI
+    runner: script
+    script: scripts/s9_tts_audio.py
+    description: "TTS 语音合成 + 混音输出"
+
+# ── VL 质检策略 ──
+# qw35-9b 启动约 2 分钟，用完立即释放
+# 流程：stage 完成 → 启动 qw35 → 执行质检 → 释放 qw35
+# GPU 互斥：qw35 (exclusive) vs ComfyUI (shared)
+#   启动 qw35 前：先确认 ComfyUI 可以暂停（S3/S5/S6 已完成当前任务）
+#   释放 qw35 后：ComfyUI 恢复运行（无需重启，shared 模式不依赖独占 GPU）
+#
+# ⚠️ 实际约束：RTX 5090D 32GB 无法同时运行 qw35 + ComfyUI
+#   ComfyUI shared 模式约占 8-10GB VRAM
+#   qw35-9b 约占 13GB VRAM
+#   两者合计 ~23GB，理论上可共存，但 ComfyUI 模型加载时峰值 VRAM 会超限
+#   因此：质检时需短暂释放 ComfyUI GPU 占用 → 启动 qw35 → 质检 → 释放 qw35 → ComfyUI 恢复
+
+vl_check_strategy:
+  backend: qw35-9b
+  startup_time_estimate: 120s
+  lifecycle: on_demand    # 启动 → 使用 → 释放
+  gpu_conflict: comfyui   # 与 ComfyUI 互斥

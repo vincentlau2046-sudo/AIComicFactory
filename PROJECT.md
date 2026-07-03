@@ -433,3 +433,20 @@ shot_asset = {
 | `src/lib/pipeline/continuity-check.ts` | 连续性检查 |
 | `src/lib/pipeline/video-quality-check.ts` | 视频质量检查 |
 | `src/lib/task-queue/queue.ts` | 任务队列实现 |
+
+### D12: S3b 双版本输出 + S5 qedit 简化 (2026-07-02)
+
+**决策**: S3b 同时输出 v2（4张独立视角图）和 v3（2×2 合一图）
+
+**理由**:
+- v2 独立视角图 → S5 qedit 按镜头视角直接选对应参考图注入，消除"参考图来源"分支
+- v3 合一图 → VL 质检 + 人工审视
+- S5 qedit 仅保留"多角色参考"一个分支，视角选择变为显式查表
+
+**影响**: S5 frame_generate 简化为单分支架构（多角色参考注入）
+
+**并行策略**:
+- S3b 立即实现双版本输出（v2+v3）
+- S5 qedit 主线用现有成熟版本跑通全链路
+- S5 qedit v2 单分支版本放在临时脚本 `s5_frame_generate_v2.py` 中并行开发
+- 验证通过后 v2 替换主线

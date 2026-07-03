@@ -32,8 +32,11 @@ def extract_json_robust(text):
     # Fix unquoted string values: "key":value → "key":"value"
     if start >= 0:
         candidate = text[start:end+1]
-        fixed = re.sub(r'"([^"]+)"\s*:\s*([^"\s\[\{][^,\}\]]+?)([\s]*[,}\]])',
-                       r'"\1": "\2"\3', candidate)
+        fixed = re.sub(r'("[^"]+")\s*:\s*([^"\s\[\{][^,\}\]]*?)(\s*[,}\]])', r'\1: "\2"\3', candidate)
+        # Fix double-quoted endings: ...text"" → ...text"
+        fixed = re.sub(r'""(\s*[,}\]])', r'"\1', fixed)
+        # Fix number values that got over-quoted: "sceneNumber": "1" → "sceneNumber": 1
+        fixed = re.sub(r'"(sceneNumber|shotNumber|duration|startRatio|endRatio)":\s*"(\d+(?:\.\d+)?)"', r'"\1": \2', fixed)
         try: return json.loads(fixed)
         except: pass
 

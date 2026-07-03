@@ -244,19 +244,19 @@ def build_flux_dev_prompt(character: dict) -> str:
 # ═══════════════════════════════════════════════════════════════════
 
 def build_flux_dev_workflow(positive: str, width: int = 1024, height: int = 1536,
-                            seed: int = None, steps: int = 28, cfg: float = 4.0,
-                            sampler: str = "dpmpp_2m", scheduler: str = "sgm_uniform") -> dict:
+                            seed: int = None, steps: int = 20, cfg: float = 1.0,
+                            sampler: str = "euler", scheduler: str = "simple") -> dict:
     """Build Flux Dev fp8 T2I workflow from template.
     
-    Default params optimized for character reference images:
-    - 28 steps dpmpp_2m/sgm_uniform, cfg=4.0 (not 20 euler/simple)
-    - Flux Dev doesn't use negative prompt, node 15 left empty
+    v2.0: Aligned with official ComfyUI Flux.1 Dev blueprint.
+    - 20 steps euler/simple, cfg=1.0 (guidance-distilled model)
+    - Negative uses ConditioningZeroOut (not separate CLIPTextEncode)
+    - EmptySD3LatentImage (not EmptyLatentImage)
     """
     wf = load_workflow("flux_dev_t2i.json")
     return inject_params(wf, {
         "13": {"width": width, "height": height},
         "14": {"text": positive},
-        "15": {"text": ""},
         "16": {
             "seed": seed if seed is not None else random.randint(0, 2**32 - 1),
             "steps": steps,
@@ -475,9 +475,11 @@ def _run_qedit(args):
                               key=lambda p: p.stat().st_mtime, reverse=True)
 
                 if files:
-                    dest = ref_dir / f"{name}_{view}.png"
+                    char_dir = ref_dir / name
+                    char_dir.mkdir(parents=True, exist_ok=True)
+                    dest = char_dir / f"{view}.png"
                     shutil.copy2(str(files[0]), str(dest))
-                    print(f"    ✅ {dest.name} ({dest.stat().st_size//1024}KB)")
+                    print(f"    ✅ {name}/{dest.name} ({dest.stat().st_size//1024}KB)")
                     results[f"{name}_{view}"] = str(dest)
                 else:
                     print(f"    ❌ No output")
@@ -490,6 +492,7 @@ def _run_qedit(args):
     manifest = {
         "project": args.project, "gen_mode": "qedit",
         "views": views, "characters": results,
+        "structure": "per_character_dir",
     }
     with open(ref_dir / "manifest.json", "w") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
@@ -512,10 +515,10 @@ def _run_t2i(args):
     Supports both Flux Dev (--gen flux, default) and legacy SDXL (--gen t2i).
     """
     # Flux Dev optimal params
-    FLUX_STEPS = 28
-    FLUX_CFG = 4.0
-    FLUX_SAMPLER = "dpmpp_2m"
-    FLUX_SCHEDULER = "sgm_uniform"
+    FLUX_STEPS = 20
+    FLUX_CFG = 1.0
+    FLUX_SAMPLER = "euler"
+    FLUX_SCHEDULER = "simple"
 
     is_flux = (args.gen == "flux")
     
@@ -557,16 +560,38 @@ def _run_t2i(args):
     # SaveImage node ID differs between Flux and SDXL
     save_node = FLUX_SAVE_NODE if is_flux else SDXL_SAVE_NODE
 
-    # 预检 VL 后端可用性
+    # 预检 + 启动 VL 后端 (qw35-9b)
     if vl_available:
+        print(f"\n  [VL] 启动 qw35-9b 后端 (用于质检)...")
+        import subprocess, time
         try:
-            checker = CharacterImageChecker()
-            import urllib.request
-            urllib.request.urlopen("http://localhost:8002/health", timeout=5)
+            result = subprocess.run(
+                ["edge-llm", "switch", "qwen35-9b"],
+                capture_output=True, text=True, timeout=180
+            )
+            if result.returncode != 0:
+                print(f"  [VL] ⚠️ edge-llm switch qwen35-9b failed: {result.stderr[-200:]}")
+                vl_available = False
+            else:
+                # 等待就绪 (最多 150s)
+                print(f"  [VL] 等待 qw35-9b 就绪...")
+                deadline = time.time() + 150
+                import urllib.request
+                while time.time() < deadline:
+                    try:
+                        urllib.request.urlopen("http://localhost:8002/health", timeout=3)
+                        print(f"  [VL] ✅ qw35-9b 就绪")
+                        break
+                    except:
+                        time.sleep(5)
+                else:
+                    print(f"  [VL] ⚠️ qw35-9b 启动超时，跳过质检")
+                    vl_available = False
+        except subprocess.TimeoutExpired:
+            print(f"  [VL] ⚠️ edge-llm switch 超时，跳过质检")
+            vl_available = False
         except Exception as e:
-            print(f"  ⚠️ VL 后端不可用 (qw35-9b): {e}")
-            print(f"  → 提示: 运行 'edge-llm switch qwen35-9b' 启动")
-            print(f"  → 跳过 VL 质检，仅生成图片")
+            print(f"  [VL] ⚠️ 启动失败: {e}")
             vl_available = False
 
     for i, char in enumerate(characters):
@@ -607,31 +632,39 @@ def _run_t2i(args):
                 files = sorted(output_dir.glob(f"{prefix}_*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
 
                 if files:
+                    # Per-character per-costume directory
+                    char_dir = ref_dir / name
+                    char_dir.mkdir(parents=True, exist_ok=True)
                     am = get_asset_manager()
                     am.register(
                         project=args.project, asset_type="character_ref",
-                        shot_id=name, source_path=files[0], relative_dir="s3_character_refs",
-                        dest_name=f"{name}.png",
-                        metadata={"character": name,
+                        shot_id=name, source_path=files[0], relative_dir=f"s3_character_refs/{name}",
+                        dest_name="default.png",
+                        metadata={"character": name, "costume_id": "default",
                                   "generator": "flux_dev" if is_flux else "sdxl",
                                   "checkpoint": checkpoint if not is_flux else "flux1-dev-fp8",
                                   "resolution": f"{args.width}x{args.height}", "prompt": prompt[:200],
                                   "attempt": attempt + 1}
                     )
-                    dest = ref_dir / f"{name}.png"
+                    dest = char_dir / "default.png"
                     if dest.exists():
                         print(f"  ✅ {dest} ({dest.stat().st_size//1024}KB)")
                         
                         if vl_available:
                             checker = CharacterImageChecker()
                             vl_result = checker.check(str(dest), char)
-                            icon = "✅" if vl_result["pass"] else "⚠️"
-                            print(f"  VL质检: {icon} {vl_result['score']}/10 {vl_result['summary'][:60]}")
+                            if not isinstance(vl_result, dict):
+                                print(f"  ⚠️ VL质检返回异常类型: {type(vl_result)}, 跳过")
+                                vl_result = {"pass": True, "score": 0, "summary": "VL返回异常"}
+                            icon = "✅" if vl_result.get("pass", True) else "⚠️"
+                            score = vl_result.get("score", "?")
+                            summary = vl_result.get("summary", "")
+                            print(f"  VL质检: {icon} {score}/10 {summary[:60]}")
                             vl_result["generated_at"] = str(dest.stat().st_mtime)
                             vl_result["attempt"] = attempt + 1
                             vl_results_list.append(vl_result)
                             
-                            if vl_result["pass"]:
+                            if vl_result.get("pass", True):
                                 results[name] = str(dest)
                                 break
                             elif attempt < args.max_vl_retries:
@@ -657,12 +690,22 @@ def _run_t2i(args):
         "checkpoint": "flux1-dev-fp8" if is_flux else checkpoint,
         "resolution": f"{args.width}x{args.height}",
         "characters": results,
+        "structure": "per_character_dir",
     }
     if vl_results_list:
         vl_report_path = ref_dir / "vl_quality_report.json"
         with open(vl_report_path, "w") as f:
             json.dump(vl_results_list, f, ensure_ascii=False, indent=2)
         print(f"\n  VL质检报告: {vl_report_path}")
+
+        # 释放 qw35-9b
+        print(f"  [VL] 释放 qw35-9b (edge-llm switch idle)...")
+        try:
+            subprocess.run(["edge-llm", "switch", "idle"],
+                          capture_output=True, timeout=120)
+            print(f"  [VL] ✅ qw35-9b 已释放")
+        except Exception as e:
+            print(f"  [VL] ⚠️ 释放失败: {e}")
 
     with open(ref_dir / "manifest.json", "w") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)

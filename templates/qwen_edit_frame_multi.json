@@ -1,19 +1,15 @@
 {
-  "_comment": "qwen-image-edit ReferenceLatent 多角色帧生成工作流 (S5 multi-character)",
-  "_architecture": {
-    "image1": "主角色参考图 (node 41 → TextEncodeQwenImageEditPlus.image1)",
-    "image2": "配角参考图 (node 42 → TextEncodeQwenImageEditPlus.image2)",
-    "image3": "前帧连续性参考 / 第3角色 (node 43 → TextEncodeQwenImageEditPlus.image3)",
-    "description": "TextEncodeQwenImageEditPlus 内部处理 image1/image2/image3 的参考潜在编码，无需额外 VAEEncode/ReferenceLatent 链。单角色场景仍使用 qwen_edit_frame.json。"
+  "_comment": "qwen-image-edit 多角色帧生成工作流 (S5 multi-character) — v2.2 fit+pad resolution alignment",
+  "_changelog": {
+    "v2.0": "Aligned with official Vantage workflow: removed ReferenceLatent/FluxKontext, euler/simple sampler",
+    "v2.1": "Added ImageScale before VAEEncode (caused distortion)",
+    "v2.2": "Replaced ImageScale with fit+pad: LoadImage(original)→TextEncode, LoadImage(padded)→VAEEncode. No distortion."
   },
-  "_requirements": [
-    "ComfyUI must NOT run with --use-sage-attention (causes black output)",
-    "Lightning LoRA: Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
-    "Checkpoint: qwen_image_edit_2511_fp8mixed.safetensors (in diffusion_models/)",
-    "CLIP: qwen_2.5_vl_7b_fp8_scaled.safetensors (in text_encoders/)",
-    "VAE: qwen_image_vae.safetensors (in vae/)",
-    "Reference images: character refs from S3/S3b"
-  ],
+  "_architecture": {
+    "resolution_chain": "S3 ref(1024×1536) → Python fit+pad(480×720 in 1280×720 white) → VAEEncode → 1280×720 output",
+    "conditioning": "TextEncodeQwenImageEditPlus gets original-res image1/2/3 (full detail for CLIP)",
+    "latent": "VAEEncode gets padded 1280×720 image1 (controls output resolution, no distortion)"
+  },
 
   "12": {
     "class_type": "UNETLoader",
@@ -75,10 +71,16 @@
       "image": "reference3.png"
     }
   },
+  "81": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "reference_padded.png"
+    }
+  },
   "75": {
     "class_type": "VAEEncode",
     "inputs": {
-      "pixels": ["41", 0],
+      "pixels": ["81", 0],
       "vae": ["10", 0]
     }
   },
@@ -97,35 +99,11 @@
     "class_type": "TextEncodeQwenImageEditPlus",
     "inputs": {
       "clip": ["61", 0],
-      "prompt": ""
-    }
-  },
-  "89": {
-    "class_type": "ReferenceLatent",
-    "inputs": {
-      "conditioning": ["68", 0],
-      "latent": ["75", 0]
-    }
-  },
-  "90": {
-    "class_type": "ReferenceLatent",
-    "inputs": {
-      "conditioning": ["69", 0],
-      "latent": ["75", 0]
-    }
-  },
-  "70": {
-    "class_type": "FluxKontextMultiReferenceLatentMethod",
-    "inputs": {
-      "conditioning": ["89", 0],
-      "reference_latents_method": "index_timestep_zero"
-    }
-  },
-  "71": {
-    "class_type": "FluxKontextMultiReferenceLatentMethod",
-    "inputs": {
-      "conditioning": ["90", 0],
-      "reference_latents_method": "index_timestep_zero"
+      "prompt": "",
+      "vae": ["10", 0],
+      "image1": ["41", 0],
+      "image2": ["42", 0],
+      "image3": ["43", 0]
     }
   },
   "65": {
@@ -134,12 +112,12 @@
       "seed": 0,
       "steps": 4,
       "cfg": 1.0,
-      "sampler_name": "er_sde",
-      "scheduler": "beta",
+      "sampler_name": "euler",
+      "scheduler": "simple",
       "denoise": 1.0,
       "model": ["64", 0],
-      "positive": ["70", 0],
-      "negative": ["71", 0],
+      "positive": ["68", 0],
+      "negative": ["69", 0],
       "latent_image": ["75", 0]
     }
   },

@@ -71,6 +71,7 @@ OUTPUT_FORMAT = """═══ 输出格式 ═══
     {
       "name": "角色名，与剧本中完全一致",
       "scope": "main" 或 "guest",
+      "gender": "male 或 female。根据剧本原文推断，必须准确。",
       "description": "完整视觉规格——单段落，包含以下所有要求",
       "visualHint": "2-4个字的视觉标识符，用于对白标签（如 银发金瞳、红衣长发）。必须一眼可识别——聚焦最显著的外貌特征。",
       "visualAnchors": {
@@ -84,6 +85,8 @@ OUTPUT_FORMAT = """═══ 输出格式 ═══
       "heightCm": "估算身高（厘米），如175。根据剧本中的线索推断。",
       "bodyType": "slim | average | athletic | heavy | petite | tall",
       "performanceStyle": "表演风格描述——动作幅度（夸张/细腻）、标志性手势、情绪表达模式"
+      
+      /* costumes 和 defaultCostume 由下游 wardrobe_extract.py 自动提取和管理，无需 LLM 输出 */
     }
   ],
   "relationships": [
@@ -103,7 +106,7 @@ OUTPUT_FORMAT = """═══ 输出格式 ═══
 - face: 聚焦"一眼认出"的面部特征（如"方形脸, 浓眉, 丹凤眼, 法令纹, 短胡茬, 冷白皮"）
 - hair: 聚焦发型+颜色（如"寸头, 黑色带灰白, 向后梳"）
 - body: 聚焦体态关键词（如"中等身材, 微驼背, 厚手掌"）
-- clothing: 聚焦服装关键词（如"蓝色工装夹克, 深色裤子, 劳保鞋"）
+- clothing: 聚焦**默认着装**服装关键词（如"蓝色工装夹克, 深色裤子, 劳保鞋"）——下游 wardrobe_extract.py 会从此字段自动提取衣橱
 - signature: 聚焦标志性特征（如"左手无名指工伤疤痕, 总叼烟斗"）
 - 如果角色没有某个维度的显著特征，可以简短写"无特殊"或省略该字段
 

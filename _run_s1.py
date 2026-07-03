@@ -4,6 +4,7 @@ import json, sys, urllib.request
 sys.path.insert(0, '.')
 from core.prompt_runner import run_script_parse
 from core.state_manager import get_state_manager
+from _json_utils import extract_json_robust
 
 source = open('projects/last_bento/source.txt').read()
 print(f'Source: {len(source)} chars')
@@ -32,24 +33,9 @@ with urllib.request.urlopen(req, timeout=300) as resp:
     api_result = json.loads(resp.read())
     content = api_result['choices'][0]['message']['content']
 
-def extract_json(text):
-    text = text.strip()
-    try: return json.loads(text)
-    except: pass
-    if '```json' in text:
-        block = text.split('```json')[1].split('```')[0]
-        try: return json.loads(block.strip())
-        except: pass
-    start = text.find('{')
-    end = text.rfind('}')
-    if start >= 0 and end > start:
-        for trunc_end in range(end, max(start, end-5000), -1):
-            if text[trunc_end] == '}':
-                try: return json.loads(text[start:trunc_end+1])
-                except: continue
-    raise ValueError(f'Cannot extract JSON: {text[:200]}')
+from _json_utils import extract_json_robust
 
-parsed = extract_json(content)
+parsed = extract_json_robust(content)
 print(f'S1 result: {len(parsed.get("scenes",[]))} scenes')
 
 sm = get_state_manager()

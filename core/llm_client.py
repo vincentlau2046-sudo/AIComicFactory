@@ -35,7 +35,7 @@ MODEL_ALIASES = {
 
 DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_TEMPERATURE = 0.7
-DEFAULT_MAX_TOKENS = 8192
+DEFAULT_MAX_TOKENS = 16384
 
 
 def _get_api_key() -> str:

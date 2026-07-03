@@ -91,61 +91,59 @@ def get_clip_fps(path: Path) -> float:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Card generation (AICB: ffmpeg drawtext)
+# Card generation (Pillow → ffmpeg, no drawtext dependency)
 # ═══════════════════════════════════════════════════════════════════
 
-def _escape_ffmpeg_text(text: str) -> str:
-    """Escape text for ffmpeg drawtext filter (single-quote safe)."""
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "'\\\\\\''")
+def _generate_text_frame(text: str, font_size: int, color: str) -> Path:
+    """Pillow render: black background + centered CJK text → PNG."""
+    from PIL import Image, ImageDraw, ImageFont
+    import uuid
+    png_path = Path(tempfile.gettempdir()) / f"card-{uuid.uuid4().hex[:8]}.png"
+    img = Image.new("RGB", (W, H), color="black")
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype(FONT_PATH, font_size) if FONT_PATH else None
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(((W - tw) // 2, (H - th) // 2), text, fill=color, font=font)
+    img.save(png_path)
+    return png_path
 
 
 def generate_title_card(out_dir: Path, text: str, project_id: str) -> Path:
-    """Generate title card with ffmpeg drawtext (AICB style)."""
+    """Generate title card: Pillow PNG → ffmpeg fade-in mp4."""
     import uuid
     card_path = out_dir / f"title-{uuid.uuid4().hex[:8]}.mp4"
-    escaped = _escape_ffmpeg_text(text)
-    font_arg = f":fontfile='{FONT_PATH}'" if FONT_PATH else ""
-
+    png_path = _generate_text_frame(text, 48, "white")
     cmd = [
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s={W}x{H}:d={TITLE_DURATION}",
-        "-vf", (
-            f"drawtext=text='{escaped}'"
-            f":fontsize=48:fontcolor=white"
-            f":x=(w-text_w)/2:y=(h-text_h)/2{font_arg}"
-            f",fade=t=in:d=1"
-        ),
+        "-loop", "1", "-i", str(png_path),
+        "-vf", f"fade=t=in:d=1",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
         "-t", str(TITLE_DURATION),
         "-pix_fmt", "yuv420p",
         str(card_path),
     ]
     subprocess.run(cmd, check=True, capture_output=True)
+    png_path.unlink(missing_ok=True)
     return card_path
 
 
 def generate_credits_card(out_dir: Path, text: str, project_id: str) -> Path:
-    """Generate end credits card (AICB style)."""
+    """Generate end credits card: Pillow PNG → ffmpeg fade-out mp4."""
     import uuid
     card_path = out_dir / f"credits-{uuid.uuid4().hex[:8]}.mp4"
-    escaped = _escape_ffmpeg_text(text)
-    font_arg = f":fontfile='{FONT_PATH}'" if FONT_PATH else ""
-
+    png_path = _generate_text_frame(text, 36, "white")
     cmd = [
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s={W}x{H}:d={CREDITS_DURATION}",
-        "-vf", (
-            f"drawtext=text='{escaped}'"
-            f":fontsize=36:fontcolor=white"
-            f":x=(w-text_w)/2:y=(h-text_h)/2{font_arg}"
-            f",fade=t=out:d=1"
-        ),
+        "-loop", "1", "-i", str(png_path),
+        "-vf", f"fade=t=out:d=1",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
         "-t", str(CREDITS_DURATION),
         "-pix_fmt", "yuv420p",
         str(card_path),
     ]
     subprocess.run(cmd, check=True, capture_output=True)
+    png_path.unlink(missing_ok=True)
     return card_path
 
 
@@ -499,32 +497,33 @@ def main():
     transitions = []
     subtitles = []
 
-    for scene in s4["scenes"]:
-        for shot in scene["shots"]:
-            sn = shot["shotNumber"]
-            clip = videos_dir / f"s{sn:02d}.mp4"
-            # B5: Fallback to assets.json active video path
-            if not clip.exists():
-                try:
-                    am = get_asset_manager()
-                    active = am.get_active(args.project, f"shot_{sn:03d}", "keyframe_video")
-                    if active:
-                        clip = pd / active["file_path"]
-                except Exception:
-                    pass
-            if not clip.exists():
-                print(f"  ⚠️ Missing clip: s{sn:02d}.mp4 (checked assets.json fallback)")
-                continue
+    for i, (scene, shot) in enumerate(
+        ((scene, shot) for scene in s4["scenes"] for shot in scene["shots"])
+    ):
+        sn = i + 1  # 全局编号
+        clip = videos_dir / f"s{sn:02d}.mp4"
+        # B5: Fallback to assets.json active video path
+        if not clip.exists():
+            try:
+                am = get_asset_manager()
+                active = am.get_active(args.project, f"shot_{sn:03d}", "keyframe_video")
+                if active:
+                    clip = pd / active["file_path"]
+            except Exception:
+                pass
+        if not clip.exists():
+            print(f"  ⚠️ Missing clip: s{sn:02d}.mp4 (checked assets.json fallback)")
+            continue
 
-            video_paths.append(clip)
-            dur = get_clip_duration(clip)
-            shot_durations.append(dur)
-            transit = shot.get("transitionOut", "cut")
-            transitions.append(transit)
+        video_paths.append(clip)
+        dur = get_clip_duration(clip)
+        shot_durations.append(dur)
+        transit = shot.get("transitionOut", "cut")
+        transitions.append(transit)
 
-            # Build subtitle entries for this shot
-            shot_dialogues = shot.get("dialogues", [])
-            for di, d in enumerate(shot_dialogues):
+        # Build subtitle entries for this shot
+        shot_dialogues = shot.get("dialogues", [])
+        for di, d in enumerate(shot_dialogues):
                 subtitles.append({
                     "shotSequence": len(video_paths),  # 1-based
                     "text": d.get("text", ""),

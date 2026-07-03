@@ -31,6 +31,11 @@ sys.stdout.reconfigure(line_buffering=True)
 from core.state_manager import get_state_manager
 from prompts.defaults.frame_generate_first import build_full_prompt as build_first_prompt
 from prompts.defaults.frame_generate_last import build_full_prompt as build_last_prompt
+
+# Costume helpers (shared with S5)
+import s5_frame_generate
+_resolve_shot_costumes = s5_frame_generate._resolve_shot_costumes
+_build_costume_consistency = s5_frame_generate._build_costume_consistency
 from prompts.defaults.character_image import build_flux_ref_prompt
 
 
@@ -176,6 +181,31 @@ def main():
 
     s4 = json.load(open(s4_path))
     s2 = json.load(open(s2_path))
+
+    # ── S4b 审核: 分镜时长校验 ──
+    MAX_SHOT_DURATION = 6.0  # 秒
+    scenes = s4.get("scenes", [])
+    all_shots = []
+    if scenes:
+        for sc in scenes:
+            for sh in sc["shots"]:
+                all_shots.append(sh)
+    else:
+        all_shots = s4.get("shots", [])
+
+    over_limit = [sh for sh in all_shots if sh.get("duration", 5.0) > MAX_SHOT_DURATION]
+    if over_limit:
+        print(f"⚠️ S4b 审核: {len(over_limit)}/{len(all_shots)} shots 超过 {MAX_SHOT_DURATION}s 限制，自动截断:")
+        for sh in over_limit:
+            n = sh["shotNumber"]
+            dur = sh.get("duration", 5.0)
+            sh["duration"] = MAX_SHOT_DURATION
+            print(f"  s{n:02d}: {dur}s → {MAX_SHOT_DURATION}s")
+        # 写回修正后的 s4_shots.json
+        s4_path.write_text(json.dumps(s4, ensure_ascii=False, indent=2))
+        print(f"  已自动修正并写回 s4_shots.json")
+    else:
+        print(f"✅ S4b 审核: {len(all_shots)} shots 全部 ≤{MAX_SHOT_DURATION}s")
 
     chars = s2["characters"]
     project_color_palette = s2.get("colorPalette", "") or s4.get("colorPalette", "")

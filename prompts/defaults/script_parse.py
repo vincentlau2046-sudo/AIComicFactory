@@ -121,6 +121,33 @@ LANGUAGE = """【关键语言规则】JSON中的所有文本内容（title、syn
 
 仅返回有效JSON。不要使用markdown代码块。不要添加任何评论。"""
 
+PARSING_RULES = """=== 场景解析规则（结构化指导）===
+
+【场景拆分原则】
+- 宁多勿少：不确定是否拆分时，默认拆分
+- 拆分触发条件（任一满足即新开 scene）：
+  ① 时间跳跃（"过了半小时"、"入夜后"）
+  ② 地点变化（"回到办公室"、"走出大门"）
+  ③ 叙事节拍转折（情绪转换、新事件开始）
+  ④ 对白轮次≥3 且有动作穿插（对白+动作交织=节奏变化）
+- 每场景目标时长 5-15 秒动画
+
+【时间标注规则】
+- setting 字段必须包含时间：日/夜/晨/昏/上午/下午/深夜/傍晚
+- 原文有明确时间 → 原样使用
+- 原文无明确时间 → 从上下文推断（"阳光"→日，"路灯"→夜）
+
+【对白归属规则】
+- 连续对白无说话人标记 → 根据上下文推断，不确定时用"未知角色"
+- 旁白/内心独白 → character="旁白"，emotion 标注"内心独白"
+- 群体对白（"众人齐声"） → character="众人"
+
+【描述补充规则】
+- 原文有视觉描写 → 完整保留，可补充光照/色调/空间关系
+- 原文无视觉描写 → 推断补充，但标注为推断（"（推断）"）
+- 禁止用推断覆盖原文已有描写
+- description 必须有视觉具体性：角色位置/姿态/光线/色调至少出现2项"""
+
 
 # ═══════════════════════════════════════════════════════════════════
 # Definition
@@ -136,6 +163,7 @@ class ScriptParsePrompt(PromptDefinition):
         self.slots = [
             slot("role", ROLE, editable=True),
             slot("fidelity", FIDELITY, editable=True),
+            slot("parsing_rules", PARSING_RULES, editable=True),
             slot("format", FORMAT, editable=False),
             slot("rules", RULES, editable=True),
             slot("language", LANGUAGE, editable=False),
@@ -147,6 +175,7 @@ class ScriptParsePrompt(PromptDefinition):
         return "\n\n".join([
             r("role"),
             r("fidelity"),
+            r("parsing_rules"),
             r("format"),
             r("rules"),
             r("language"),

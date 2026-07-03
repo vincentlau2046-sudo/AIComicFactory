@@ -11,15 +11,15 @@ chars_data = json.load(open('projects/last_bento/s2_characters.json'))
 characters = chars_data.get('characters', [])
 print(f'Loaded: {len(parsed.get("scenes",[]))} scenes, {len(characters)} characters')
 
-result = run_shot_split('projects/last_bento', parsed_script=parsed, characters=characters)
+result = run_shot_split('projects/last_bento', parsed_script=parsed, characters=characters, max_duration=6.0)
 print(f'Prompt: {len(result["messages"])} messages')
 
 config = json.load(open('/home/vince/.openclaw/agents/main/agent/models.json'))
 key = config['providers']['baidu-codingplan']['apiKey']
 
 payload = json.dumps({
-    'model': 'glm-5.1', 'messages': result['messages'],
-    'temperature': 0.3, 'max_tokens': 8192,
+    'model': 'deepseek-v4-pro', 'messages': result['messages'],
+    'temperature': 0.3, 'max_tokens': 16384,
 }).encode()
 
 req = urllib.request.Request(
@@ -28,7 +28,7 @@ req = urllib.request.Request(
     method='POST',
 )
 
-with urllib.request.urlopen(req, timeout=600) as resp:
+with urllib.request.urlopen(req, timeout=1800) as resp:
     content = json.loads(resp.read())['choices'][0]['message']['content']
 
 

@@ -23,6 +23,34 @@ from core.asset_manager import get_asset_manager
 from core.workflow_loader import load_workflow, inject_params
 from prompts.defaults.video_generate import build_video_prompt
 
+
+def _extract_frame_desc(s4b_prompt: str) -> str:
+    """从 S4b keyframe prompt 中提取 '画面描述' 段落作为帧描述。
+    
+    S4b prompt 格式:
+        生成该镜头的...
+        === 关键：画风 ===
+        ...
+        === 场景环境 ===
+        ...
+        === 画面描述 ===
+        <这是我们需要的内容>
+        === (下一个段落或结束) ===
+    
+    Returns:
+        纯画面描述文本，不含生成指令/画风指令/场景环境。
+        如果提取失败，返回整个 prompt（退化 fallback）。
+    """
+    import re
+    # Match === 画面描述 === block
+    m = re.search(r'===\s*画面描述\s*===\s*\n(.*?)(?=\n===\s|$)', s4b_prompt, re.DOTALL)
+    if m:
+        desc = m.group(1).strip()
+        if desc:
+            return desc
+    # Fallback: return full prompt (better than nothing)
+    return s4b_prompt
+
 # ═══════════════════════════════════════
 # Config
 # ═══════════════════════════════════════
@@ -39,7 +67,7 @@ SHIFT = 5.0
 FPS = 25
 W, H = 1280, 720  # 16:9 landscape, matches S5 frame resolution (unified 2026-07-01)
 
-MAX_FLF2V_FRAMES = 125   # FLF2V 有效窗口 ~5s@25fps
+MAX_FLF2V_FRAMES = 150   # FLF2V 有效窗口 ~6s@25fps; >6s 镜头应打回重分镜
 
 TEACACHE_THRESHOLD = 0.2
 TEACACHE_START = 0.15
@@ -48,9 +76,9 @@ TEACACHE_END = 0.95
 NEG_PROMPT = "静态, 细节模糊不清, 最差质量, 低质量, 丑陋, 多余手指, 畸形的肢体, 字幕, 水印"
 
 # Mid-frame generation config
-MID_CKPT = "animagine-xl-3.1.safetensors"
+# Mid-frame uses Flux Dev T2I (same as S5 Path B), not Animagine XL
+# MID_CKPT/MID_NEG removed — Flux Dev uses ConditioningZeroOut
 MID_QUALITY = "masterpiece, best quality, very aesthetic, highres, detailed"
-MID_NEG = "low quality, worst quality, bad anatomy, bad hands, blurry, watermark, text, signature, deformed"
 
 
 def build_flf2v_workflow(start_image: str, end_image: str, motion_prompt: str,
@@ -129,29 +157,45 @@ def _build_flf2v_inline(start_image: str, end_image: str, motion_prompt: str,
 # ═══════════════════════════════════════
 
 def build_midframe_workflow(prompt: str, seed: int, width: int = 1280, height: int = 720) -> dict:
-    """Generate a single mid-frame via T2I."""
+    """Generate a single mid-frame via Flux Dev T2I.
+    
+    v2.0: Replaced Animagine XL with Flux Dev (style consistency with S5 Path B).
+    Aligned with official Flux.1 Dev Blueprint: cfg=1.0, euler/simple, 20 steps,
+    ConditioningZeroOut negative, EmptySD3LatentImage.
+    """
     return {
-        "3": {"class_type": "KSampler", "inputs": {
-            "seed": seed, "steps": 20, "cfg": 7.5,
-            "sampler_name": "euler_ancestral", "scheduler": "normal",
-            "denoise": 1.0, "model": ["4", 0],
-            "positive": ["6", 0], "negative": ["7", 0],
-            "latent_image": ["5", 0],
-        }},
-        "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": MID_CKPT}},
-        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
-        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["4", 1]}},
-        "7": {"class_type": "CLIPTextEncode", "inputs": {"text": MID_NEG, "clip": ["4", 1]}},
-        "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
-        "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "aicf_mid", "images": ["8", 0]}},
+        "10": {"class_type": "UNETLoader", "inputs": {
+            "unet_name": "flux1-dev-fp8.safetensors", "weight_dtype": "default"}},
+        "11": {"class_type": "DualCLIPLoader", "inputs": {
+            "clip_name1": "clip_l.safetensors",
+            "clip_name2": "t5xxl_fp8_e4m3fn_scaled.safetensors",
+            "type": "flux"}},
+        "12": {"class_type": "VAELoader", "inputs": {
+            "vae_name": "ae.safetensors"}},
+        "13": {"class_type": "EmptySD3LatentImage", "inputs": {
+            "width": width, "height": height, "batch_size": 1}},
+        "14": {"class_type": "CLIPTextEncode", "inputs": {
+            "text": prompt, "clip": ["11", 0]}},
+        "15": {"class_type": "ConditioningZeroOut", "inputs": {
+            "conditioning": ["14", 0]}},
+        "16": {"class_type": "KSampler", "inputs": {
+            "seed": seed, "steps": 20, "cfg": 1.0,
+            "sampler_name": "euler", "scheduler": "simple",
+            "denoise": 1.0, "model": ["10", 0],
+            "positive": ["14", 0], "negative": ["15", 0],
+            "latent_image": ["13", 0]}},
+        "17": {"class_type": "VAEDecode", "inputs": {
+            "samples": ["16", 0], "vae": ["12", 0]}},
+        "18": {"class_type": "SaveImage", "inputs": {
+            "filename_prefix": "aicf_mid", "images": ["17", 0]}},
     }
 
 
 def generate_mid_frame(sess: ComfyUISession, prompt: str, seed: int, shot_num: int, seg_idx: int,
                         project: str, s5_dir: Path, comfy_input: Path) -> Path:
-    """Generate a mid-frame and save to s5_frames. Returns the ComfyUI input filename."""
+    """Generate a mid-frame (Flux Dev T2I) and save to s5_frames. Returns the ComfyUI input filename."""
     wf = build_midframe_workflow(prompt, seed)
-    wf["9"]["inputs"]["filename_prefix"] = f"aicf_mid_s{shot_num:02d}_{seg_idx}"
+    wf["18"]["inputs"]["filename_prefix"] = f"aicf_mid_s{shot_num:02d}_{seg_idx}"
 
     try:
         result = sess.run(wf, timeout=300)
@@ -232,6 +276,10 @@ def main():
     s4 = json.load(open(pd / "s4_shots.json"))
     s2 = json.load(open(pd / "s2_characters.json"))
     chars = s2["characters"]
+    
+    # Load S4b keyframe assets for frame descriptions
+    s4b_path = pd / "s4b_keyframe_assets.json"
+    s4b_data = json.load(open(s4b_path)) if s4b_path.exists() else None
     s5_dir = pd / "s5_frames"
 
     shots = []
@@ -249,8 +297,11 @@ def main():
     comfy_input = Path.home() / "ComfyUI" / "input"
     sess = ComfyUISession()
 
+    done = 0
     for i, shot in enumerate(shots):
-        sn = shot["shotNumber"]
+        global_shot = i + 1
+        sn = global_shot  # 全局编号做文件名
+        local_sn = shot["shotNumber"]  # 场景内编号，用于 S4b 匹配
         first = s5_dir / f"s{sn:02d}_first.png"
         last = s5_dir / f"s{sn:02d}_last.png"
 
@@ -268,16 +319,38 @@ def main():
                     shot_chars.append({"name": c["name"], "visualHint": c.get("visualHint")})
                     break
 
-        motion = build_video_prompt(
-            video_script=shot.get("videoScript", shot.get("motionScript", "")),
-            camera_direction=shot.get("cameraDirection", "静态"),
-            start_frame_desc=shot.get("startFrameDesc", ""),
-            end_frame_desc=shot.get("endFrameDesc", ""),
-            duration=duration,
-            characters=shot_chars,
-            dialogues=shot.get("dialogues", []),
-            aspect_ratio="16:9",
-        )
+        # P1-5: 优先读 shot.videoPrompt，fallback 到 build_video_prompt() 拼装
+        if shot.get("videoPrompt"):
+            motion = shot["videoPrompt"]
+        else:
+            # P1-3: 消费新字段 sceneDescription + startFrameDesc/endFrameDesc
+            scene_desc = shot.get("sceneDescription", "")
+            # Read S4b keyframe assets for frame descriptions
+            start_desc = shot.get("startFrameDesc", "")
+            end_desc = shot.get("endFrameDesc", "")
+            # Also check S4b data — extract 画面描述 only (not full gen prompt)
+            if s4b_data and (not start_desc or not end_desc):
+                for s4b_s in s4b_data.get("shots", []):
+                    if s4b_s["shotNumber"] == local_sn:
+                        if not start_desc:
+                            raw = s4b_s.get("startFrame", {}).get("prompt", "")
+                            start_desc = _extract_frame_desc(raw) if raw else ""
+                        if not end_desc:
+                            raw = s4b_s.get("endFrame", {}).get("prompt", "")
+                            end_desc = _extract_frame_desc(raw) if raw else ""
+                        break
+            
+            motion = build_video_prompt(
+                video_script=shot.get("videoScript", shot.get("motionScript", "")),
+                camera_direction=shot.get("cameraDirection", "静态"),
+                start_frame_desc=start_desc,
+                end_frame_desc=end_desc,
+                scene_description=scene_desc,
+                duration=duration,
+                characters=shot_chars,
+                dialogues=shot.get("dialogues", []),
+                aspect_ratio="16:9",
+            )
 
         # Build T2I prompt for mid-frame generation (same as S5 prompt)
         t2i_prompt = f"{MID_QUALITY}, {shot.get('prompt', '')}"
@@ -324,80 +397,21 @@ def main():
                     dest = videos_dir / f"s{sn:02d}.mp4"
                     size_mb = dest.stat().st_size / (1024 * 1024)
                     print(f"  ✅ {size_mb:.1f}MB ({result.elapsed:.0f}s)")
+                    done += 1
                 else:
                     print(f"  ⚠️ No output file")
             except ComfyUIError as e:
                 print(f"  ❌ {e}")
             continue
 
-        # ── Path D: Split FLF2V (>MAX_FLF2V_FRAMES) ──
-        num_segments = (total_frames + MAX_FLF2V_FRAMES - 1) // MAX_FLF2V_FRAMES
-        remaining = total_frames
-        print(f"\nShot {sn}/{len(shots)}: {total_frames}f ({duration}s) → {num_segments} segments | {motion[:60]}...")
+        # ── Path D: Shot too long (>6s) — reject, must re-split in S4 ──
+        if total_frames > MAX_FLF2V_FRAMES:
+            print(f"\n  ❌ Shot {sn}: {total_frames}f ({duration}s) > {MAX_FLF2V_FRAMES}f ({MAX_FLF2V_FRAMES/FPS:.1f}s)")
+            print(f"     → 打回重分镜: S4 max_duration 应 ≤{MAX_FLF2V_FRAMES/FPS:.0f}s")
+            sm.add_error(args.project, "s6_flf2v_render",
+                         f"shot {sn} too long: {duration}s > {MAX_FLF2V_FRAMES/FPS:.0f}s, re-run S4 with max_duration={MAX_FLF2V_FRAMES/FPS:.0f}")
+            continue
 
-        # Copy start/end to ComfyUI input
-        start_name = f"aicf_s{sn:02d}_start.png"
-        end_name = f"aicf_s{sn:02d}_end.png"
-        shutil.copy2(str(first), str(comfy_input / start_name))
-        shutil.copy2(str(last), str(comfy_input / end_name))
-
-        segments = []
-        current_start = start_name
-        total_elapsed = 0
-
-        for seg_idx in range(num_segments):
-            seg_frames = min(remaining, MAX_FLF2V_FRAMES)
-
-            if seg_idx == num_segments - 1:
-                # Last segment: current_start → end_image
-                current_end = end_name
-            else:
-                # Generate mid-frame for segment boundary
-                mid_seed = random.randint(0, 2**32 - 1)
-                current_end = generate_mid_frame(
-                    sess, t2i_prompt, mid_seed, sn, seg_idx,
-                    args.project, s5_dir, comfy_input
-                )
-
-            print(f"  seg {seg_idx + 1}/{num_segments}: {seg_frames}f ({seg_frames/FPS:.1f}s)")
-
-            seg_mp4 = render_segment(
-                sess, current_start, current_end,
-                motion, seg_frames, args.seed + sn * 100 + seg_idx,
-                sn, seg_idx
-            )
-            size_mb = seg_mp4.stat().st_size / (1024 * 1024)
-            print(f"    ✅ {size_mb:.1f}MB")
-            segments.append(seg_mp4)
-
-            remaining -= seg_frames
-            current_start = current_end  # Next segment starts from this mid/end
-
-        # Concatenate all segments
-        dest = videos_dir / f"s{sn:02d}.mp4"
-        concat_segments(segments, dest)
-        print(f"  → concat ✅ {dest.stat().st_size/(1024*1024):.1f}MB")
-        
-        # Register concatenated asset (am.register writes the file with dest_name)
-        # Note: dest already exists (written by concat_segments), so am.register
-        # will copy it to the versioned name; we use dest_name to also write the canonical name.
-        am = get_asset_manager()
-        am.register(
-            project=args.project,
-            asset_type="keyframe_video",
-            shot_id=f"shot_{sn:03d}",
-            source_path=dest,
-            relative_dir="s6_videos",
-            dest_name=f"s{sn:02d}.mp4",
-            metadata={
-                "frames": total_frames,
-                "duration_s": duration,
-                "segments": num_segments,
-                "accelerations": "Lightx2v+TeaCache+SageAttention",
-            }
-        )
-
-    done = len(list(videos_dir.glob("*.mp4")))
     sm.mark_completed(args.project, "s6_video_generate", generated=f"{done}/{len(shots)}")
     print(f"\nS6: {done}/{len(shots)} videos")
 

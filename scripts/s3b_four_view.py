@@ -35,16 +35,17 @@ NEGATIVE_PROMPT = (
 FOUR_VIEW_PROMPT = """请将输入的角色图片转换为一张包含四个视角的设定图，布局为 2x2 网格：
 
 【左上】正面视图 (front view)：角色正面站立，正面朝向观众
-【右上】3/4 侧视图 (3-4 angle view)：角色身体微微转向左侧，从右前方约45度角观看
-【左下】侧面视图 (side view)：角色纯侧面站立，身体完全朝向左侧
+【右上】左3/4侧视图 (left 3/4 view)：角色身体微微转向左侧（约45度），从右前方观看，能看到右半边脸和身体右侧轮廓
+【左下】右3/4侧视图 (right 3/4 view)：角色身体微微转向右侧（约45度），从左前方观看，能看到左半边脸和身体左侧轮廓
 【右下】背面视图 (back view)：角色背面站立，背对观众
 
 整体要求：
 - 四个视角的角色必须完全一致（同一人，相同服装，相同发型，相同身高体型）
 - 保持输入图片中的角色特征：服装款式、颜色、发型、面部特征、配饰
+- 左3/4和右3/4必须是对称互补的两个方向，不是同一方向的重复
 - 白色或浅灰色统一背景，专业角色设定图风格
 - 四个视角之间有明显间距，排列整齐
-- 角色站立姿势自然，正面/背面为正面站立，侧面为纯侧面站立
+- 角色站立姿势自然，正面/背面为正面站立，3/4视角为自然微转
 - 高质量，清晰细节，适合作为动画制作参考"""
 
 STYLE_PROMPTS = {
@@ -52,118 +53,138 @@ STYLE_PROMPTS = {
     "realist": "写实真人电影风格，专业角色设定图，照片级细节，真实光照",
 }
 
+STYLE_ANCHORS = {
+    "comic": (
+        "日系动漫风格设定图。线条清晰锐利，色彩饱和鲜明，阴影使用赛璐珞分层。"
+        "角色比例遵循动漫标准（大眼、小鼻、简化面部结构）。"
+        "背景纯色或浅灰渐变，无环境光影干扰。"
+        "整体呈现专业动画角色设定集的视觉标准。"
+    ),
+    "realist": (
+        "写实真人电影级设定图。照片级皮肤质感（毛孔、细纹、皮下血管可见），"
+        "物理准确的光照（主光+辅光+轮廓光三点布光），自然材质反射。"
+        "角色比例遵循真实人体解剖学。"
+        "背景纯白或浅灰无缝渐变，如专业摄影棚证件照环境。"
+        "整体呈现电影级选角照片的视觉标准。"
+    ),
+}
+
+
+def build_four_view_prompt(char_name: str, characters: list, style: str = "realist") -> str:
+    """构建四视图 prompt，注入 visualAnchors + 画风锚定 + 一致性硬约束。
+    
+    Args:
+        char_name: 角色名
+        characters: S2 characters 列表
+        style: "comic" or "realist"
+    """
+    # Find character
+    char = None
+    for c in characters:
+        if c["name"] == char_name:
+            char = c
+            break
+    
+    prompt = FOUR_VIEW_PROMPT
+    
+    # Inject visualAnchors
+    if char:
+        anchors = char.get("visualAnchors", {})
+        palette = char.get("colorPalette", "")
+        
+        anchor_lines = []
+        if anchors.get("face"):
+            anchor_lines.append(f"- 面部: {anchors['face']}")
+        if anchors.get("hair"):
+            anchor_lines.append(f"- 发型: {anchors['hair']}")
+        if anchors.get("body"):
+            anchor_lines.append(f"- 体型: {anchors['body']}")
+        if anchors.get("clothing"):
+            anchor_lines.append(f"- 服装: {anchors['clothing']}")
+        if anchors.get("signature"):
+            anchor_lines.append(f"- 标志: {anchors['signature']}")
+        
+        if anchor_lines:
+            prompt += "\n\n=== 角色视觉锚点（不可偏离）==="
+            for line in anchor_lines:
+                prompt += f"\n{line}"
+        
+        if palette:
+            prompt += f"\n- 色板: {palette}"
+    
+    # Inject style anchor
+    style_anchor = STYLE_ANCHORS.get(style, STYLE_ANCHORS["realist"])
+    prompt += f"\n\n=== 画风锚定 ===\n{style_anchor}"
+    
+    # Inject consistency hard constraint
+    prompt += (
+        "\n\n=== 一致性硬约束 ==="
+        "\n四个视角必须严格是同一角色：相同面孔、相同发型发色、相同服装款式颜色材质、相同体型身高。"
+        "\n任何视角间的外观差异（换装/换发型/换配饰/换体型）都是严重错误。"
+        "\n四个视角的服装褶皱和光影可以因视角不同而自然变化，但服装本身的款式/颜色/材质必须完全一致。"
+        "\n左3/4和右3/4必须是对称互补的两个方向：一个朝左转（看到右脸），一个朝右转（看到左脸）。"
+        "\n禁止两个3/4视角朝同一方向或角度过于接近，这会导致信息冗余。"
+    )
+    
+    return prompt
+
 
 def build_qwen_edit_workflow(
     reference_image_path: str,
     prompt: str,
     width: int = 1024,
-    height: int = 1024,
+    height: int = 1536,
     seed: int = None,
-    steps: int = 20,
-    cfg: float = 7.0,
-    checkpoint: str = "qwen_image_edit_2511_fp8mixed.safetensors",
+    steps: int = 4,
+    cfg: float = 1.0,
+    unet_name: str = "qwen_image_edit_2511_fp8mixed.safetensors",
+    clip_name: str = "qwen_2.5_vl_7b_fp8_scaled.safetensors",
     vae_name: str = "qwen_image_vae.safetensors",
-    lora_name: str = None,
-    lora_strength: float = 0.8,
+    lora_name: str = "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    lora_strength: float = 1.0,
+    shift: float = 3.1,
+    lora_only: bool = True,
 ) -> dict:
     """
-    Build Qwen Image Edit workflow for four-view generation.
+    Build Qwen Image Edit workflow using separate loaders (no CheckpointLoaderSimple).
     
-    Uses TextEncodeQwenImageEditPlus node which accepts up to 3 reference images.
-    For four-view: we use image1 as the single reference character image.
+    Aligned with template qwen_edit_four_view.json v2.1:
+    - UNETLoader + CLIPLoader + VAELoader (separate components)
+    - Lightning LoRA 4-step, euler/simple, cfg=1.0
+    - ModelSamplingAuraFlow (shift=3.1)
+    - CFGNorm (strength=1)
+    - ImageScale before VAEEncode for resolution alignment
+    - TextEncodeQwenImageEditPlus for both positive and negative
     """
     import random
     if seed is None:
         seed = random.randint(0, 2**32 - 1)
     
-    # Workflow uses TextEncodeQwenImageEditPlus for reference-based editing
-    # Node IDs:
-    # 4: CheckpointLoaderSimple (Qwen Image Edit)
-    # 5: EmptyLatentImage
-    # 6: TextEncodeQwenImageEditPlus (prompt + reference image)
-    # 7: CLIPTextEncode (negative)
-    # 8: VAEDecode
-    # 9: LoadImage (reference)
-    # 10: SaveImage
+    ref_filename = os.path.basename(reference_image_path)
     
     workflow = {
-        "4": {
-            "class_type": "CheckpointLoaderSimple",
-            "inputs": {"ckpt_name": checkpoint}
-        },
-        "5": {
-            "class_type": "EmptyLatentImage",
-            "inputs": {"width": width, "height": height, "batch_size": 1}
-        },
-        "6": {
-            "class_type": "TextEncodeQwenImageEditPlus",
-            "inputs": {
-                "clip": ["4", 1],
-                "prompt": prompt,
-                "vae": ["4", 2],
-                "image1": ["9", 0],
-            }
-        },
-        "7": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {
-                "text": NEGATIVE_PROMPT,
-                "clip": ["4", 1]
-            }
-        },
-        "8": {
-            "class_type": "VAEDecode",
-            "inputs": {
-                "samples": ["3", 0],
-                "vae": ["4", 2]
-            }
-        },
-        "9": {
-            "class_type": "LoadImage",
-            "inputs": {
-                "image": os.path.basename(reference_image_path)
-            }
-        },
-        "10": {
-            "class_type": "SaveImage",
-            "inputs": {
-                "filename_prefix": "aicf_fourview",
-                "images": ["8", 0]
-            }
-        },
-        # KSampler needs to come after conditioning
-        "3": {
-            "class_type": "KSampler",
-            "inputs": {
-                "seed": seed,
-                "steps": steps,
-                "cfg": cfg,
-                "sampler_name": "euler_ancestral",
-                "scheduler": "normal",
-                "denoise": 1.0,
-                "model": ["4", 0],
-                "positive": ["6", 0],
-                "negative": ["7", 0],
-                "latent_image": ["5", 0],
-            }
-        },
+        # ── Model loaders ──
+        "12": {"class_type": "UNETLoader", "inputs": {"unet_name": unet_name, "weight_dtype": "default"}},
+        "61": {"class_type": "CLIPLoader", "inputs": {"clip_name": clip_name, "type": "qwen_image"}},
+        "10": {"class_type": "VAELoader", "inputs": {"vae_name": vae_name}},
+        # ── LoRA ──
+        "74": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["12", 0], "lora_name": lora_name, "strength_model": lora_strength}},
+        # ── Model patches ──
+        "67": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["74", 0], "shift": shift}},
+        "64": {"class_type": "CFGNorm", "inputs": {"model": ["67", 0], "strength": 1}},
+        # ── Reference image ──
+        "41": {"class_type": "LoadImage", "inputs": {"image": ref_filename}},
+        "80": {"class_type": "ImageScale", "inputs": {"image": ["41", 0], "width": width, "height": height, "upscale_method": "lanczos", "crop": "disabled"}},
+        "75": {"class_type": "VAEEncode", "inputs": {"pixels": ["80", 0], "vae": ["10", 0]}},
+        # ── Conditioning ──
+        "68": {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {"clip": ["61", 0], "prompt": prompt, "vae": ["10", 0], "image1": ["41", 0]}},
+        "69": {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {"clip": ["61", 0], "prompt": NEGATIVE_PROMPT, "vae": ["10", 0], "image1": ["41", 0]}},
+        # ── Sampling ──
+        "65": {"class_type": "KSampler", "inputs": {"seed": seed, "steps": steps, "cfg": cfg, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0, "model": ["64", 0], "positive": ["68", 0], "negative": ["69", 0], "latent_image": ["75", 0]}},
+        # ── Decode + Save ──
+        "8": {"class_type": "VAEDecode", "inputs": {"samples": ["65", 0], "vae": ["10", 0]}},
+        "60": {"class_type": "SaveImage", "inputs": {"filename_prefix": "aicf_fourview", "images": ["8", 0]}},
     }
-    
-    # Add LoRA if specified
-    if lora_name:
-        # Insert LoRA loader between checkpoint and KSampler
-        workflow["4_lora"] = {
-            "class_type": "LoraLoader",
-            "inputs": {
-                "model": ["4", 0],
-                "lora_name": lora_name,
-                "strength_model": lora_strength,
-                "strength_clip": lora_strength,
-            }
-        }
-        # Update model reference to use LoRA output
-        workflow["3"]["inputs"]["model"] = ["4_lora", 0]
-        workflow["6"]["inputs"]["clip"] = ["4_lora", 1]
     
     return workflow
 
@@ -180,14 +201,16 @@ def main():
     parser.add_argument("--checkpoint", default="qwen_image_edit_2511_fp8mixed.safetensors",
                        help="Qwen Image Edit checkpoint")
     parser.add_argument("--vae", default="qwen_image_vae.safetensors", help="VAE name")
-    parser.add_argument("--lora", default=None, help="Optional LoRA (e.g. Lightning 8-step)")
+    parser.add_argument("--lora", default="Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+                       help="LoRA for Lightning sampling (required for Qwen Image Edit)")
     parser.add_argument("--lora-strength", type=float, default=0.8, help="LoRA strength")
-    parser.add_argument("--steps", type=int, default=20, help="Sampling steps")
-    parser.add_argument("--cfg", type=float, default=7.0, help="CFG scale")
+    parser.add_argument("--steps", type=int, default=4, help="Sampling steps (4 with Lightning LoRA)")
+    parser.add_argument("--cfg", type=float, default=1.0, help="CFG scale")
     parser.add_argument("--width", type=int, default=1024, help="Output width")
-    parser.add_argument("--height", type=int, default=1024, help="Output height")
+    parser.add_argument("--height", type=int, default=1536, help="Output height")
     parser.add_argument("--seed", type=int, help="Random seed (default: random)")
     parser.add_argument("--dry-run", action="store_true", help="Print workflow without running")
+    parser.add_argument("--no-check", action="store_true", help="Skip VL quality check")
     args = parser.parse_args()
     
     project_dir = Path(__file__).parent.parent / "projects" / args.project
@@ -222,28 +245,55 @@ def main():
     sm = get_state_manager()
     sm.mark_running(args.project, "s3b_four_view", remaining=len(char_images))
     
-    # Output dir
+    # Output dirs — new: s3_character_refs/{name}/, compat: s3b_four_views/
     fv_dir = project_dir / "s3b_four_views"
     fv_dir.mkdir(parents=True, exist_ok=True)
+    ref_dir = project_dir / "s3_character_refs"
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Load S2 characters for visualAnchors injection
+    s2_path = project_dir / "s2_characters.json"
+    characters = []
+    if s2_path.exists():
+        import json as _json
+        s2_data = _json.loads(s2_path.read_text())
+        characters = s2_data.get("characters", [])
     
     session = ComfyUISession()
-    style_suffix = STYLE_PROMPTS.get(args.style, "")
-    full_prompt = f"{FOUR_VIEW_PROMPT}\n\n风格要求：{style_suffix}"
+    
+    # Copy reference images to ComfyUI input directory
+    # Use character-name prefix to avoid basename collision (new per-char dirs all use 'default.png')
+    comfyui_input = Path.home() / "ComfyUI" / "input"
+    char_input_map = {}  # name → input_filename
+    for name, img_path in char_images.items():
+        src = Path(img_path)
+        # Prefix with sanitized character name to avoid collision
+        safe_name = name.replace(" ", "_")
+        input_filename = f"s3b_{safe_name}_{src.name}"
+        dest = comfyui_input / input_filename
+        if str(src) != str(dest):
+            shutil.copy2(str(src), str(dest))
+        char_input_map[name] = input_filename
     
     results = {}
     for i, (name, img_path) in enumerate(char_images.items()):
+        # Build per-character prompt with visualAnchors
+        full_prompt = build_four_view_prompt(name, characters, args.style)
+        
         print(f"\n{'='*60}")
         print(f"Character {i+1}/{len(char_images)}: {name}")
         print(f"Reference: {img_path}")
+        print(f"ComfyUI input: {char_input_map[name]}")
+        print(f"Prompt: {len(full_prompt)} chars")
         
         if args.dry_run:
             wf = build_qwen_edit_workflow(
-                reference_image_path=img_path,
+                reference_image_path=char_input_map[name],
                 prompt=full_prompt,
                 seed=args.seed,
                 steps=args.steps,
                 cfg=args.cfg,
-                checkpoint=args.checkpoint,
+                unet_name=args.checkpoint,
                 vae_name=args.vae,
                 lora_name=args.lora,
                 lora_strength=args.lora_strength,
@@ -256,12 +306,12 @@ def main():
         
         try:
             wf = build_qwen_edit_workflow(
-                reference_image_path=img_path,
+                reference_image_path=char_input_map[name],  # Use prefixed filename in ComfyUI input
                 prompt=full_prompt,
                 seed=args.seed,
                 steps=args.steps,
                 cfg=args.cfg,
-                checkpoint=args.checkpoint,
+                unet_name=args.checkpoint,
                 vae_name=args.vae,
                 lora_name=args.lora,
                 lora_strength=args.lora_strength,
@@ -270,7 +320,7 @@ def main():
             )
             
             prefix = f"aicf_{args.project}_{name}_fourview"
-            wf["10"]["inputs"]["filename_prefix"] = prefix
+            wf["60"]["inputs"]["filename_prefix"] = prefix
             
             print(f"Running Qwen Image Edit... (steps={args.steps}, cfg={args.cfg})")
             result = session.run(wf, timeout=600)
@@ -280,8 +330,14 @@ def main():
             files = sorted(output_dir.glob(f"{prefix}_*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
             
             if files:
-                dest = fv_dir / f"{name}_fourview.png"
+                # New per-character dir
+                char_dir = ref_dir / name
+                char_dir.mkdir(parents=True, exist_ok=True)
+                dest = char_dir / "default_fourview.png"
                 shutil.copy2(str(files[0]), str(dest))
+                # Backward compat copy to s3b_four_views/
+                compat_dest = fv_dir / f"{name}_fourview.png"
+                shutil.copy2(str(files[0]), str(compat_dest))
                 print(f"✅ {name}: {dest} ({dest.stat().st_size} bytes)")
                 results[name] = str(dest)
                 

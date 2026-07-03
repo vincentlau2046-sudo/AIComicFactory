@@ -7,8 +7,10 @@ __pycache__/
 *.egg-info/
 
 # Generated assets (large files)
-projects/*/s3_character_refs/*.png
-projects/*/s5_frames/*.png
+projects/*/s3_character_refs/
+projects/*/s3b_four_views/
+projects/*/s4b_keyframe_assets.json
+projects/*/s5_frames/
 projects/*/s6_videos/
 projects/*/s7_assembled/
 projects/*/s7_assembled.mp4
@@ -22,6 +24,13 @@ projects/*/state.json
 projects/*/*.mp4
 projects/*/title-*.mp4
 projects/*/credits-*.mp4
+projects/*/e2e_report.md
+projects/*/s1_parsed.json
+projects/*/s2_characters.json
+projects/*/s4_shots.json
+projects/*/s4b_keyframe_assets.json
+projects/*/AUDIT_REPORT.md
+projects/*/s3_character_refs/manifest.json
 
 # Temp experiments
 projects/*/tmp/
@@ -34,3 +43,4 @@ tmp/
 # OS
 .DS_Store
 Thumbs.db
+achieve (last_bento)/

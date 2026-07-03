@@ -1,5 +1,9 @@
 {
-  "_comment": "qwen-image-edit ReferenceLatent 四视角工作流 (官方 QIE-ReferenceLatents)",
+  "_comment": "qwen-image-edit 四视角工作流 (S3b) — v2.1 with ImageScale for resolution alignment",
+  "_changelog": {
+    "v2.0": "Aligned with official Vantage-Qwen-Image-Edit-2511 workflow: removed ReferenceLatent/FluxKontextMultiReferenceLatentMethod, VAEEncode direct to KSampler, euler/simple sampler, negative shares image1 and vae",
+    "v2.1": "Added ImageScale before VAEEncode to enforce output resolution; S3b uses 1024×1536 portrait for character detail"
+  },
   "_requirements": [
     "ComfyUI must NOT run with --use-sage-attention (causes black output)",
     "Lightning LoRA: Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
@@ -56,10 +60,20 @@
       "image": "placeholder.png"
     }
   },
+  "80": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": ["41", 0],
+      "width": 1024,
+      "height": 1536,
+      "upscale_method": "lanczos",
+      "crop": "disabled"
+    }
+  },
   "75": {
     "class_type": "VAEEncode",
     "inputs": {
-      "pixels": ["41", 0],
+      "pixels": ["80", 0],
       "vae": ["10", 0]
     }
   },
@@ -77,35 +91,8 @@
     "inputs": {
       "clip": ["61", 0],
       "prompt": "",
-      "vae": ["10", 0]
-    }
-  },
-  "89": {
-    "class_type": "ReferenceLatent",
-    "inputs": {
-      "conditioning": ["68", 0],
-      "latent": ["75", 0]
-    }
-  },
-  "90": {
-    "class_type": "ReferenceLatent",
-    "inputs": {
-      "conditioning": ["69", 0],
-      "latent": ["75", 0]
-    }
-  },
-  "70": {
-    "class_type": "FluxKontextMultiReferenceLatentMethod",
-    "inputs": {
-      "conditioning": ["89", 0],
-      "reference_latents_method": "index_timestep_zero"
-    }
-  },
-  "71": {
-    "class_type": "FluxKontextMultiReferenceLatentMethod",
-    "inputs": {
-      "conditioning": ["90", 0],
-      "reference_latents_method": "index_timestep_zero"
+      "vae": ["10", 0],
+      "image1": ["41", 0]
     }
   },
   "65": {
@@ -114,12 +101,12 @@
       "seed": 0,
       "steps": 4,
       "cfg": 1.0,
-      "sampler_name": "er_sde",
-      "scheduler": "beta",
+      "sampler_name": "euler",
+      "scheduler": "simple",
       "denoise": 1.0,
       "model": ["64", 0],
-      "positive": ["70", 0],
-      "negative": ["71", 0],
+      "positive": ["68", 0],
+      "negative": ["69", 0],
       "latent_image": ["75", 0]
     }
   },

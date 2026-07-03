@@ -41,6 +41,12 @@ SLOTS = {
         "defaultContent": "",
     },
 
+    "costume_consistency": {
+        "key": "costume_consistency",
+        "editable": True,
+        "defaultContent": "",
+    },
+
     "reference_rules": {
         "key": "reference_rules",
         "editable": True,
@@ -90,6 +96,7 @@ def build_full_prompt(
     end_frame_desc: str = "",
     character_descriptions: str = "",
     first_frame_path: str = "",
+    costume_consistency: str = "",
 ) -> str:
     """
     Build full last-frame prompt (AICB buildLastFramePrompt).
@@ -116,6 +123,11 @@ def build_full_prompt(
     lines.append("=== 角色描述 ===")
     lines.append(character_descriptions)
     lines.append("")
+
+    if costume_consistency:
+        lines.append(costume_consistency)
+        lines.append("")
+
     lines.append(resolve("first_frame_anchor"))
     lines.append("")
     lines.append(resolve("first_frame_relationship"))
