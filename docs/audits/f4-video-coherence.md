@@ -12,7 +12,7 @@
 | 🟡 中 | s6_flf2v_render.py / s7_video_assemble.py | 两套 FPS 不一致：S6 用 FPS=25，旧 S6 用 FPS=24。S7 默认 FPS=25。若混用旧 S6 产出的 clip，帧率不匹配会导致播放速度异常 | 不同帧率的 clip 拼接后会出现加速/减速，节奏感被破坏 | 统一全局 FPS 常量到 `core/config.py`，所有脚本引用同一值 |
 | 🟡 中 | video_quality_check.py | 质检仅检查 S5 静态帧（`s5_frames/`），不检查 S6 视频输出。没有运动质量评估（如帧间一致性、运动伪影检测） | 帧插值产生的伪影（morphing 变形、角色闪烁、背景扭曲）无法被拦截，直接流入最终 comic | 新增 S6 视频质检：采样关键帧序列，检测帧间一致性、morphing 伪影、首尾帧对齐度 |
 | 🟡 中 | video_quality_check.py | 图像缩放至 384×216 再送 vLLM，分辨率损失严重，无法检测细节问题（手指、文字、小道具） | 低分辨率质检可能放过细节错误（多余手指、文字乱码），在高清播放时暴露 | 对质检图像使用至少 640×360 或原图 50% 以上的分辨率 |
-| 🟢 低 | s6_video_assemble.py (旧版) | 旧版 S6 用 Ken Burns 缩放，与 FLF2V 管线完全不同。若误调用会产出静态帧+缓动的低质量视频 | 误用旧版会产出缺乏角色运动的"假视频"，动态质量大幅下降 | 在文件头部标注 deprecated，或直接移除 |
+| 🟢 低 | ~~s6_video_assemble.py (旧版)~~ *(已删除)* | 旧版 S6 用 Ken Burns 缩放，与 FLF2V 管线完全不同。若误调用会产出静态帧+缓动的低质量视频 | 误用旧版会产出缺乏角色运动的"假视频"，动态质量大幅下降 | 在文件头部标注 deprecated，或直接移除 |
 | 🟢 低 | s7_video_assemble.py | `concat_with_transitions` 在 xfade 失败时静默降级到 fast concat（stream copy），不报错不重试 | 观众看到硬切而非预期转场，节奏感打折扣但不算严重 | 降级时打印警告（已有 ⚠️），同时记录到 state_manager 供后续审查 |
 | 🟢 低 | video_generate.py | Prompt 中 `safe_zone_reminder` 对横屏/竖屏分别设 20%/15%，但 S6 render 不感知 aspect_ratio（硬编码 1280×720） | 竖屏项目时安全区提示与实际分辨率矛盾，但当前无竖屏管线所以影响有限 | 将 aspect_ratio 传入 S6 render 的 build_flf2v_workflow |
 | 🟢 低 | flf2v_keyframe.json | 模板中默认分辨率 1024×576，与 S6 代码默认 1280×720 不一致。`inject_params` 会覆盖，但模板本身是过时配置 | 新开发者直接用模板测试时会得到低分辨率输出 | 更新模板默认值为 1280×720 |

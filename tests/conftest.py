@@ -31,15 +31,149 @@ def tmp_project(tmp_path):
     return pd
 
 
+@pytest.fixture(scope="session")
+def test_pipeline_yaml(tmp_path_factory):
+    """Create a minimal pipeline.yaml for testing (12 stages)."""
+    base = tmp_path_factory.mktemp("aicf_test_base")
+    yaml_path = base / "pipeline.yaml"
+    yaml_path.write_text("""stages:
+  s1_script_parse:
+    id: s1_parse
+    order: 1
+    requires: [source.txt]
+    produces: [s1_parsed.json]
+    depends_on: []
+    gpu: none
+    runner: llm
+    description: "剧本解析"
+
+  s2_character_extract:
+    id: s2_character_extract
+    order: 2
+    requires: [s1_parsed.json]
+    produces: [s2_characters.json]
+    depends_on: [s1_parse]
+    gpu: none
+    runner: llm
+    description: "角色提取"
+
+  s2b_wardrobe_extract:
+    id: s2b_wardrobe_extract
+    order: 3
+    requires: [s2_characters.json]
+    produces: [s2_characters.json]
+    depends_on: [s2_character_extract]
+    gpu: none
+    runner: script
+    description: "服饰提取"
+
+  s4_shot_split:
+    id: s4_shot_split
+    order: 4
+    requires: [s1_parsed.json, s2_characters.json]
+    produces: [s4_shots.json]
+    depends_on: [s1_parse, s2_character_extract]
+    gpu: none
+    runner: llm
+    description: "分镜拆解"
+
+  s4b_keyframe_assets:
+    id: s4b_keyframe_assets
+    order: 5
+    requires: [s4_shots.json, s2_characters.json]
+    produces: [s4b_keyframe_assets.json]
+    depends_on: [s4_shot_split, s2_character_extract]
+    gpu: none
+    runner: script
+    description: "关键帧资产"
+
+  s3_character_image:
+    id: s3_character_image
+    order: 6
+    requires: [s2_characters.json]
+    produces: [s3_character_refs/manifest.json]
+    depends_on: [s2_character_extract]
+    gpu: comfyui
+    runner: script
+    description: "角色参考图"
+
+  s3b_four_view:
+    id: s3b_four_view
+    order: 7
+    requires: [s3_character_refs/manifest.json]
+    produces: [s3b_four_views/manifest.json]
+    depends_on: [s3_character_image]
+    gpu: comfyui
+    runner: script
+    description: "四视图扩展"
+
+  s5_frame_generate:
+    id: s5_frame_generate
+    order: 8
+    requires: [s4b_keyframe_assets.json, s3_character_refs/, s3b_four_views/]
+    produces: [s5_frames/*.png]
+    depends_on: [s3_character_image, s3b_four_view, s4_shot_split, s4b_keyframe_assets]
+    gpu: comfyui
+    runner: script
+    description: "关键帧生成"
+
+  s6_flf2v_render:
+    id: s6_video_generate
+    order: 9
+    requires: [s5_frames/, s4b_keyframe_assets.json]
+    produces: [s6_videos/*.mp4]
+    depends_on: [s5_frame_generate]
+    gpu: comfyui
+    runner: script
+    description: "视频渲染"
+
+  s7_video_assemble:
+    id: s7_assemble
+    order: 10
+    requires: [s6_videos/]
+    produces: [s7_assembled.mp4]
+    depends_on: [s6_video_generate]
+    gpu: none
+    runner: script
+    description: "视频合成"
+
+  s8_subtitles:
+    id: s8_subtitles
+    order: 11
+    requires: [s7_assembled.mp4, s4_shots.json]
+    produces: [s8_subtitles.ass]
+    depends_on: [s7_assemble, s4_shot_split]
+    gpu: none
+    runner: script
+    description: "字幕生成"
+
+  s9_tts_audio:
+    id: s9_tts_audio
+    order: 12
+    requires: [s7_assembled.mp4, s4_shots.json]
+    produces: [s9_final.mp4]
+    depends_on: [s7_assemble, s4_shot_split]
+    gpu: comfyui
+    runner: script
+    description: "TTS语音"
+""")
+    return str(base)
+
+
 @pytest.fixture
-def projects_root(tmp_path):
-    """Create a projects root with test_project inside."""
+def projects_root(tmp_path, test_pipeline_yaml):
+    """Create a projects root with test_project inside + symlinked pipeline.yaml."""
+    # Use the session-scoped pipeline.yaml
+    pipeline_src = Path(test_pipeline_yaml) / "pipeline.yaml"
     root = tmp_path / "projects"
     root.mkdir()
     pd = root / "test_project"
     pd.mkdir()
     (pd / "s5_frames").mkdir()
     (pd / "s6_clips").mkdir()
+    # Symlink or copy pipeline.yaml for StateManager to find
+    import shutil
+    shutil.copy2(str(pipeline_src), str(tmp_path / "pipeline.yaml"))
     return root
 
 
@@ -47,7 +181,10 @@ def projects_root(tmp_path):
 def state_manager(projects_root):
     """StateManager bound to tmp projects_root."""
     from core.state_manager import StateManager
-    return StateManager(projects_root=str(projects_root))
+    # Explicitly point to the test pipeline.yaml
+    pipeline_path = Path(projects_root).parent / "pipeline.yaml"
+    return StateManager(projects_root=str(projects_root),
+                        pipeline_path=str(pipeline_path))
 
 
 @pytest.fixture

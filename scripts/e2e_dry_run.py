@@ -36,6 +36,12 @@ except ImportError:
 
 from core.llm_client import get_llm_client
 from core.prompt_runner import run_script_parse, run_character_extract, run_shot_split
+from core.parallel_executor import (
+    run_parallel_stages,
+    find_parallel_groups,
+    find_potential_parallel_groups,
+    is_parallelizable_stage,
+)
 
 # ═══════════════════════════════════════════════════════════════════
 # Logging
@@ -614,14 +620,93 @@ def _flush_vl_checks(project: Path, vl_pending: list, skip_vl: bool = False):
 # Pipeline Executor
 # ═══════════════════════════════════════════════════════════════════
 
+def _run_single_stage(
+    project: Path,
+    stage_id: str,
+    stage_def: dict,
+    skip_vl: bool = False,
+    vl_pending: list = None,
+    comfyui_started: list = None,
+) -> tuple[bool, dict]:
+    """Run a single stage (used by both serial and parallel paths).
+
+    Args:
+        project: Project directory Path.
+        stage_id: Stage ID (pipeline key).
+        stage_def: Stage definition from pipeline.yaml.
+        skip_vl: Skip VL quality checks.
+        vl_pending: List for collecting VL check stages (mutated in-place).
+        comfyui_started: Single-element list [bool] tracking ComfyUI state (mutated).
+
+    Returns:
+        (success, result_dict) where result_dict contains at least "elapsed" and "note".
+    """
+    t0 = time.time()
+    if vl_pending is None:
+        vl_pending = []
+    if comfyui_started is None:
+        comfyui_started = [False]
+
+    # 1. 检查前置条件
+    req_ok, req_msg = check_requires(project, stage_def)
+    if not req_ok:
+        log(f"  ⏭️ 跳过: {req_msg}", "WARN")
+        return False, {"elapsed": 0, "note": req_msg, "skipped": True}
+
+    # 2. 检查是否跳过已有产出
+    if stage_def.get("skip_existing"):
+        prod_ok, prod_msg = check_produces(project, stage_def)
+        if prod_ok:
+            log(f"  ⏭️ 产出已存在，跳过: {prod_msg}", "INFO")
+            return True, {"elapsed": 0, "note": "skipped (exists)", "skipped": True}
+
+    # 3. 确保 GPU 资源
+    gpu = stage_def.get("gpu", "none")
+    if gpu == "comfyui":
+        if not ensure_comfyui():
+            return False, {"elapsed": 0, "note": "ComfyUI unavailable"}
+        comfyui_started[0] = True
+    elif gpu == "qw35_vl":
+        if not ensure_qw35():
+            return False, {"elapsed": 0, "note": "qw35-9b unavailable"}
+
+    # 4. 执行 stage
+    runner = stage_def.get("runner", "script")
+    if runner == "llm":
+        success, detail = run_llm_stage(project, stage_id, stage_def)
+    elif runner == "script":
+        success, detail = run_script_stage(project, stage_id, stage_def)
+    else:
+        success, detail = False, f"Unknown runner: {runner}"
+
+    elapsed = time.time() - t0
+    icon = "✅" if success else "❌"
+    log(f"  {icon} {stage_id} ({elapsed:.1f}s): {detail}", "OK" if success else "ERROR")
+
+    # 5. VL 质检收集
+    if success and stage_def.get("vl_check") and not skip_vl:
+        if stage_id == "s5_frame_generate":
+            _flush_vl_checks(project, vl_pending + [stage_id], skip_vl)
+            vl_pending.clear()
+        else:
+            vl_pending.append(stage_id)
+
+    return success, {"elapsed": elapsed, "note": detail}
+
+
 def execute_pipeline(
     project: Path,
     pipeline: dict,
     from_stage: str = None,
     only_stages: list = None,
     skip_vl: bool = False,
+    parallel: bool = False,
 ):
-    """执行管线，按 pipeline.yaml 定义的顺序逐 stage 运行。"""
+    """执行管线，按 pipeline.yaml 定义的顺序逐 stage 运行。
+
+    当 parallel=True 时，自动检测可并行 stage (如 S8+S9) 并通过
+    ThreadPoolExecutor 并发执行。错误隔离：单 stage 失败不影响其他。
+    """
     
     stages = pipeline.get("stages", {})
     results = {}
@@ -643,74 +728,192 @@ def execute_pipeline(
         sorted_stages = filtered
     
     # Track GPU state
-    comfyui_started = False
+    comfyui_started = [False]  # Mutable list for _run_single_stage
     vl_pending = []  # 收集需要 VL 质检的 stage
+    completed_set = set()  # Track completed stages for parallel detection
     
-    for stage_id, stage_def in sorted_stages:
+    # Build a set of all stage IDs in this run
+    scheduled_stages = set(sid for sid, _ in sorted_stages)
+    
+    # ── Main execution loop ──
+    # Use index-based iteration so we can skip stages absorbed into parallel groups
+    i = 0
+    while i < len(sorted_stages):
+        stage_id, stage_def = sorted_stages[i]
+        
+        # Skip if this stage was already handled by a parallel group
+        if stage_id in results:
+            i += 1
+            continue
+        
         log_header(stage_id, stage_def)
         t0 = time.time()
         
-        # 1. 检查前置条件
-        req_ok, req_msg = check_requires(project, stage_def)
-        if not req_ok:
-            log(f"  ⏭️ 跳过: {req_msg}", "WARN")
-            results[stage_id] = (False, {"elapsed": 0, "note": req_msg, "skipped": True})
-            continue
+        # ── Parallel group detection ──
+        if parallel:
+            # Check if this stage and subsequent pending stages form a parallel group
+            parallel_group = _detect_parallel_group(
+                stage_id, stage_def, sorted_stages, i + 1,
+                scheduled_stages, results, pipeline,
+            )
+            
+            if parallel_group:
+                # Ensure GPU for any comfyui stages in the group
+                for psid, psdef in parallel_group:
+                    if psdef.get("gpu") == "comfyui" and not comfyui_started[0]:
+                        if not ensure_comfyui():
+                            log(f"  ❌ {psid}: ComfyUI unavailable — skipping parallel group", "ERROR")
+                            results[psid] = (False, {"elapsed": 0, "note": "ComfyUI unavailable"})
+                            break
+                        comfyui_started[0] = True
+                else:
+                    # Build parallel tasks
+                    parallel_tasks = []
+                    for psid, psdef in parallel_group:
+                        def make_task(sid, sdef):
+                            def _task(_sid, _sdef):
+                                return _run_single_stage(
+                                    project, _sid, _sdef,
+                                    skip_vl=skip_vl,
+                                    vl_pending=vl_pending,
+                                    comfyui_started=comfyui_started,
+                                )
+                            return _task
+                        parallel_tasks.append((psid, psdef, make_task(psid, psdef)))
+                    
+                    group_label = "∥".join(psid for psid, _ in parallel_group)
+                    log(f"  ⚡ 并行执行 {len(parallel_group)} stages: {group_label}")
+                    
+                    parallel_results = run_parallel_stages(
+                        project=project,
+                        stage_tasks=parallel_tasks,
+                        parallel_label=group_label,
+                        max_workers=len(parallel_group),
+                    )
+                    
+                    for psid, (psuccess, presult) in parallel_results.items():
+                        results[psid] = (psuccess, presult)
+                        if psuccess:
+                            completed_set.add(psid)
+                    
+                    i += 1
+                    continue
+                # Fall through to serial if GPU setup failed
         
-        # 2. 检查是否跳过已有产出
-        if stage_def.get("skip_existing"):
-            prod_ok, prod_msg = check_produces(project, stage_def)
-            if prod_ok:
-                log(f"  ⏭️ 产出已存在，跳过: {prod_msg}", "INFO")
-                results[stage_id] = (True, {"elapsed": 0, "note": "skipped (exists)", "skipped": True})
-                continue
+        # ── Serial execution (default path) ──
+        success, result = _run_single_stage(
+            project, stage_id, stage_def,
+            skip_vl=skip_vl,
+            vl_pending=vl_pending,
+            comfyui_started=comfyui_started,
+        )
+        results[stage_id] = (success, result)
+        if success:
+            completed_set.add(stage_id)
         
-        # 3. 确保 GPU 资源
-        gpu = stage_def.get("gpu", "none")
-        if gpu == "comfyui":
-            if not ensure_comfyui():
-                results[stage_id] = (False, {"elapsed": 0, "note": "ComfyUI unavailable"})
-                continue
-            comfyui_started = True
-        elif gpu == "qw35_vl":
-            if not ensure_qw35():
-                results[stage_id] = (False, {"elapsed": 0, "note": "qw35-9b unavailable"})
-                continue
-        
-        # 4. 执行 stage
-        runner = stage_def.get("runner", "script")
-        if runner == "llm":
-            success, detail = run_llm_stage(project, stage_id, stage_def)
-        elif runner == "script":
-            success, detail = run_script_stage(project, stage_id, stage_def)
-        else:
-            success, detail = False, f"Unknown runner: {runner}"
-        
-        elapsed = time.time() - t0
-        icon = "✅" if success else "❌"
-        log(f"  {icon} {stage_id} ({elapsed:.1f}s): {detail}", "OK" if success else "ERROR")
-        results[stage_id] = (success, {"elapsed": elapsed, "note": detail})
-        
-        # 5. VL 质检收集
-        #    S5 完成后立即触发 S3/S3b/S5 的批量质检（在 S6 开始前）
-        #    其他 vl_check stage 收集到管线结束后统一质检
-        if success and stage_def.get("vl_check") and not skip_vl:
-            if stage_id == "s5_frame_generate":
-                _flush_vl_checks(project, vl_pending + [stage_id], skip_vl)
-                vl_pending = []
-            else:
-                vl_pending.append(stage_id)
+        i += 1
     
     # 6. 剩余 VL 质检（如有）
     if vl_pending:
         _flush_vl_checks(project, vl_pending, skip_vl)
     
     # 7. 清理 GPU
-    if comfyui_started:
+    if comfyui_started[0]:
         log("  最终清理: 释放 GPU...")
         release_comfyui()
     
     return results
+
+
+def _detect_parallel_group(
+    stage_id: str,
+    stage_def: dict,
+    sorted_stages: list,
+    start_index: int,
+    scheduled_stages: set,
+    results: dict,
+    pipeline: dict,
+) -> list:
+    """Detect if a stage can form a parallel group with subsequent stages.
+
+    A parallel group requires:
+      1. Stage is parallelizable (not exclusive GPU)
+      2. There is at least one subsequent stage whose deps are all subsets
+         of the union of {completed stages, this stage's deps}
+      3. Stages in the group do NOT depend on each other
+      4. Stages share at least one common dependency (= true S8+S9 pattern)
+      5. GPU: exactly one uses comfyui, one uses none (no contention)
+
+    Returns:
+        List of (stage_id, stage_def) for the parallel group, or empty list.
+    """
+    if not is_parallelizable_stage(stage_id, stage_def):
+        return []
+
+    # Build ID-to-key mapping from the pipeline definition
+    stages_config = pipeline.get("stages", {})
+    id_to_key = {}
+    for key, sdef in stages_config.items():
+        sid = sdef.get("id", key)
+        id_to_key[sid] = key
+
+    def _resolve_key(name: str) -> str:
+        """Resolve a state ID or pipeline key to pipeline key."""
+        return id_to_key.get(name, name)
+
+    # Resolve deps to pipeline keys
+    current_deps = set(
+        _resolve_key(d) for d in stage_def.get("depends_on", [])
+    )
+
+    # Stages that have already completed (keys in results with success=True)
+    already_completed = set(
+        sid for sid, (ok, _) in results.items() if ok
+    )
+
+    group = [(stage_id, stage_def)]
+
+    for j in range(start_index, len(sorted_stages)):
+        if len(group) >= 2:
+            break
+        next_id, next_def = sorted_stages[j]
+        if next_id in results:
+            continue
+        if next_id not in scheduled_stages:
+            continue
+        if not is_parallelizable_stage(next_id, next_def):
+            continue
+
+        next_deps = set(
+            _resolve_key(d) for d in next_def.get("depends_on", [])
+        )
+
+        # No inter-dependency
+        if stage_id in next_deps or next_id in current_deps:
+            continue
+
+        # All deps for the second stage must already be satisfied:
+        # deps ⊆ (already_completed ∪ current_deps)
+        satisfiable = next_deps.issubset(already_completed | current_deps)
+        if not satisfiable:
+            continue
+
+        # Shared dependency test
+        if not (current_deps & next_deps):
+            continue
+
+        # GPU contention check: exactly one GPU + one CPU
+        gpu_a = stage_def.get("gpu", "none")
+        gpu_b = next_def.get("gpu", "none")
+        if gpu_a == "comfyui" and gpu_b == "comfyui":
+            continue
+        if gpu_a == "none" and gpu_b == "none":
+            continue
+
+        group.append((next_id, next_def))
+        break
+
+    return group if len(group) >= 2 else []
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -785,6 +988,8 @@ def main():
     parser.add_argument("--from", dest="from_stage", help="Start from specific stage")
     parser.add_argument("--only", help="Comma-separated list of stages to run")
     parser.add_argument("--skip-vl", action="store_true", help="Skip all VL quality checks")
+    parser.add_argument("--parallel", action="store_true", help="Enable parallel execution for independent stages (S8∥S9)")
+    parser.add_argument("--dry-run", action="store_true", help="Validate pipeline config and exit without running")
     args = parser.parse_args()
     
     project = AICF_ROOT / "projects" / args.project
@@ -800,9 +1005,28 @@ def main():
     
     pipeline = load_pipeline(pipeline_path)
     n_stages = len(pipeline.get("stages", {}))
+    
+    if args.dry_run:
+        log(f"🔍 DRY RUN — validating pipeline config only (no execution)")
+        log(f"  Pipeline: {n_stages} stages from pipeline.yaml")
+        log(f"  Parallel: {'ON' if args.parallel else 'OFF (serial)'}")
+        # Show parallelizable groups
+        if args.parallel:
+            groups = find_potential_parallel_groups(pipeline)
+            if groups:
+                log(f"  Detected parallel groups:")
+                for g in groups:
+                    ids = ", ".join(sid for sid, _ in g)
+                    log(f"    ⚡ {ids}")
+            else:
+                log(f"  No parallelizable groups detected (all stages will run serially)")
+        log(f"  ✅ DRY RUN complete — pipeline.yaml is valid")
+        sys.exit(0)
+    
     log(f"🚀 AICF E2E Pipeline v2.0 — {datetime.now(TZ).strftime('%Y-%m-%d %H:%M')}")
     log(f"  Project: {project.name}")
     log(f"  Pipeline: {n_stages} stages from pipeline.yaml")
+    log(f"  Parallel: {'ON ⚡' if args.parallel else 'OFF (serial)'}")
     log(f"  VL 质检: {'跳过' if args.skip_vl else '按需启用 (qw35-9b)'}")
     
     only_stages = args.only.split(",") if args.only else None
@@ -813,6 +1037,7 @@ def main():
         from_stage=args.from_stage,
         only_stages=only_stages,
         skip_vl=args.skip_vl,
+        parallel=args.parallel,
     )
     
     generate_report(project, results, pipeline)

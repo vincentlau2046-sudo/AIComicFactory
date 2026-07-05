@@ -11,9 +11,11 @@
 stages:
   # ── 文本链路 (LLM) ──
   s1_script_parse:
+    id: s1_parse
     order: 1
     requires: [source.txt]
     produces: [s1_parsed.json]
+    depends_on: []
     gpu: none
     runner: llm
     model: DEEPSEEK_PRO
@@ -21,9 +23,11 @@ stages:
     description: "剧本解析 → 结构化 JSON"
 
   s2_character_extract:
+    id: s2_character_extract
     order: 2
     requires: [s1_parsed.json]
     produces: [s2_characters.json]
+    depends_on: [s1_parse]
     gpu: none
     runner: llm
     model: DEEPSEEK_PRO
@@ -31,9 +35,11 @@ stages:
     description: "角色提取 → visualAnchors + visualHint"
 
   s2b_wardrobe_extract:
+    id: s2b_wardrobe_extract
     order: 3
     requires: [s2_characters.json]
     produces: [s2_characters.json]  # 就地更新 costumes[]
+    depends_on: [s2_character_extract]
     gpu: none
     runner: script
     script: scripts/wardrobe_extract.py
@@ -41,9 +47,11 @@ stages:
 
   # ── 分镜链路 (LLM) ──
   s4_shot_split:
+    id: s4_shot_split
     order: 4
     requires: [s1_parsed.json, s2_characters.json]
     produces: [s4_shots.json]
+    depends_on: [s1_parse, s2_character_extract]
     gpu: none
     runner: llm
     model: DEEPSEEK_PRO
@@ -52,9 +60,11 @@ stages:
     description: "分镜拆解 → shots[] with cameraDirection, videoScript"
 
   s4b_keyframe_assets:
+    id: s4b_keyframe_assets
     order: 5
     requires: [s4_shots.json, s2_characters.json]
     produces: [s4b_keyframe_assets.json]
+    depends_on: [s4_shot_split, s2_character_extract]
     gpu: none
     runner: script
     script: scripts/s4b_keyframe_assets.py
@@ -62,9 +72,11 @@ stages:
 
   # ── 图像链路 (ComfyUI) ──
   s3_character_image:
+    id: s3_character_image
     order: 6
     requires: [s2_characters.json]
     produces: [s3_character_refs/manifest.json]
+    depends_on: [s2_character_extract]
     gpu: comfyui
     runner: script
     script: scripts/s3_character_image.py
@@ -73,9 +85,11 @@ stages:
     description: "角色参考图 (Flux Dev T2I)"
 
   s3b_four_view:
+    id: s3b_four_view
     order: 7
     requires: [s3_character_refs/manifest.json]
     produces: [s3b_four_views/manifest.json]
+    depends_on: [s3_character_image]
     gpu: comfyui
     runner: script
     script: scripts/s3b_four_view.py
@@ -84,9 +98,11 @@ stages:
     description: "四视图参考图 (Qwen Image Edit)"
 
   s5_frame_generate:
+    id: s5_frame_generate
     order: 8
     requires: [s4b_keyframe_assets.json, s3_character_refs/, s3b_four_views/]
     produces: [s5_frames/*.png]
+    depends_on: [s3_character_image, s3b_four_view, s4_shot_split, s4b_keyframe_assets]
     gpu: comfyui
     runner: script
     script: scripts/s5_frame_generate.py
@@ -97,9 +113,11 @@ stages:
 
   # ── 视频链路 (ComfyUI + FFmpeg) ──
   s6_flf2v_render:
+    id: s6_video_generate
     order: 9
     requires: [s5_frames/, s4b_keyframe_assets.json]
     produces: [s6_videos/*.mp4]
+    depends_on: [s5_frame_generate]
     gpu: comfyui
     runner: script
     script: scripts/s6_flf2v_render.py
@@ -108,27 +126,33 @@ stages:
     description: "FLF2V 视频渲染 (Wan 2.2)"
 
   s7_video_assemble:
+    id: s7_assemble
     order: 10
     requires: [s6_videos/]
     produces: [s7_assembled.mp4]
+    depends_on: [s6_video_generate]
     gpu: none
     runner: script
     script: scripts/s7_video_assemble.py
     description: "视频拼接 (FFmpeg xfade)"
 
   s8_subtitles:
+    id: s8_subtitles
     order: 11
     requires: [s7_assembled.mp4, s4_shots.json]
     produces: [s8_subtitles.ass]
+    depends_on: [s7_assemble, s4_shot_split]
     gpu: none
     runner: script
     script: scripts/s8_subtitles.py
     description: "ASS 字幕生成"
 
   s9_tts_audio:
+    id: s9_tts_audio
     order: 12
     requires: [s7_assembled.mp4, s4_shots.json]
     produces: [s9_final.mp4]
+    depends_on: [s7_assemble, s4_shot_split]
     gpu: comfyui           # Qwen3-TTS via ComfyUI
     runner: script
     script: scripts/s9_tts_audio.py
