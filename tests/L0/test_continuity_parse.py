@@ -5,7 +5,7 @@ class TestParseCleanJson:
     def test_parse_good_response(self, mock_vision_good_response):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
-        result = checker._parse_result(mock_vision_good_response, 1, 2)
+        result = checker._parse(mock_vision_good_response, 1, 2)
         assert result["overall_score"] == 85
         assert result["character_appearance"] == 9
         assert result["severity"] == "none"
@@ -15,7 +15,7 @@ class TestParseCleanJson:
     def test_parse_moderate_response(self, mock_vision_moderate_response):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
-        result = checker._parse_result(mock_vision_moderate_response, 3, 4)
+        result = checker._parse(mock_vision_moderate_response, 3, 4)
         assert result["overall_score"] == 55
         assert len(result["issues"]) == 2
         assert result["severity"] == "moderate"
@@ -26,7 +26,7 @@ class TestParseCodeblock:
     def test_parse_json_in_codeblock(self, mock_vision_codeblock_response):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
-        result = checker._parse_result(mock_vision_codeblock_response, 1, 2)
+        result = checker._parse(mock_vision_codeblock_response, 1, 2)
         assert result["overall_score"] == 90
         assert result["severity"] == "none"
 
@@ -34,7 +34,7 @@ class TestParseCodeblock:
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
         response = '```\n{"overall_score": 75, "character_appearance": 7, "scene_environment": 8, "lighting_color": 7, "composition": 8, "issues": ["轻微色差"], "severity": "minor", "suggestion": "调整色温"}\n```'
-        result = checker._parse_result(response, 5, 6)
+        result = checker._parse(response, 5, 6)
         assert result["overall_score"] == 75
         assert result["severity"] == "minor"
 
@@ -43,29 +43,32 @@ class TestParseMalformed:
     def test_malformed_response(self, mock_vision_malformed_response):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
-        result = checker._parse_result(mock_vision_malformed_response, 1, 2)
-        assert result["overall_score"] == -1
-        assert "raw_response" in result
+        result = checker._parse(mock_vision_malformed_response, 1, 2)
+        # heuristic fallback returns 50 (medium) for unparseable responses
+        assert result["overall_score"] == 50
+        assert result["severity"] == "medium"
 
     def test_empty_response(self):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
-        result = checker._parse_result("", 1, 2)
-        assert result["overall_score"] == -1
+        result = checker._parse("", 1, 2)
+        assert result["overall_score"] == 50
+        assert result["severity"] == "medium"
 
     def test_partial_json(self):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
         response = '{"overall_score": 80, "character_appearance": 8'  # Incomplete JSON
-        result = checker._parse_result(response, 1, 2)
-        assert result["overall_score"] == -1  # Can't parse, should fallback
+        result = checker._parse(response, 1, 2)
+        assert result["overall_score"] == 50
+        assert result["severity"] == "medium"
 
 
 class TestShotMetadata:
     def test_shot_ids_preserved(self):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
-        result = checker._parse_result(
+        result = checker._parse(
             '{"overall_score": 90, "character_appearance": 9, "scene_environment": 9, "lighting_color": 9, "composition": 9, "issues": [], "severity": "none", "suggestion": ""}',
             7, 8
         )
@@ -77,7 +80,7 @@ class TestGenerateSummary:
     def test_summary_format(self, mock_vision_good_response):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
-        result = checker._parse_result(mock_vision_good_response, 1, 2)
+        result = checker._parse(mock_vision_good_response, 1, 2)
         report = {
             "project": "test",
             "pairs_checked": 1,
@@ -94,7 +97,7 @@ class TestGenerateSummary:
     def test_summary_with_issues(self, mock_vision_moderate_response):
         from core.continuity_check import ContinuityChecker
         checker = ContinuityChecker()
-        result = checker._parse_result(mock_vision_moderate_response, 1, 2)
+        result = checker._parse(mock_vision_moderate_response, 1, 2)
         report = {
             "project": "test",
             "pairs_checked": 1,

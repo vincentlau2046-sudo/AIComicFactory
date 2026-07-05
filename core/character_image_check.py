@@ -30,6 +30,8 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from core.demographics import infer_gender
+
 # ═══════════════════════════════════════════════════════════════════
 # Config
 # ═══════════════════════════════════════════════════════════════════
@@ -44,20 +46,10 @@ Description: {description}
 
 Check: sex({gender}) age({age}) hair({hair}) face({face}) clothes({clothing}) format(full body front white bg)
 
-JSON: {{"g":{{"m":true,"s":2,"n":""}},"a":{{"m":true,"s":2,"n":""}},"h":{{"m":true,"s":2,"n":""}},"f":{{"m":true,"s":2,"n":""}},"c":{{"m":true,"s":2,"n":""}},"t":{{"m":true,"s":2,"n":""}},"o":10,"sum":"","iss":[],"re":false}}"""
+Score each dimension 0-3 (0=poor, 1=partial, 2=good, 3=perfect).
+Overall = sum of all dimension scores * 10 / 18, capped at 10.
 
-
-def _detect_gender_from_text(text: str) -> str:
-    """从角色描述推断性别."""
-    if text is None:
-        return "unknown"
-    t = text.lower()
-    if "她" in t or "小姐" in t or "女士" in t or "女" in t[:200]:
-        if not ("男" in t.split("女")[0] if "女" in t and "男" in t else False):
-            return "female"
-    if "他" in t or "先生" in t or "男" in t[:200] or "小伙" in t or "老爹" in t:
-        return "male"
-    return "unknown"
+JSON: {{"g":{{"m":true,"s":3,"n":""}},"a":{{"m":true,"s":3,"n":""}},"h":{{"m":true,"s":3,"n":""}},"f":{{"m":true,"s":3,"n":""}},"c":{{"m":true,"s":3,"n":""}},"t":{{"m":true,"s":3,"n":""}},"o":10,"sum":"","iss":[],"re":false}}"""
 
 
 def _detect_age_from_text(text: str, visual_hint: str = "") -> str:
@@ -183,7 +175,7 @@ class CharacterImageChecker:
         hint = character.get("visualHint", "")
         anchors = character.get("visualAnchors", {})
 
-        gender = _detect_gender_from_text(desc)
+        gender = infer_gender(desc)
         age = _detect_age_from_text(desc, hint)
         hair = anchors.get("hair", desc[:80])
         face = anchors.get("face", desc[:80])
@@ -228,11 +220,14 @@ class CharacterImageChecker:
         t = result.get("t", {})
 
         # Calculate overall from dimension scores (don't trust model's o)
-        dim_scores = [g["s"], a["s"], h["s"], f["s"], c["s"], t["s"]]
-        overall = sum(dim_scores)  # max 18, normalize to 10
-        overall_norm = round(overall * 10 / 18, 1)
-        if isinstance(overall, (int, float)):
-            overall = int(overall)
+        # Each dimension score range: 0-3. 6 dims → max 18 → linear map to 0-10.
+        DIM_SCORE_MAX = 3  # per-dimension max (0-3)
+        NUM_DIMENSIONS = 6
+        TOTAL_MAX = NUM_DIMENSIONS * DIM_SCORE_MAX  # 18
+
+        dim_scores = [g.get("s", 0), a.get("s", 0), h.get("s", 0), f.get("s", 0), c.get("s", 0), t.get("s", 0)]
+        overall = sum(dim_scores)
+        overall_norm = round(min(overall * 10 / TOTAL_MAX, 10.0), 1)
 
         issues = result.get("issues", [])
         if not isinstance(issues, list):

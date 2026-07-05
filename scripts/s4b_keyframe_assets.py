@@ -236,19 +236,21 @@ def main():
         char_desc = _build_character_descriptions(chars, chars_in)
         comp_suffix = _build_composition_suffix(sh, chars_in, chars, project_color_palette)
 
-        # Build first frame prompt
+        # Build first frame prompt — prefer startFrameDesc (中文散文), fallback to prompt
+        start_desc = sh.get("startFrameDesc", sh.get("prompt", sh.get("description", "")))
         first_prompt = build_first_prompt(
             scene_description=scene_desc,
-            start_frame_desc=sh.get("prompt", sh.get("description", "")),
+            start_frame_desc=start_desc,
             character_descriptions=char_desc,
         )
         if comp_suffix:
             first_prompt += comp_suffix
 
-        # Build last frame prompt
+        # Build last frame prompt — prefer endFrameDesc (中文散文), fallback to prompt
+        end_desc = sh.get("endFrameDesc", sh.get("prompt", sh.get("description", "")))
         last_prompt = build_last_prompt(
             scene_description=scene_desc,
-            end_frame_desc=sh.get("prompt", sh.get("description", "")),
+            end_frame_desc=end_desc,
             character_descriptions=char_desc,
         )
         if comp_suffix:

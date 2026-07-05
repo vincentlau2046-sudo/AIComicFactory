@@ -10,9 +10,21 @@ class TestSlotIntegrity:
 
     def test_default_content_nonempty(self):
         from prompts.registry import REGISTRY
+        # Some slots are param-driven (content comes from build() params)
+        # Only assert nonempty for slots that have a hardcoded default
+        allowed_empty = {
+            ("frame_generate_first", "scene_environment"),
+            ("frame_generate_first", "frame_description"),
+            ("frame_generate_first", "character_descriptions"),
+            ("frame_generate_first", "costume_consistency"),
+            ("frame_generate_last", "frame_description"),
+            ("frame_generate_last", "character_descriptions"),
+            ("frame_generate_last", "costume_consistency"),
+        }
         for key, p in REGISTRY.items():
             for slot in p.slots:
-                assert len(slot.default_content) > 0, f"{key}.{slot.key} has empty defaultContent"
+                if (key, slot.key) not in allowed_empty:
+                    assert len(slot.default_content) > 0, f"{key}.{slot.key} has empty defaultContent"
 
     def test_slot_editable_flag(self):
         from prompts.registry import REGISTRY

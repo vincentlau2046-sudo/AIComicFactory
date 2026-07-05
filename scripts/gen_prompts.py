@@ -1,7 +1,28 @@
 import json
+import logging
 from pathlib import Path
 
+from core.schema_validators import validate_s1_output
+
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
+
 PROJECT = Path.home() / "AIComicFactory/projects/last_bento"
+
+# ── S1 验证 ──
+s1_path = PROJECT / "s1_parsed.json"
+if s1_path.exists():
+    s1 = json.loads(s1_path.read_text())
+    s1_errors = validate_s1_output(s1)
+    if s1_errors:
+        for err in s1_errors:
+            logger.warning("S1 schema validation: %s", err)
+        print(f"⚠️  S1 validation: {len(s1_errors)} warning(s) — continuing")
+    else:
+        print("✅ S1 schema valid")
+else:
+    print("⚠️  s1_parsed.json not found — skipping S1 validation")
+
 s2 = json.loads((PROJECT / "s2_characters.json").read_text())
 s4 = json.loads((PROJECT / "s4_shots.json").read_text())
 

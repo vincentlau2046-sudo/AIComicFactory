@@ -118,6 +118,13 @@ def build_timeline(
             trans_out = shot.get("transitionOut", "cut")
             trans_in = shot.get("transitionIn", "cut")
 
+            # xfade 重叠修正:
+            # 前一个 shot 非 cut 转场 → 当前 shot 提前 xfade_duration
+            if xfade_duration > 0 and tl.shots:
+                prev_trans = tl.shots[-1].transition_out
+                if prev_trans != "cut":
+                    current_time -= xfade_duration
+
             st = ShotTiming(
                 shot_number=sn,
                 duration=dur,
@@ -128,19 +135,6 @@ def build_timeline(
             )
             tl.shots.append(st)
             current_time += dur
-
-    # xfade 重叠修正: 每个非 cut 转场会消耗 xfade_duration 的重叠时间
-    # 简化处理: 总时长减少 N * xfade_duration (N = 非cut转场数)
-    if xfade_duration > 0 and len(tl.shots) > 1:
-        non_cut = sum(1 for s in tl.shots[:-1] if s.transition_out != "cut")
-        # 注意: 标题卡→s1 和 sN→结束卡 的转场也算
-        if title_duration:
-            non_cut += 1  # fade_in
-        if credits_duration:
-            non_cut += 1  # fade_out
-        # 修正后的总时长已在 total_duration 中隐含，
-        # 但 shot 的 start_time/end_time 不修正（它们是"逻辑"时间）
-        # 修正只在 S7 的 xfade offset 计算中体现
 
     return tl
 
@@ -336,8 +330,16 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
         for entry in dialogue_entries:
             text = clean_subtitle_text(entry["text"])
             char = entry.get("character", "")
-            # 简单样式选择: 默认用 Dialogue
-            style = "Dialogue"
+            # 三样式按 dialogue 类型选择:
+            #   "旁白" → Narration (白色45px)
+            #   "心声" → InnerVoice (半透明40px斜体)
+            #   其他   → Dialogue  (黄色48px加粗)
+            if char == "旁白":
+                style = "Narration"
+            elif char == "心声":
+                style = "InnerVoice"
+            else:
+                style = "Dialogue"
             line = f"{char}: {text}" if char else text
             f.write(f"Dialogue: 0,{fmt_ass_time(entry['start_s'])},{fmt_ass_time(entry['end_s'])},{style},,0,0,0,,{line}\n")
     return output_path

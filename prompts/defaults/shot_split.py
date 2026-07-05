@@ -92,9 +92,24 @@ SHOT_COUNT_RULES = """=== 分镜数量规则 ===
 - 尾帧姿态必须是稳定的（非运动中间态）
 - 情感场景的尾帧应留有"余韵"——不急着切走
 
+=== 首帧/尾帧描述字段（startFrameDesc / endFrameDesc）===
+
+每个 shot 必须同时提供 startFrameDesc 和 endFrameDesc：
+- startFrameDesc: 此 shot 起始帧的画面描述（中文散文 40-80 字），描述画面中可见的
+  具体内容——角色位置、姿态、表情、环境细节、光影、空间关系。这是 FLF2V 插值的起点帧。
+- endFrameDesc: 此 shot 结束帧的画面描述（中文散文 40-80 字），描述运动结束后的画面
+  状态——角色移动到哪里、姿态变化、镜头位置变化后的构图。这是 FLF2V 插值的终点帧。
+- 两帧描述必须体现 motionScript 中描述的变化：从 start 到 end 是同一 shot 内
+  的连续运动，不是两个无关画面。
+- 使用自然散文风格，不用逗号分隔的关键词列表。
+- 举例（同一个 shot 的 start → end）：
+  起: "老周站在工地门口，低头看着那盒便当，右手微微颤动"
+  终: "老周蹲在便当摊前的马扎上，双手捧起便当，低着头"
+
 === Prompt 字数下限 ===
 
 - prompt 字段：至少 40 个英文单词（确保足够的视觉细节）
+- startFrameDesc / endFrameDesc：各 40-80 个中文字
 - motionScript 字段：每3秒段至少 30 个中文字符
 - videoScript 字段：30-60 个中文字
 - 太短的 prompt 会导致生成结果模糊、不可控"""
@@ -148,6 +163,8 @@ OUTPUT_FORMAT = """输出格式 — 仅JSON对象：
         {
           "shotNumber": 1,
           "prompt": "图像生成prompt — 英文，描述此帧的画面内容",
+          "startFrameDesc": "起始帧描述 — 中文散文 40-80 字，描述 shot 开始时的画面，供 FLF2V 首帧生成",
+          "endFrameDesc": "结束帧描述 — 中文散文 40-80 字，描述 shot 结束时的画面，供 FLF2V 尾帧生成",
           "motionScript": "运动描述 — 中文散文格式，3秒一段，四层信息交织（角色+环境+机位+物理）",
           "videoScript": "视频生成prompt — 中文散文 30-60词自然语言，描述画面中的运动",
           "cameraDirection": "static | slow_push_in | push_in | pull_out | pan_left | pan_right | tilt_up | tilt_down | dolly_left | dolly_right | crane_up | crane_down | orbit_left | orbit_right | handheld",
@@ -240,11 +257,12 @@ PERFORMANCE_STYLE_INJECTION = """=== 角色标志动作约束 ===
 
 LANGUAGE = """【关键语言规则】
 - prompt 字段: 必须英文（图像/视频模型需要英文 prompt）
+- startFrameDesc / endFrameDesc 字段: 中文散文（FLF2V 视频生成语境，自然画面描述）
 - motionScript 字段: 中文散文
 - videoScript 字段: 中文散文
 - 其他所有字段: 与剧本语言一致
 
-【重要】输出格式与输入格式完全不同！输入是简单剧本（scenes+dialogues），输出是详细分镜（scenes+shots数组）。每个scene必须有"shots"数组，每个shot包含prompt/motionScript/videoScript/cameraDirection等完整字段。不要返回输入格式的结构！
+【重要】输出格式与输入格式完全不同！输入是简单剧本（scenes+dialogues），输出是详细分镜（scenes+shots数组）。每个scene必须有"shots"数组，每个shot包含prompt/motionScript/videoScript/startFrameDesc/endFrameDesc/cameraDirection等完整字段。不要返回输入格式的结构！
 
 仅返回有效JSON。不要markdown。不要评论。"""
 
@@ -271,6 +289,7 @@ class ShotSplitPrompt(PromptDefinition):
             slot("output_format", OUTPUT_FORMAT, editable=False),
             slot("consistency", CONSISTENCY, editable=True),
             slot("relationships_constraint", RELATIONSHIPS_CONSTRAINT, editable=True),
+            slot("costume_override", COSTUME_OVERRIDE, editable=True),
             slot("performance_style", PERFORMANCE_STYLE_INJECTION, editable=True),
             slot("language", LANGUAGE, editable=False),
         ]
@@ -287,6 +306,7 @@ class ShotSplitPrompt(PromptDefinition):
             r("composition"),
             r("transition"),
             r("output_format"),
+            r("costume_override"),
             r("consistency"),
             r("relationships_constraint"),
             r("performance_style"),
@@ -342,6 +362,7 @@ class ShotSplitPrompt(PromptDefinition):
 - ⚠️ 硬性约束：每个shot的duration字段必须 ≤ {max_duration_per_shot}秒，超过此值的duration将被强制截断
 - 对白必须逐字保持不变
 - prompt字段必须英文，motionScript和videoScript用中文散文
+- startFrameDesc和endFrameDesc必须是中文散文（40-80字），描述起始帧和结束帧的画面
 - 多角色shot必须参考角色关系约束确定站位和视线
 - 每个shot的motionScript必须包含涉及角色的标志动作（performanceStyle）"""
 

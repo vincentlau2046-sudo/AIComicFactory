@@ -8,7 +8,7 @@ class TestInitProject:
     def test_creates_state_with_all_stages(self, state_manager, projects_root):
         result = state_manager.init_project("test_project")
         assert "stages" in result
-        assert len(result["stages"]) == 10
+        assert len(result["stages"]) == 11  # s1_parse..s9_tts_audio (includes s3b, s4b)
 
     def test_state_file_created(self, state_manager, projects_root):
         state_manager.init_project("test_project")

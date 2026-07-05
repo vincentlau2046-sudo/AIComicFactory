@@ -11,7 +11,9 @@ core/llm_client.py — 统一 LLM 调用客户端
 """
 
 import json
+import logging
 import os
+import time
 import urllib.request
 import urllib.error
 from typing import Dict, List, Optional, Any
@@ -36,6 +38,13 @@ MODEL_ALIASES = {
 DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 16384
+
+# Retry / degradation
+RETRY_DELAYS = [5, 15, 30]          # exponential backoff schedule (seconds)
+MAX_RETRIES = 3
+DEGRADATION_THRESHOLD = 5           # consecutive failures before graceful degradation
+
+logger = logging.getLogger(__name__)
 
 
 def _get_api_key() -> str:
@@ -70,15 +79,40 @@ def _get_api_key() -> str:
 class LLMClient:
     """Unified LLM client for AIComicFactory pipeline stages."""
 
-    def __init__(self, api_key: str = None, model: str = None):
+    def __init__(self, api_key: str = None, model: str = None,
+                 degradation_threshold: int = DEGRADATION_THRESHOLD):
         self.api_key = api_key or _get_api_key()
         self.model = model or DEFAULT_MODEL
         self.base_url = CODINGPLAN_URL
+        self._consecutive_failures = 0
+        self._degradation_threshold = degradation_threshold
 
     def _resolve_model(self, model: str = None) -> str:
         """Resolve model alias to actual model ID."""
         m = model or self.model
         return MODEL_ALIASES.get(m, m)
+
+    def _is_degraded(self) -> bool:
+        """Check whether the client has entered degraded mode."""
+        return self._consecutive_failures >= self._degradation_threshold
+
+    def _extract_response(self, result: dict, resolved: str) -> str:
+        """Extract assistant content from API response, handling thinking models."""
+        msg = result["choices"][0]["message"]
+        content = msg.get("content", "") or ""
+
+        # Handle thinking models (GLM-5, DeepSeek-R1 etc.)
+        if not content:
+            reasoning = msg.get("reasoning_content", "") or ""
+            if reasoning:
+                content = reasoning
+
+        # Log usage
+        usage = result.get("usage", {})
+        total = usage.get("total_tokens", 0)
+        if total > 0:
+            print(f"  [LLM] {resolved} → {total} tokens")
+        return content
 
     def chat(
         self,
@@ -125,32 +159,50 @@ class LLMClient:
         }
 
         data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(self.base_url, data=data, headers=headers, method="POST")
 
-        try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                msg = result["choices"][0]["message"]
-                content = msg.get("content", "") or ""
-                
-                # Handle thinking models (GLM-5, DeepSeek-R1 etc.)
-                # where actual output may be in reasoning_content
-                if not content:
-                    reasoning = msg.get("reasoning_content", "") or ""
-                    if reasoning:
-                        content = reasoning
-                
-                # Log usage
-                usage = result.get("usage", {})
-                total = usage.get("total_tokens", 0)
-                if total > 0:
-                    print(f"  [LLM] {resolved} → {total} tokens")
-                return content
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8") if e.fp else ""
-            raise RuntimeError(f"LLM API error {e.code}: {body[:500]}")
-        except Exception as e:
-            raise RuntimeError(f"LLM API call failed: {e}")
+        # Retry with exponential backoff for transient errors
+        last_error = None
+        for attempt in range(MAX_RETRIES):
+            req = urllib.request.Request(self.base_url, data=data, headers=headers, method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=300) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                    self._consecutive_failures = 0  # reset on success
+                    return self._extract_response(result, resolved)
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8") if e.fp else ""
+                last_error = RuntimeError(f"LLM API error {e.code}: {body[:500]}")
+                # Non-4xx errors are potentially transient
+                if 400 <= e.code < 500 and e.code not in (429, 408, 409):
+                    # Client error (auth, bad request, not found) — no retry
+                    break
+                # 429 rate-limit, 408/409 timeout/conflict, 5xx server errors → retry
+            except (urllib.error.URLError, OSError, TimeoutError) as e:
+                last_error = RuntimeError(f"LLM API call failed: {e}")
+            except Exception as e:
+                # Non-retryable
+                self._consecutive_failures += 1
+                if self._is_degraded():
+                    logger.warning("LLM degradation: consecutive_failures=%d, returning empty",
+                                   self._consecutive_failures)
+                    return ""
+                raise RuntimeError(f"LLM API call failed: {e}")
+
+            # Backoff before next retry
+            if attempt < MAX_RETRIES - 1:
+                wait = RETRY_DELAYS[attempt] if attempt < len(RETRY_DELAYS) else RETRY_DELAYS[-1]
+                import sys as _sys
+                print(f"  [API retry {attempt+1}/{MAX_RETRIES}] waiting {wait}s: {last_error}",
+                      file=_sys.stderr)
+                time.sleep(wait)
+
+        # All retries exhausted
+        self._consecutive_failures += 1
+        if self._is_degraded():
+            logger.warning("LLM degradation: consecutive_failures=%d, returning empty",
+                           self._consecutive_failures)
+            return ""
+        raise last_error or RuntimeError("LLM API call failed (unknown error)")
 
     def chat_json(
         self,
@@ -165,9 +217,10 @@ class LLMClient:
         Send a chat request expecting JSON output.
         Uses lower temperature and response_format for reliability.
         Auto-retries on JSON parse failure with increasing temperature.
+        Each retry sends the original prompt unchanged (no error concatenation).
         """
         import re
-        
+
         last_error = None
         for attempt in range(max_retries):
             current_temp = temperature + (attempt * 0.1)  # Increase temp slightly on retry
@@ -181,12 +234,20 @@ class LLMClient:
                     response_format={"type": "json_object"},
                 )
             except RuntimeError as e:
-                # Timeout/API errors: don't retry with modified prompt
-                if attempt < max_retries - 1 and "timed" in str(e).lower():
+                # Timeout/API errors: retry with backoff (handled inside chat())
+                if attempt < max_retries - 1:
                     import sys as _sys
                     print(f"  [API retry {attempt+1}/{max_retries}] {e}", file=_sys.stderr)
                     continue
-                raise
+                # Degradation: chat() already returned "" in degraded mode;
+                # but if it raised, fall through to degradation check below
+                last_error = e
+                break
+
+            # On empty content (degraded mode from chat()), return empty dict
+            # Note: chat() already incremented _consecutive_failures and logged
+            if not content:
+                return {}
 
             # Strip markdown code blocks if present
             text = content.strip()
@@ -207,16 +268,26 @@ class LLMClient:
                         return json.loads(match.group())
                     except json.JSONDecodeError:
                         pass
-                
-                # Retry with a note about the error
+
+                # Retry — keep original user prompt intact (no error hint appended)
                 if attempt < max_retries - 1:
                     import sys as _sys
                     print(f"  [JSON retry {attempt+1}/{max_retries}] parse error: {e}", file=_sys.stderr)
-                    user += f"\n\n[系统提示] 上一次你输出的 JSON 有格式错误: {e}。请确保输出严格合法的 JSON，检查引号、逗号、括号配对。"
-        
-        # All retries exhausted
-        err_text = last_error[1][:500] if last_error else text[:500]
-        raise RuntimeError(f"LLM JSON parse failed after {max_retries} attempts: {last_error[0]}\nPartial output: {err_text}")
+                    # NOTE: user prompt is NOT modified — each retry sends the original
+
+        # All retries exhausted — check degradation
+        self._consecutive_failures += 1
+        if self._is_degraded():
+            logger.warning("LLM degradation in chat_json: returning empty dict")
+            return {}
+
+        if isinstance(last_error, tuple):
+            e, partial = last_error
+            raise RuntimeError(
+                f"LLM JSON parse failed after {max_retries} attempts: {e}\n"
+                f"Partial output: {partial[:500]}"
+            )
+        raise last_error or RuntimeError("LLM JSON parse failed (unknown error)")
 
     def generate_image_prompt(
         self,

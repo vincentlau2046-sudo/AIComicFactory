@@ -1,5 +1,11 @@
 import json
+import logging
 from pathlib import Path
+
+from core.schema_validators import validate_s4_output
+
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
 s1 = json.loads((Path.home() / "AIComicFactory/projects/last_bento/s1_parsed.json").read_text())
 chars = json.loads((Path.home() / "AIComicFactory/projects/last_bento/s2_characters.json").read_text())
@@ -72,6 +78,16 @@ shots.append(S(3, D21, 5, "over-the-shoulder, eye contact, warm close", ["lin_ji
 shots.append(S(3, D22, 7, "wide shot, night silhouettes against city lights, slow zoom out", ["lao_zhou", "lin_jie"], "明天，一切都重新开始了", last=True))
 
 result = {"totalShots": len(shots), "shots": shots}
+
+# ── S4 输出 schema 验证 ──
+s4_errors = validate_s4_output(result)
+if s4_errors:
+    for err in s4_errors:
+        logger.warning("S4 schema validation: %s", err)
+    print(f"⚠️  S4 validation: {len(s4_errors)} warning(s) — continuing")
+else:
+    print("✅ S4 schema valid")
+
 out = Path.home() / "AIComicFactory/projects/last_bento/s4_shots.json"
 out.write_text(json.dumps(result, ensure_ascii=False, indent=2))
 print("S4: %d shots written, %d bytes" % (len(shots), out.stat().st_size))

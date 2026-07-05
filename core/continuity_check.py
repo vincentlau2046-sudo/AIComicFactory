@@ -103,14 +103,14 @@ COMPARISON_PROMPT = """你是一位专业的动画连续性审查员。请对比
 【帧 A】是 shot {shot_a} 的尾帧
 【帧 B】是 shot {shot_b} 的首帧
 
-从以下维度评估连续性 (0-10):
+从以下维度评估连续性 (0-100):
 1. character_appearance: 角色面部、发型、服装、体型是否一致？
 2. scene_environment: 背景、道具、空间布局是否连贯？
 3. lighting_color: 光源方向、色温、明暗是否匹配？
 4. composition: 机位、视角、画面重心是否合理过渡？
 
 请只输出JSON:
-{{"overall_score":0,"character_appearance":0,"scene_environment":0,"lighting_color":0,"composition":0,"issues":[],"severity":"none","suggestion":""}}"""
+{{"overall_score":100,"character_appearance":90,"scene_environment":90,"lighting_color":80,"composition":80,"issues":[],"severity":"none","suggestion":""}}"""
 
 
 class ContinuityChecker:

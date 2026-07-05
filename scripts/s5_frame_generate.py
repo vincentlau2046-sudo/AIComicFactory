@@ -53,6 +53,15 @@ QEDIT_SEED = None  # None = random
 REF_VIEW_PRIORITY = ["front", "minus_angle", "plus_angle", "back"]
 
 
+def _get_frame_desc(shot: dict, frame: str, fallback_field: str = "prompt") -> str:
+    """Get frame description with fallback chain.
+    
+    Priority: startFrameDesc/endFrameDesc → prompt → description → ""
+    """
+    key = "startFrameDesc" if frame == "start" else "endFrameDesc"
+    return shot.get(key, shot.get(fallback_field, shot.get("description", "")))
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Prompt builders (AICB 对齐)
 # ═══════════════════════════════════════════════════════════════════
@@ -710,12 +719,12 @@ def main():
 
             fp_first = build_first_prompt(
                 scene_description=scene_desc,
-                start_frame_desc=sh.get("prompt", sh.get("description", "")),
+                start_frame_desc=_get_frame_desc(sh, "start"),
                 character_descriptions=char_desc,
             )
             fp_last = build_last_prompt(
                 scene_description=scene_desc,
-                end_frame_desc=sh.get("prompt", sh.get("description", "")),
+                end_frame_desc=_get_frame_desc(sh, "end"),
                 character_descriptions=char_desc,
             )
             # Find ref images
@@ -796,7 +805,7 @@ def main():
                 else:
                     fp = build_first_prompt(
                         scene_description=scene_desc,
-                        start_frame_desc=sh.get("prompt", sh.get("description", "")),
+                        start_frame_desc=_get_frame_desc(sh, "start"),
                         character_descriptions="",  # no characters
                     )
                 print(f"  First (T2I, {len(fp)}c): {fp[:80]}...")
@@ -811,7 +820,7 @@ def main():
                     first_frame_path = str(out / f"s{n:02d}_first.png")
                     fl = build_last_prompt(
                         scene_description=scene_desc,
-                        end_frame_desc=sh.get("prompt", sh.get("description", "")),
+                        end_frame_desc=_get_frame_desc(sh, "end"),
                         character_descriptions="",
                         first_frame_path=first_frame_path,
                     )
@@ -899,7 +908,7 @@ def main():
             else:
                 fp = build_first_prompt(
                     scene_description=scene_desc,
-                    start_frame_desc=sh.get("prompt", sh.get("description", "")),
+                    start_frame_desc=_get_frame_desc(sh, "start"),
                     character_descriptions=char_desc,
                     previous_last_frame=prev_last if prev_last else "",
                     costume_consistency=costume_text,
@@ -937,7 +946,7 @@ def main():
                 else:
                     fl = build_last_prompt(
                         scene_description=scene_desc,
-                        end_frame_desc=sh.get("prompt", sh.get("description", "")),
+                        end_frame_desc=_get_frame_desc(sh, "end"),
                         character_descriptions=char_desc,
                         first_frame_path=first_frame_path,
                         costume_consistency=costume_text,

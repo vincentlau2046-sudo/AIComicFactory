@@ -6,6 +6,7 @@ core/state_manager.py — 管线状态管理器
 """
 
 import json
+import logging
 import os
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -69,9 +70,10 @@ class StateManager:
         """Initialize a new project state."""
         proj_dir = self.root / project
         proj_dir.mkdir(parents=True, exist_ok=True)
-        
+
         now = datetime.now(TZ).isoformat()
         state = {
+            "schema_version": 1,
             "project": project,
             "created": now,
             "updated": now,
@@ -81,20 +83,62 @@ class StateManager:
         self._write(project, state)
         return state
     
-    def get(self, project: str) -> dict:
-        """Read project state. Auto-initializes if not exists."""
+    def load(self, project: str) -> dict:
+        """Load project state with corruption recovery.
+
+        If state.json is missing, initializes a fresh project.
+        If state.json is corrupt, attempts recovery from .tmp backup.
+        If no recovery is possible, returns a clean init state.
+        """
         path = self._state_path(project)
         if not path.exists():
             return self.init_project(project)
-        with open(path, "r") as f:
-            return json.load(f)
+
+        try:
+            with open(path, "r") as f:
+                state = json.load(f)
+            # Backward compatibility: default schema_version to 1
+            state.setdefault("schema_version", 1)
+            return state
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            tmp = path.with_suffix(".json.tmp")
+            if tmp.exists():
+                try:
+                    with open(tmp, "r") as f:
+                        state = json.load(f)
+                    state.setdefault("schema_version", 1)
+                    # Copy recovered tmp back as primary
+                    import shutil
+                    shutil.copy2(tmp, path)
+                    return state
+                except (json.JSONDecodeError, FileNotFoundError) as e2:
+                    pass
+            # Unrecoverable — reinitialize
+            logging.warning(
+                "state.json for '%s' was corrupt and unrecoverable; reinitializing", project
+            )
+            return self.init_project(project)
+
+    def get(self, project: str) -> dict:
+        """Read project state. Auto-initializes if not exists; recovers from corruption."""
+        return self.load(project)
     
+    def _write_atomic(self, path: Path, data: dict):
+        """Write JSON atomically via tmp + os.replace.
+
+        Guarantees that a crash mid-write leaves either the old valid file
+        or a .tmp orphan — never a truncated state.json on disk.
+        """
+        tmp = path.with_suffix(".json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)  # atomic on POSIX / Windows
+
     def _write(self, project: str, state: dict):
         state["updated"] = datetime.now(TZ).isoformat()
         path = self._state_path(project)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
+        self._write_atomic(path, state)
     
     def update_stage(self, project: str, stage: str, status: str, **kwargs):
         """Update a single stage's status."""

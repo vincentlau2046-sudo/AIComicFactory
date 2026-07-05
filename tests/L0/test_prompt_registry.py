@@ -141,7 +141,7 @@ class TestFramePrompts:
         })
         # Without previous_last_frame, continuity section should not appear
         # (it's conditionally included)
-        assert "画风匹配" in result
+        assert "画风必须" in result
 
     def test_last_frame_references_first(self):
         from prompts.registry import build_prompt

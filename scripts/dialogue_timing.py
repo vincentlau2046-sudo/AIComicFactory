@@ -211,14 +211,34 @@ def analyze_shot_dialogues(
 
         result = json.loads(json_str.strip())
 
-        # Merge back text
+        # 校验+修正 Vision LLM 输出:
+        # 1. 0 <= startRatio < endRatio <= 1
+        # 2. 同一 shot 内 intervals 不重叠
+        prev_er = 0.0
         for i, d in enumerate(dialogues):
             if i < len(result):
-                d["startRatio"] = result[i].get("startRatio", 0.0)
-                d["endRatio"] = result[i].get("endRatio", 1.0)
+                sr = result[i].get("startRatio", 0.0)
+                er = result[i].get("endRatio", 1.0)
             else:
-                d["startRatio"] = 0.0
-                d["endRatio"] = 1.0
+                sr, er = 0.0, 1.0
+
+            # clamp [0, 1]
+            sr = max(0.0, min(1.0, sr))
+            er = max(0.0, min(1.0, er))
+
+            # sr < er
+            if sr >= er:
+                sr, er = 0.0, 1.0
+
+            # 不与前一个 interval 重叠
+            if sr < prev_er:
+                sr = prev_er
+            if sr >= er:  # 修正后仍然无效，回退
+                sr, er = 0.0, 1.0
+
+            d["startRatio"] = round(sr, 4)
+            d["endRatio"] = round(er, 4)
+            prev_er = er
 
         return dialogues
     except Exception as e:

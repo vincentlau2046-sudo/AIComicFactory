@@ -53,7 +53,7 @@ for fp in FONT_SEARCH_PATHS:
         break
 
 TRANSITION_MAP = {
-    "cut":        "cut",
+    "cut":        None,       # None → hard cut (no xfade)
     "dissolve":   "dissolve",
     "fade_in":    "fade",
     "fade_out":   "fadeblack",
@@ -217,11 +217,40 @@ def generate_srt(subtitles: List[dict], shot_durations: List[float],
 # ═══════════════════════════════════════════════════════════════════
 
 def map_transition(t: str) -> str:
-    """Map our transition type to ffmpeg xfade transition name."""
-    mapped = TRANSITION_MAP.get(t.lower(), DEFAULT_TRANSITION)
-    if mapped == "cut":
-        return "fade"
-    return mapped
+    """Map our transition type to ffmpeg xfade transition name (legacy alias)."""
+    name = get_xfade_name(t)
+    return name if name is not None else "fade"
+
+
+def get_xfade_name(t: str):
+    """
+    Map transition type to ffmpeg xfade transition name.
+
+    Returns:
+        xfade name (str) for real transitions,
+        None for hard cuts (no xfade filter needed).
+    """
+    raw = TRANSITION_MAP.get(t.lower(), DEFAULT_TRANSITION)
+    # cut → None (no xfade), others → xfade name string
+    if raw is None:
+        return None
+    return raw if raw != "cut" else None
+
+
+def simple_concat(
+    output_path: Path,
+    video_paths: List[Path],
+) -> None:
+    """Concatenate clips using ffmpeg concat demuxer (stream copy, no re-encoding)."""
+    concat_list = output_path.parent / f"_concat_{output_path.stem}.txt"
+    with open(concat_list, "w") as f:
+        for p in video_paths:
+            f.write(f"file '{p.absolute()}'\n")
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+        "-i", str(concat_list), "-c", "copy", str(output_path),
+    ], check=True, capture_output=True)
+    concat_list.unlink(missing_ok=True)
 
 
 def concat_with_transitions(
@@ -248,50 +277,58 @@ def concat_with_transitions(
         return
 
     # All cuts: use fast concat demuxer
-    all_cuts = all(TRANSITION_MAP.get(t.lower(), "") == "cut" for t in transitions)
+    all_cuts = all(get_xfade_name(t) is None for t in transitions)
     if all_cuts:
-        concat_list = output_path.parent / f"_concat_{output_path.stem}.txt"
-        with open(concat_list, "w") as f:
-            for p in video_paths:
-                f.write(f"file '{p.absolute()}'\n")
-        subprocess.run([
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-            "-i", str(concat_list), "-c", "copy", str(output_path),
-        ], check=True, capture_output=True)
-        concat_list.unlink(missing_ok=True)
+        simple_concat(output_path, video_paths)
         return
 
     # Mixed transitions: xfade filter chain
-    # Key: offset for xfade[i] = total output duration so far - xfade_duration
-    # After each xfade, output grows by: next_clip_duration - xfade_duration
+    #
+    # Offset calculation (fixed):
+    #   offset[i] = output_dur - eff_dur
+    #   output_dur += next_dur - eff_dur   (works for both cut and dissolve)
+    #
+    # This unified formula eliminates the cumulative offset drift that occurred
+    # when cut and dissolve transitions were mixed — previously cut used
+    # output_dur += next_dur (without subtracting eff_dur=0) while dissolve
+    # used output_dur += next_dur - eff_dur, and the old `map_transition`
+    # returned "fade" for cut, causing semantic mismatch.
+    #
+    # For cuts in a mixed chain: we still need to advance the label chain.
+    # We use concat=n=2 to splice clips without xfade overlay.
+    #
+    # For dissolve/fade/etc.: standard xfade with offset.
+
     cmd = ["ffmpeg", "-y"]
     for vp in video_paths:
         cmd.extend(["-i", str(vp)])
 
     filter_parts = []
     prev_label = "0:v"
-    # Output duration after processing clips[0..i]
+    # output_dur = length of the output stream after clips[0..i] have been processed
     output_dur = shot_durations[0]
 
     for i, t in enumerate(transitions):
         out_label = f"v{i}" if i < len(transitions) - 1 else "vout"
         next_dur = shot_durations[i + 1]
-        xfade_name = map_transition(t)
-        eff_dur = xfade_duration if xfade_name != "cut" else 0.0
+        xfade_name = get_xfade_name(t)
 
-        # offset = when the xfade starts = current output length - overlap
-        offset = output_dur - eff_dur
-        if offset < 0:
-            offset = 0
-
-        if xfade_name == "cut" or eff_dur == 0:
-            # Hard cut: no overlap, offset at exact boundary
+        if xfade_name is None:
+            # Hard cut: no xfade, just concat
+            # offset = output_dur - 0 = output_dur
+            # output_dur += next_dur - 0 = next_dur  (unified formula)
             filter_parts.append(
-                f"[{prev_label}][{i + 1}:v]xfade=transition=fade:duration=0"
-                f":offset={offset:.3f}[{out_label}]"
+                f"[{prev_label}][{i + 1}:v]concat=n=2:v=1:a=0[{out_label}]"
             )
             output_dur = output_dur + next_dur
         else:
+            eff_dur = xfade_duration
+
+            # offset = when the xfade starts = current output length - overlap
+            offset = output_dur - eff_dur
+            if offset < 0:
+                offset = 0
+
             filter_parts.append(
                 f"[{prev_label}][{i + 1}:v]xfade=transition={xfade_name}"
                 f":duration={eff_dur}:offset={offset:.3f}[{out_label}]"
@@ -313,15 +350,7 @@ def concat_with_transitions(
     if result.returncode != 0:
         # Fallback to simple concat
         print(f"  ⚠️ Xfade failed, falling back to fast concat: {result.stderr[-200:]}")
-        concat_list = output_path.parent / f"_concat_fallback_{output_path.stem}.txt"
-        with open(concat_list, "w") as f:
-            for p in video_paths:
-                f.write(f"file '{p.absolute()}'\n")
-        subprocess.run([
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-            "-i", str(concat_list), "-c", "copy", str(output_path),
-        ], check=True)
-        concat_list.unlink(missing_ok=True)
+        simple_concat(output_path, video_paths)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -525,7 +554,7 @@ def main():
         shot_dialogues = shot.get("dialogues", [])
         for di, d in enumerate(shot_dialogues):
                 subtitles.append({
-                    "shotSequence": len(video_paths),  # 1-based
+                    "shotSequence": shot.get("shotNumber", sn),  # 1-based
                     "text": d.get("text", ""),
                     "dialogueSequence": di,
                     "dialogueCount": len(shot_dialogues),
