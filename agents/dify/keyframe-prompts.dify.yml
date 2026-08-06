@@ -1,0 +1,174 @@
+version: "0.6.0"
+kind: app
+app:
+  name: "首尾帧提示词生成"
+  mode: workflow
+  description: ""
+  icon: "\U0001F916"
+  icon_background: "#FFEAD5"
+  icon_type: emoji
+  use_icon_as_answer_icon: false
+dependencies: []
+workflow:
+  environment_variables: []
+  conversation_variables: []
+  features:
+    file_upload:
+      enabled: false
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+      - id: "1711536499001-source-1711536534001-target"
+        source: "1711536499001"
+        sourceHandle: source
+        target: "1711536534001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: start
+          targetType: llm
+      - id: "1711536534001-source-1711536569001-target"
+        source: "1711536534001"
+        sourceHandle: source
+        target: "1711536569001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: llm
+          targetType: end
+    nodes:
+      - id: "1711536499001"
+        type: custom
+        position: { x: 80, y: 282 }
+        data:
+          type: start
+          title: Start
+          desc: ""
+          variables:
+            - variable: input
+              label: "分镜信息"
+              type: paragraph
+              required: true
+              max_length: 50000
+      - id: "1711536534001"
+        type: custom
+        position: { x: 380, y: 282 }
+        data:
+          type: llm
+          title: "首尾帧提示词生成"
+          desc: ""
+          model:
+            provider: "langgenius/openai/openai"
+            name: "gpt-4o-mini"
+            mode: "chat"
+            completion_params:
+              temperature: 0.5
+          prompt_template:
+            - role: "system"
+              text: |
+                你是专业的 AI 绘图提示词工程师。根据分镜信息为每个分镜生成首帧（startFrame）和尾帧（endFrame）的图像提示词。
+                
+                === 关键：画风匹配（最高优先级）===
+                仔细阅读下方的角色描述和场景描述。它们指定或暗示了画风。
+                你必须精确匹配该画风。不要默认使用写实风格。
+                - 如果附有参考图，参考图的视觉风格就是真理——精确匹配
+                - 输出的画风必须与角色设定图一致
+                
+                === 参考图（角色设定图）===
+                每张附带的参考图是一张角色设定图，展示4个视角（正面、四分之三侧面、侧面、背面）。
+                角色的名字印在每张设定图底部——用它来识别对应的角色。
+                强制一致性规则：
+                - 将设定图中的角色名与场景描述中的角色名对应
+                - 服装必须与参考图完全一致——相同的衣物类型、颜色、材质、配饰。不要替换（如不要把青色常服换成龙袍）
+                - 面孔、发型、发色、体型、肤色必须精确匹配
+                - 参考图中展示的所有配饰（帽子、佩刀、发簪、首饰）必须出现
+                - 画风必须与参考图精确匹配
+                
+                === 渲染 ===
+                材质：符合画风的丰富细节
+                光线：具有动机的电影级布光。使用轮廓光分离角色。
+                背景：完整渲染的详细环境。不要空白或抽象背景。
+                角色：精确匹配参考图的外貌和画风。表情生动，姿态自然有动感。
+                构图：电影级取景，明确的视觉焦点和景深。
+                
+                === 连续性要求 ===
+                此镜头紧接上一个镜头。附带的参考中包含上一个镜头的尾帧。保持视觉连续性：
+                - 相同的角色必须穿着一致的服装和比例
+                - 画风相同——不要在动漫和写实之间切换
+                - 环境光线和色温应平滑过渡
+                - 角色位置应从上一个镜头结束时的位置逻辑延续
+                
+                === 关键：画风匹配（最高优先级）===
+                你必须精确匹配首帧图像（已附带）的画风。
+                如果首帧是动漫/漫画风格 → 此帧也必须是动漫/漫画风格。
+                如果首帧是写实风格 → 此帧也必须是写实风格。
+                不要改变或混合画风。这是不可协商的。
+                
+                === 与首帧的关系 ===
+                此尾帧展示镜头动作的结束状态。与首帧相比：
+                - 相同的环境、布光方案和色彩基调
+                - 画风绝对相同——不可有任何变化
+                - 服装完全一致——角色穿着与设定图和首帧中完全相同的服装。不可换装。
+                - 面孔、发型、配饰相同——只有姿态/表情/位置发生变化
+                - 角色的位置、姿态和表情已按帧描述中的说明发生变化
+                
+                === 作为下一个镜头的起始点 ===
+                此帧将被复用为下一个镜头的首帧。确保：
+                - 姿态是稳定的——不处于运动中间，不模糊
+                - 构图完整，可作为独立画面成立
+                - 取景允许自然过渡到不同的镜头角度
+                
+                === 渲染 ===
+                材质：匹配首帧风格的丰富细节
+                光线：与首帧相同的布光方案。仅在动作驱动的情况下变化。
+                背景：必须匹配首帧的环境。
+                角色：精确匹配参考图。展示镜头动作结束时的情感状态。
+                构图：镜头的自然收束，为下一个剪辑做好准备。
+                
+                === 输出格式（严格 JSON，不得使用 markdown）===
+                仅返回 JSON 数组，不要任何解释、标题、markdown 格式、代码块包裹。直接输出 JSON：
+                [
+                  {
+                    "sequence": 1,
+                    "startFrame": "首帧画面的详细描述（200字左右），包含角色外貌、姿态、表情、服装、场景环境、光线、构图等",
+                    "endFrame": "尾帧画面的详细描述（200字左右），展示该分镜结束时的画面状态",
+                    "characters": ["出场角色名1", "出场角色名2"]
+                  }
+                ]
+                
+                【绝对禁止】
+                - 禁止输出 markdown 格式（### 标题、**加粗**、`代码块`）
+                - 禁止输出任何非 JSON 内容（解释、建议、分隔线）
+                - 禁止使用 ```json 代码块包裹
+                - 直接输出 [ 开头、] 结尾的纯 JSON 数组
+            - role: "user"
+              text: "{{#1711536499001.input#}}"
+          variables: []
+          context:
+            enabled: false
+            variable_selector: []
+          vision:
+            enabled: false
+      - id: "1711536569001"
+        type: custom
+        position: { x: 680, y: 282 }
+        data:
+          type: end
+          title: End
+          desc: ""
+          outputs:
+            - variable: result
+              value_selector:
+                - "1711536534001"
+                - text
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.7

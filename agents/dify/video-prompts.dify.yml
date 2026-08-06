@@ -1,0 +1,146 @@
+version: "0.6.0"
+kind: app
+app:
+  name: "视频提示词生成"
+  mode: workflow
+  description: ""
+  icon: "\U0001F916"
+  icon_background: "#FFEAD5"
+  icon_type: emoji
+  use_icon_as_answer_icon: false
+dependencies: []
+workflow:
+  environment_variables: []
+  conversation_variables: []
+  features:
+    file_upload:
+      enabled: false
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+      - id: "1711536502001-source-1711536537001-target"
+        source: "1711536502001"
+        sourceHandle: source
+        target: "1711536537001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: start
+          targetType: llm
+      - id: "1711536537001-source-1711536572001-target"
+        source: "1711536537001"
+        sourceHandle: source
+        target: "1711536572001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: llm
+          targetType: end
+    nodes:
+      - id: "1711536502001"
+        type: custom
+        position: { x: 80, y: 282 }
+        data:
+          type: start
+          title: Start
+          desc: ""
+          variables:
+            - variable: input
+              label: "分镜信息"
+              type: paragraph
+              required: true
+              max_length: 50000
+      - id: "1711536537001"
+        type: custom
+        position: { x: 380, y: 282 }
+        data:
+          type: llm
+          title: "视频提示词生成"
+          desc: ""
+          model:
+            provider: "langgenius/openai/openai"
+            name: "gpt-4o-mini"
+            mode: "chat"
+            completion_params:
+              temperature: 0.5
+          prompt_template:
+            - role: "system"
+              text: |
+                你是专业的 AI 视频生成提示词工程师。根据分镜的首帧、尾帧和动作信息生成视频提示词。
+                
+                用自然中文散文描述从首帧到尾帧之间发生的动态过程。不要使用结构化标签（"Scene:"、"Action:"），不要权重语法（"（xx：1.5）"）。把镜头当一段电影画面来写，语言要让模型"看见"。
+                
+                写作要点（Seedance 2.0 风格）：
+                - 主体动作：具体的肢体运动——握紧、倾身、回头、抬手、脚步变缓、呼吸停顿；写速度与力度。
+                - 环境反应：世界对主体的回应——衣摆翻飞、落叶扬起、光斑掠过墙面、水面扩散的涟漪。
+                - 镜头运动：使用具体词——"镜头缓慢推近"/"低角度广角缓缓上摇"/"环绕摇镜快切"/"固定机位"/"希区柯克变焦"；不要"优雅地""柔和地"这种空词。
+                - 物理与氛围：材质细节、光影色温、音效线索（脚步声、衣料摩擦、呼吸、环境声），让模型感到"在场"。
+                
+                时长策略：
+                - 4-8秒：聚焦一个核心动作，不用时间戳。
+                - 9-12秒：2-3 段时间戳，例如 "0-4秒：…… 5-8秒：…… 9-12秒：……"
+                - 13-15秒：强制使用 3-4 段时间戳分镜，每段一个密集长句编织主体/环境/镜头/物理四层。
+                
+                结尾禁止项（直接写入提示词最后一行）：
+                禁止出现水印、字幕、文字 LOGO、标识、时间码、画面边框。
+                
+                对白格式（每条独立一行，放在画面描述之后）：
+                - 画内对白：【对白口型】角色名（视觉标识，情绪）: "台词原文"
+                - 画外旁白：【画外音】角色名（情绪）: "台词原文"
+                
+                情绪标注是关键——让模型把口型、呼吸节奏和台词对齐。示例：
+                - 【对白口型】苏晚（红裙黑发，冷漠反杀）: "顾总，当初是你说，我连给你提鞋都不配。"
+                - 【画外音】旁白（低沉沙哑）: "那一夜，城市比雨还冷。"
+                
+                音效单独一行，以 "音效：" 开头，与画面描述分开。
+                示例：音效：契约撕碎的脆响、宾客窃窃私语、远处低沉的背景弦乐。
+                
+                [帧锚点]
+                首帧：{{START_FRAME_DESC}}
+                尾帧：{{END_FRAME_DESC}}
+                
+                === 输出格式（严格 JSON，不得使用 markdown）===
+                仅返回 JSON 数组，不要任何解释、标题、markdown 格式、代码块包裹。直接输出 JSON：
+                [
+                  {
+                    "sequence": 1,
+                    "videoPrompt": "视频提示词（30-60词英文），描述画面运动、角色动作、镜头移动"
+                  }
+                ]
+                
+                【绝对禁止】
+                - 禁止输出 markdown 格式
+                - 禁止输出任何非 JSON 内容
+                - 禁止使用 ```json 代码块包裹
+                - 直接输出 [ 开头、] 结尾的纯 JSON 数组
+            - role: "user"
+              text: "{{#1711536502001.input#}}"
+          variables: []
+          context:
+            enabled: false
+            variable_selector: []
+          vision:
+            enabled: false
+      - id: "1711536572001"
+        type: custom
+        position: { x: 680, y: 282 }
+        data:
+          type: end
+          title: End
+          desc: ""
+          outputs:
+            - variable: result
+              value_selector:
+                - "1711536537001"
+                - text
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.7

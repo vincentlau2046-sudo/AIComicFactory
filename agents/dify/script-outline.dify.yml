@@ -1,0 +1,135 @@
+version: "0.6.0"
+kind: app
+app:
+  name: "故事大纲生成"
+  mode: workflow
+  description: ""
+  icon: "\U0001F916"
+  icon_background: "#FFEAD5"
+  icon_type: emoji
+  use_icon_as_answer_icon: false
+dependencies: []
+workflow:
+  environment_variables: []
+  conversation_variables: []
+  features:
+    file_upload:
+      enabled: false
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+      - id: "1711536487001-source-1711536522001-target"
+        source: "1711536487001"
+        sourceHandle: source
+        target: "1711536522001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: start
+          targetType: llm
+      - id: "1711536522001-source-1711536558001-target"
+        source: "1711536522001"
+        sourceHandle: source
+        target: "1711536558001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: llm
+          targetType: end
+    nodes:
+      - id: "1711536487001"
+        type: custom
+        position: { x: 80, y: 282 }
+        data:
+          type: start
+          title: Start
+          desc: ""
+          variables:
+            - variable: input
+              label: "创意构想"
+              type: paragraph
+              required: true
+              max_length: 50000
+      - id: "1711536522001"
+        type: custom
+        position: { x: 380, y: 282 }
+        data:
+          type: llm
+          title: "故事大纲生成"
+          desc: ""
+          model:
+            provider: "langgenius/openai/openai"
+            name: "gpt-4o-mini"
+            mode: "chat"
+            completion_params:
+              temperature: 0.5
+          prompt_template:
+            - role: "system"
+              text: |
+                你是一位屡获殊荣的编剧。根据用户的创意构想，生成一份简洁的故事大纲。
+                
+                输出格式——纯文本时间轴，不要JSON，不要markdown：
+                
+                前提：（一句话核心冲突）
+                
+                1. [节拍名] (占比XX%)
+                   事件：……
+                   情感：……
+                
+                2. [节拍名] (占比XX%)
+                   事件：……
+                   情感：……
+                
+                3. [节拍名] (占比XX%)
+                   事件：……
+                   情感：……
+                
+                高潮：……
+                结局：……
+                
+                要求：
+                - 3-5个关键节拍，每个包含事件和情感转变
+                - 占比之和应为100%
+                - 语言规则：使用与用户输入相同的语言（中文输入→中文输出，英文输入→英文输出）
+                - 直接输出内容，不要任何包裹或标记
+                
+                【战斗/对决题材专项规则】
+                如果用户的创意/标题中出现战斗信号词——"大战"、"对决"、"决战"、"交手"、"PK"、"VS"、"vs"、"battle"、"fight"、"duel"、"对打"、"厮杀"——那么节拍分配必须按**实战型对决**来安排：
+                - 节拍 1 "入场"（10-15%）：双方出场、对峙、台词宣战
+                - 节拍 2 "首轮交手"（15-20%）：第一波实际对战，试探路数
+                - 节拍 3 "升级对抗"（25-30%）：招式加重、环境被破坏、双方互有伤势
+                - 节拍 4 "绝境反扑"（20-25%）：劣势方绝地反击或双方两败俱伤
+                - 节拍 5 "终局"（15-20%）：决胜一击 + 短暂余韵
+                
+                **实战节拍占比必须 ≥ 50%**。禁止把"大战"解读为"一方压制 + 另一方顿悟 + 象征性一击"的文艺套路——用户说"大战"就是要持续的双方对战序列，不是单方面的精神困境。双方都必须是主动交战者，而不是一方静立一方挣扎。
+            - role: "user"
+              text: "{{#1711536487001.input#}}"
+          variables: []
+          context:
+            enabled: false
+            variable_selector: []
+          vision:
+            enabled: false
+      - id: "1711536558001"
+        type: custom
+        position: { x: 680, y: 282 }
+        data:
+          type: end
+          title: End
+          desc: ""
+          outputs:
+            - variable: text
+              value_selector:
+                - "1711536522001"
+                - text
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.7

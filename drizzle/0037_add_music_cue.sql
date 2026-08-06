@@ -1,0 +1,1 @@
+ALTER TABLE shots ADD COLUMN music_cue TEXT DEFAULT '';

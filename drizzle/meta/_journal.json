@@ -1,0 +1,384 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1773292292025,
+      "tag": "0000_chemical_tyrannus",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1741737600000,
+      "tag": "0001_add_user_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773640000000,
+      "tag": "0002_add_generation_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1773700000000,
+      "tag": "0003_add_reference_video_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1773800000000,
+      "tag": "0004_add_last_frame_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1774000000000,
+      "tag": "0005_add_scene_ref_frame",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1774100000000,
+      "tag": "0006_add_video_script",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1774200000000,
+      "tag": "0007_add_storyboard_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1774300000000,
+      "tag": "0008_add_video_prompt",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1774400000000,
+      "tag": "0009_add_character_visual_hint",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1774500000000,
+      "tag": "0010_add_episodes",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1774600000000,
+      "tag": "0011_add_episode_description_keywords",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1774700000000,
+      "tag": "0012_add_import_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1774800000000,
+      "tag": "0013_add_episode_characters",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1774900000000,
+      "tag": "0014_add_prompt_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1775000000000,
+      "tag": "0015_add_use_project_prompts",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1775100000000,
+      "tag": "0016_add_transition_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1775200000000,
+      "tag": "0017_add_transition_out",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1775300000000,
+      "tag": "0018_add_dialogue_start_ratio",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1775400000000,
+      "tag": "0019_add_dialogue_end_ratio",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1775500000000,
+      "tag": "0020_add_shot_is_stale",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1775600000000,
+      "tag": "0021_add_character_is_stale",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1775700000000,
+      "tag": "0022_add_episode_script_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1775800000000,
+      "tag": "0023_add_project_outline",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1775900000000,
+      "tag": "0024_add_episode_outline",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1776000000000,
+      "tag": "0025_add_character_relations",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1776100000000,
+      "tag": "0026_add_scenes_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1776200000000,
+      "tag": "0027_add_shot_scene_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1776300000000,
+      "tag": "0028_add_composition_guide",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1776400000000,
+      "tag": "0029_add_project_color_palette",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1776500000000,
+      "tag": "0030_add_episode_color_palette",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1776600000000,
+      "tag": "0031_add_world_setting",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1776700000000,
+      "tag": "0032_add_project_target_duration",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1776800000000,
+      "tag": "0033_add_episode_target_duration",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1776900000000,
+      "tag": "0034_add_focal_point",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1777000000000,
+      "tag": "0035_add_depth_of_field",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1777100000000,
+      "tag": "0036_add_sound_design",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1777200000000,
+      "tag": "0037_add_music_cue",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1777300000000,
+      "tag": "0038_add_performance_style",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1777400000000,
+      "tag": "0039_add_character_height_cm",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1777500000000,
+      "tag": "0040_add_character_body_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1777600000000,
+      "tag": "0041_add_costume_sets",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1777700000000,
+      "tag": "0042_add_shot_costume_overrides",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1777800000000,
+      "tag": "0043_add_project_bgm_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1777900000000,
+      "tag": "0044_add_episode_bgm_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1778000000000,
+      "tag": "0045_add_mood_board",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1778100000000,
+      "tag": "0046_add_shot_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1778200000000,
+      "tag": "0047_add_prompt_ab_tests",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1778300000000,
+      "tag": "0048_add_shot_reference_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1778400000000,
+      "tag": "0049_add_character_image_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1778500000000,
+      "tag": "0050_add_shot_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1778600000000,
+      "tag": "0051_drop_legacy_shot_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1713062400000,
+      "tag": "0052_add_agents",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1713148800000,
+      "tag": "0053_add_agent_platform",
+      "breakpoints": true
+    }
+  ]
+}

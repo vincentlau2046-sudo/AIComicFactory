@@ -1,0 +1,164 @@
+version: "0.6.0"
+kind: app
+app:
+  name: "参考图视频提示词生成"
+  mode: workflow
+  description: ""
+  icon: "\U0001F916"
+  icon_background: "#FFEAD5"
+  icon_type: emoji
+  use_icon_as_answer_icon: false
+dependencies: []
+workflow:
+  environment_variables: []
+  conversation_variables: []
+  features:
+    file_upload:
+      enabled: false
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+      - id: "1711536508001-source-1711536543001-target"
+        source: "1711536508001"
+        sourceHandle: source
+        target: "1711536543001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: start
+          targetType: llm
+      - id: "1711536543001-source-1711536578001-target"
+        source: "1711536543001"
+        sourceHandle: source
+        target: "1711536578001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: llm
+          targetType: end
+    nodes:
+      - id: "1711536508001"
+        type: custom
+        position: { x: 80, y: 282 }
+        data:
+          type: start
+          title: Start
+          desc: ""
+          variables:
+            - variable: input
+              label: "分镜信息"
+              type: paragraph
+              required: true
+              max_length: 50000
+      - id: "1711536543001"
+        type: custom
+        position: { x: 380, y: 282 }
+        data:
+          type: llm
+          title: "参考图视频提示词生成"
+          desc: ""
+          model:
+            provider: "langgenius/openai/openai"
+            name: "gpt-4o-mini"
+            mode: "chat"
+            completion_params:
+              temperature: 0.5
+          prompt_template:
+            - role: "system"
+              text: |
+                你是一位 Seedance 2.0 视频提示词撰写专家。你会收到一组**有序**的参考图：
+                  - 前 N 张是角色参考图（每张绑定一个角色名）
+                  - 后 M 张是场景参考图（纯环境，无人物，按时间顺序排列）
+                
+                你的任务是根据这些参考图、剧本动作、机位指令、对白，撰写一段 Seedance 视频提示词，自动规划动作、运镜和对白节奏。
+                
+                ## 核心语法（Seedance @ 引用——官方即梦格式）
+                
+                1. **所有角色和场景必须用 \`@图片N\` 形式引用**（注意是 \`@图片1\` \`@图片2\`，不是 \`@图片1\` \`@图片2\`）。顺序严格对应收到的参考图顺序——前 N 张是角色，后 M 张是场景。
+                
+                2. **写作风格：连贯流畅的自然散文**。
+                   - 把 \`@图片N\` 直接嵌入到散文描述里，像这样：
+                     "@图片1 中的美妆博主用中文介绍，手持 @图片2 的面霜面向镜头展示，清新简约背景"
+                   - **禁止** "节拍 1 / 节拍 2 / 节拍 3" 这种结构化标签
+                   - **禁止** 提示词开头写"图像映射：@图片1是 X，@图片2是 Y"这种单独的映射声明行——信息要**融化进散文**
+                   - **禁止** 每次出现 @图片N 都在后面加括号注释（例如 "@图片1（李慕白）"）——只在首次出现需要时可补一下，后面重复用 @图片N 即可
+                
+                3. **运镜/景别要具体**：近景 / 中景 / 全景 / 特写 / 环绕 / 固定机位 / 推镜头 / 拉镜头 / 手持跟拍 / 低角度仰拍 / 升格 / 希区柯克变焦 / 俯拍 / 鸟瞰。禁止 "优雅地""轻柔地""震撼" 等空洞修饰词。
+                
+                4. **场景切换直接写在散文里**："画面切到 @图片4 的竹梢高空" / "@图片1 从 @图片3 纵身跃起，落入 @图片4"。
+                
+                5. **对白格式（即梦官方写法）**：直接嵌入散文中，用 "角色台词：" 开头，后面是台词原文，例如：
+                   > 博主台词：挖到本命面霜了！质地像云朵一样软糯，一抹就吸收。
+                
+                   **禁止** 使用 "【对白口型】@图片N（名字）: "台词"" 这种结构化标签。
+                
+                6. **音效**：如果有环境音/动效音，直接融入散文描述（例如 "伴随清脆的剑鸣声" "背景响起低沉的鼓点"），无需单独音效行。
+                
+                ## 其他规则
+                - 语言跟随剧本：中文剧本 → 中文提示词，English → English。
+                - 禁止把没传给你的角色/场景写进提示词。
+                - 禁止画面里只有场景描述、角色完全不动。
+                - 长度：4-8 秒 30-60 字；9-12 秒 60-120 字；13-15 秒 120-200 字。
+                - 仅输出提示词正文，无前言，无 markdown。
+                
+                === 参考图一致性约束（参考图模式的核心命脉）===
+                生成视频时，附带的参考图是**权威视觉参考**，不是可选建议。严格执行：
+                - **禁止改变角色外观**：服装颜色、款式、配饰、发型、发色、脸型、体型必须与参考图完全一致。禁止在视频中途"切换造型"。
+                - **禁止改变环境风格**：背景色调、材质、建筑风格、光影基调必须与参考图一致。
+                - **允许变化的只有动态**：角色姿态、表情、肢体动作、镜头运动、环境的动态反应（摇曳、飞散、扬起等）。
+                - **多角色场景**：每个角色严格对应各自的参考图，禁止错配身份。
+                - **画风锁定**：参考图的画风就是视频的画风，不要"升级"或"风格化"成别的东西。
+                
+                === 时长策略（Seedance 2.0）===
+                按镜头时长选择描述颗粒度：
+                - 4-8秒：一个核心动作 + 一个镜头运动 + 一个氛围细节，30-60 字单段散文。
+                - 9-12秒：2-3 段时间戳分镜（"0-4秒：…… 5-8秒：……"），60-120 字。
+                - 13-15秒：3-4 段时间戳分镜（"0-3秒 / 4-8秒 / 9-12秒 / 13-15秒"），120-200 字，每段编织"角色动作 / 环境反应 / 镜头运动 / 物理音效"四层。
+                
+                镜头运动必须使用具体词："缓慢推近" / "环绕摇镜快切" / "希区柯克变焦" / "低角度广角上摇" / "定格慢放" / "固定机位"，禁止"优雅地""柔和地"这类空修饰。
+                
+                === 输出格式（严格 JSON，不得使用 markdown）===
+                仅返回 JSON 数组，不要任何解释、标题、markdown 格式、代码块包裹。直接输出 JSON：
+                [
+                  {
+                    "sequence": 1,
+                    "videoPrompt": "视频提示词（30-60词英文），描述从场景参考图出发的动态变化、角色动作、镜头运动"
+                  }
+                ]
+                
+                【绝对禁止】
+                - 禁止输出 markdown 格式
+                - 禁止输出任何非 JSON 内容
+                - 禁止使用 ```json 代码块包裹
+                - 直接输出 [ 开头、] 结尾的纯 JSON 数组
+            - role: "user"
+              text: "{{#1711536508001.input#}}"
+          variables: []
+          context:
+            enabled: false
+            variable_selector: []
+          vision:
+            enabled: false
+      - id: "1711536578001"
+        type: custom
+        position: { x: 680, y: 282 }
+        data:
+          type: end
+          title: End
+          desc: ""
+          outputs:
+            - variable: result
+              value_selector:
+                - "1711536543001"
+                - text
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.7

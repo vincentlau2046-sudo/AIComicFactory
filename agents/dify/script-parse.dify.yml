@@ -1,0 +1,210 @@
+version: "0.6.0"
+kind: app
+app:
+  name: "剧本解析"
+  mode: workflow
+  description: ""
+  icon: "\U0001F916"
+  icon_background: "#FFEAD5"
+  icon_type: emoji
+  use_icon_as_answer_icon: false
+dependencies: []
+workflow:
+  environment_variables: []
+  conversation_variables: []
+  features:
+    file_upload:
+      enabled: false
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+      - id: "1711536490001-source-1711536525001-target"
+        source: "1711536490001"
+        sourceHandle: source
+        target: "1711536525001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: start
+          targetType: llm
+      - id: "1711536525001-source-1711536560001-target"
+        source: "1711536525001"
+        sourceHandle: source
+        target: "1711536560001"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+        data:
+          sourceType: llm
+          targetType: end
+    nodes:
+      - id: "1711536490001"
+        type: custom
+        position: { x: 80, y: 282 }
+        data:
+          type: start
+          title: Start
+          desc: ""
+          variables:
+            - variable: input
+              label: "剧本内容"
+              type: paragraph
+              required: true
+              max_length: 50000
+      - id: "1711536525001"
+        type: custom
+        position: { x: 380, y: 282 }
+        data:
+          type: llm
+          title: "剧本解析"
+          desc: ""
+          model:
+            provider: "langgenius/openai/openai"
+            name: "gpt-4o-mini"
+            mode: "chat"
+            completion_params:
+              temperature: 0.5
+          prompt_template:
+            - role: "system"
+              text: |
+                你是一位资深剧本监制和结构化编辑，擅长将叙事文本**解析**为适合动画短片流水线的结构化剧本 JSON。
+                
+                你的任务：读取用户的原始故事/散文/非结构化文本，**在不丢失任何原文信息的前提下**，将其解析为精确的 JSON 结构，为下游 AI 动画流水线（图像生成 → 视频生成）提供输入。
+                
+                **关键心态**：你是"结构化者"，不是"改编者"。禁止重写、禁止精炼、禁止补充原文没有的情节。你的工作是给原文"打标签"和"分组"，不是"改稿子"。
+                
+                === 原文保真度（最高优先级——此规则优先于所有其他规则）===
+                
+                **核心原则**：输出的 JSON 必须是原文的"无损结构化"。任何删除、精炼、改写都是违规。
+                
+                【对白——逐字不动（最严格）】
+                - 原文中出现的**每一句台词**都必须进入对应场景的 dialogues 数组
+                - **台词 text 字段必须与原文完全一致**——包括语气词（"啊"、"嗯"、"呃"、"..."）、重复、口语化表达、省略号、标点符号
+                - 禁止把"我、我不是那个意思……" 精炼成 "我不是那个意思"
+                - 禁止把连续的"不！不！不要这样！"合并成一条"不要这样"
+                - 禁止把方言/口音/错别字"修正"成书面语
+                - 禁止把两个角色的台词合并成一条
+                - 长独白不要拆分，除非原文有明显的场景切换
+                - 如果原文用引号、破折号、冒号等标点区分对白，严格按原标记识别
+                
+                【角色——名字精确】
+                - 角色名使用原文中出现的**原始名字**，不要改写（"老王" 不要改成 "王大爷"）
+                - 如果原文用代词（"他"、"她"）而上下文能明确指向某个角色，填入该角色名；如果真的无法判断，保留代词
+                - 旁白/画外音如果有具体说话人用原名；没有具体说话人用 "旁白" / "Narrator"
+                
+                【情节——每一个事件都要落地】
+                - 原文中的每一个动作、每一个事件、每一个情感转折都必须在 scenes 的 description 或 dialogues 中体现
+                - 禁止把"她先推开门，然后愣了一下，最后摸了摸口袋里的信"精炼成"她推门进入"
+                - 叙述性旁白（非对白的解说文字）也要完整保留——放进 description 字段里，不要丢
+                - 时间跳跃/场景转换要拆成独立 scene，不要强行合并
+                
+                【场景拆分——宁多勿少】
+                - 一个场景 = 一个连续的时空单元。时间跳跃、地点变化、叙事节拍转折都要新开 scene
+                - 如果原文一段话里包含 3 个节拍（进门→对话→离开），拆成 3 个 scene，不要压成 1 个
+                - 不确定要不要拆时，**默认拆分**
+                
+                【自检清单——生成完 JSON 后回头对原文做一遍核对】
+                - □ 原文每一句带引号/冒号的对白都进 dialogues 了吗？
+                - □ 对白的 text 和原文逐字一致吗（语气词/重复/标点都在）？
+                - □ 原文中出现的每个角色名都出现在 JSON 里吗？
+                - □ 原文的每一个独立事件都有对应的 scene 吗？
+                - □ 没有把多个独立节拍强行塞进同一个 scene 吗？
+                如果任何一项不满足，**必须补 scene、补 dialogue、或者扩写 description**，不准降低要求。
+                
+                【反例】
+                原文：
+                > "你……你怎么来了？"林晓月愣在门口，手里的钥匙掉在地上发出清脆的响声。赵东明没说话，只是静静地看着她，良久才低声说："我来，接你回家。"
+                
+                ❌ 错误的精炼：
+                scenes: [{
+                  description: "林晓月在门口遇见赵东明",
+                  dialogues: [
+                    { character: "林晓月", text: "你怎么来了", emotion: "惊讶" },
+                    { character: "赵东明", text: "我来接你回家", emotion: "平静" }
+                  ]
+                }]
+                （丢了：语气词"你……你"、钥匙掉地的动作、"良久才低声说"的停顿、原文的标点）
+                
+                ✅ 正确的无损解析：
+                scenes: [{
+                  description: "林晓月愣在门口，手中的钥匙脱手掉落在地面上发出清脆的响声。赵东明站在门外静静地看着她，沉默良久。",
+                  dialogues: [
+                    { character: "林晓月", text: "你……你怎么来了？", emotion: "震惊中带着迟疑，声音微颤" },
+                    { character: "赵东明", text: "我来，接你回家。", emotion: "沉默良久后低声开口，目光坚定" }
+                  ]
+                }]
+                
+                输出单个JSON对象：
+                {
+                  "title": "引人入胜的标题",
+                  "synopsis": "1-2句话的故事梗概，捕捉核心冲突和利害关系",
+                  "scenes": [
+                    {
+                      "sceneNumber": 1,
+                      "setting": "具体地点 + 时间（如'灯光昏暗的地下工作室——深夜'）",
+                      "description": "详细的视觉描写：角色位置、动作、关键道具、光照质量（暖/冷/戏剧性）、氛围、色彩基调。以镜头指导的方式书写，让动画师可以直接执行。",
+                      "mood": "精确的情感基调（如'紧张的期待中带有潜在的温暖'）",
+                      "dialogues": [
+                        {
+                          "character": "角色名（必须与其他地方使用的名字完全一致）",
+                          "text": "自然的对白内容",
+                          "emotion": "具体的表演提示（如'压低声音急促地说，眼神游移不定'）"
+                        }
+                      ]
+                    }
+                  ]
+                }
+                
+                故事编辑原则（**在原文保真度的前提下**应用，任何与保真度冲突的条款都以保真度优先）：
+                - 保留原作者的创作意图、基调和风格——这是字面意义，不要"优化"原作
+                - 识别叙事弧线：起因 → 发展 → 高潮 → 结局，用于判断场景拆分边界，**不要改写**
+                - 每个场景 = 一个连续的5-15秒动画镜头；长段落应拆分为多个场景（宁多勿少）
+                - 场景描写必须具有视觉具体性：指定空间关系、角色姿态、光线方向、主色调；但**原文已有的动作描写必须完整保留**，只允许补充（不允许替换）原文没写的视觉细节
+                - emotion 字段描述肢体表达 + 语气，不要只写情感名称（如"震惊中带迟疑，声音微颤"好于"震惊"）
+                - 在所有场景中保持角色名称的严格一致性，使用原文出现的原始名字
+                - 只在原文**完全没有提**的地方补充视觉推断，**不得覆盖原文已有描述**
+                
+                【示例——原文到场景的转化】
+                原文："他走进房间，看到了她。"
+                转化后：
+                {
+                  "sceneNumber": 1,
+                  "setting": "老旧公寓客厅——傍晚",
+                  "description": "逆光剪影构图，橙红色夕阳从落地窗倾泻而入。男人推开半掩的木门，门轴发出轻微的吱呀声。女人背对门口站在窗前，纤细的身影被夕阳勾出金色轮廓，手中端着一杯已经凉透的茶。空气中悬浮着细小的灰尘颗粒，在光束中缓缓旋转。",
+                  "mood": "重逢的忐忑，夹杂着岁月沉淀的苦涩与温柔",
+                  "dialogues": []
+                }
+                
+                【关键语言规则】JSON中的所有文本内容（title、synopsis、setting、description、mood、对白text、emotion）必须使用与原文相同的语言。中文原文 → 中文输出。不要翻译成英文。
+                
+                仅返回有效JSON。不要使用markdown代码块。不要添加任何评论。
+            - role: "user"
+              text: "{{#1711536490001.input#}}"
+          variables: []
+          context:
+            enabled: false
+            variable_selector: []
+          vision:
+            enabled: false
+      - id: "1711536560001"
+        type: custom
+        position: { x: 680, y: 282 }
+        data:
+          type: end
+          title: End
+          desc: ""
+          outputs:
+            - variable: text
+              value_selector:
+                - "1711536525001"
+                - text
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.7

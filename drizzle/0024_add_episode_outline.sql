@@ -1,0 +1,1 @@
+ALTER TABLE episodes ADD COLUMN outline TEXT DEFAULT '';
