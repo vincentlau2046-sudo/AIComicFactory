@@ -1,246 +1,194 @@
-# AI Comic Builder
+# AIComicFactory (AICF)
 
+> v0.0.1 — 全功能本地化漫剧生成器
 
-社区交流：[https://linux.do/](https://linux.do/)
+从剧本到动画视频的**全自动本地流水线**。基于 [AI Comic Builder](https://github.com/twwch/AIComicBuilder) fork，将图像/视频生成从云端 API 迁移到本地 ComfyUI + vLLM + IFF Proxy。
 
-> v0.2.3
-
-AI 驱动的漫剧生成器 — 从剧本到动画视频的全自动流水线。
-
-📺 **系统介绍视频**：
-
-[Bilibili](https://www.bilibili.com/video/BV1gMQSBQEoi/) 
-
-[v0.2.1 版本更新](https://www.bilibili.com/video/BV13CXQB8EwL/)
-
-[v0.2.2 Seedance 2.0 接入 + 参考图模式重构](https://www.bilibili.com/video/BV1v4DZBmEiw/)
-
-
-本网站全程由 AI 驱动开发， 开发指南：https://github.com/twwch/vibe-coding
-
-
-
+---
 
 ## 功能特性
 
-- **剧本导入** — 支持上传 TXT/DOCX/PDF 文件，AI 自动解析文本、提取角色、智能分集，流程可视化
-- **分集管理** — 项目级分集列表，角色按集关联，支持手动创建或导入自动分集
-- **角色管理** — 项目级角色管理，主角/配角分区展示，支持跨集复用和按集独立解析
-- **剧本创作** — 手动编写或 AI 辅助生成剧本
-- **角色提取** — AI 自动从剧本中提取角色并生成详细视觉描述
-- **角色四视图** — 为每个角色生成四视图参考图（正面/四分之三/侧面/背面），确保后续帧画面一致性
-- **智能分镜** — AI 将剧本拆解为专业镜头列表（含构图、灯光、运镜指令）
-- **首尾帧生成** — 为每个镜头生成起始帧和结束帧关键画面（首尾帧模式 / 场景参考帧模式）
-- **视频提示词** — AI 基于分镜描述和参考帧自动生成视频提示词，支持直接编辑
-- **视频生成** — 基于首尾帧插值生成动画视频片段
-- **视频合成** — 将所有片段拼接为完整动画，支持字幕烧录
-- **分镜工作流** — 分镜编辑抽屉、角色内联面板、看板视图三种协作视图，支持单张分镜精细编辑
-- **帧图管理** — 生成帧支持手动上传替换及一键清除
-- **资源下载** — 支持最终视频下载及全部素材打包下载
-- **多语言** — 中文 / English / 日本語 / 한국어
-- **风格自适应** — 自动识别剧本风格（动漫/写实等），角色四视图与首尾帧生成均匹配对应风格
-- **视频比例** — 支持 16:9 / 9:16 / 1:1 / 自适应比例，首尾帧与视频生成统一比例
-- **多模型** — 支持 OpenAI、Gemini、Kling、Seedance、Veo 等多家 AI 供应商，可按项目配置
+- **剧本导入** — TXT/DOCX/PDF 文件上传，AI 自动解析文本、提取角色、智能分集
+- **分集管理** — 项目级分集列表，角色按集关联
+- **角色管理** — 主角/配角分区展示，支持跨集复用
+- **角色四视图** — ComfyUI Qwen 工作流生成正面/四分之三/侧面/背面参考图
+- **智能分镜** — LLM 将剧本拆解为专业镜头列表（构图、灯光、运镜指令）
+- **首尾帧生成** — ComfyUI Qwen-Edit 工作流生成每镜头的起始帧和结束帧
+- **视频生成** — ComfyUI H3 工作流基于首尾帧插值生成动画视频
+- **视频合成** — FFmpeg 拼接所有片段为完整动画
+
+## 架构
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Pipeline Handlers                 │
+│  character-image  │  frame-generate  │  video-gen    │
+└────────┬──────────┴────────┬─────────┴───────┬──────┘
+         │                   │                  │
+┌────────▼───────────────────▼──────────────────▼──────┐
+│              CompositeAIProvider (router)             │
+│  generateText() │ generateImage() │ generateVideo()   │
+└─────┬───────────┴──────┬─────────┴────────┬──────────┘
+      │                  │                  │
+┌─────▼──────┐  ┌───────▼──────────┐  ┌────▼──────────┐
+│ IFF Proxy  │  │  Pipeline Engine │  │  Pipeline Eng │
+│ :8999      │  │  (DAG executor)  │  │  (video path) │
+│ deepseek   │  │  ┌──────────────┐│  │               │
+│ qwen3-vl   │  │  │ ComfyUI      ││  │  ComfyUI      │
+└────────────┘  │  │ 7 atomic     ││  │  H3-i2v/r2v  │
+                │  │ workflows    ││  └──────┬────────┘
+                │  └──────────────┘│         │
+                └───────┬──────────┘         │
+                        │                    │
+                ┌───────▼────────────────────▼──────┐
+                │         ComfyUI :8188              │
+                │  T2I │ Edit │ MultiAngle │ H3      │
+                └────────────────────────────────────┘
+```
+
+### 三路路由
+
+| 调用 | 路由 | 模型 |
+|------|------|------|
+| `generateText()` 纯文本 | IFF Proxy :8999 | deepseek-v4-flash |
+| `generateText()` 带图片 | IFF Proxy :8999 | qwen3-vl-4b |
+| `generateImage()` | ComfyUI :8188 | Qwen T2I / Edit / MultiAngle |
+| `generateVideo()` | ComfyUI :8188 | H3 i2v / r2v / t2v |
+
+全部 LLM 请求统一从 IFF Proxy 出入，本地 vLLM 和云端 API 由 IFF 根据 model 名路由。
+
+### ComfyUI 工作流
+
+7 个原子工作流（位于 `ComfyUI/workflows/AIComicFactory/atomic/`）：
+
+| 工作流 | 用途 | 模型 |
+|--------|------|------|
+| `qwen-2512-t2i` | 文生图 | Qwen 2.5 12B |
+| `qwen-2511-edit` | 单角色参考图合成 | Qwen 2.5 VL 7B |
+| `qwen-2511-edit-plus` | 多角色参考图合成 | Qwen 2.5 VL 7B |
+| `qwen-2511-edit-multiangle` | 多角度图生成 | Qwen 2.5 VL 7B |
+| `h3-t2v` | 文生视频 | MiniMax H3 |
+| `h3-i2v` | 图生视频（含首尾帧） | MiniMax H3 |
+| `h3-r2v` | 参考图生视频 | MiniMax H3 |
+
+### Pipeline Engine
+
+多步骤 DAG 编排引擎（`src/lib/pipeline-engine/`）：
+
+- YAML 定义管线（inputs / steps / outputs + GPU 模型分类）
+- 模板表达式解析（`${params.x}`、`${steps.y.z}`、`${params.arr[0]}`、`${params.seed + 1}`）
+- GPU 调度：按模型家族分类，同族共享 GPU，异族释放
+- Atomic + Script 两种步骤执行器
+- 3 条预置管线：`character-image` / `frame-generate` / `video-generate`
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 框架 | Next.js 16 (App Router) |
-| 前端 | React 19, Tailwind CSS 4, Zustand, Base UI |
-| 国际化 | next-intl |
+| 框架 | Next.js 16 (App Router, Turbopack) |
+| 前端 | React 19, Tailwind CSS 4, Zustand |
 | 数据库 | SQLite + Drizzle ORM |
-| AI 文本 | OpenAI / Gemini (via AI SDK) |
-| AI 图像 | OpenAI DALL-E / Gemini Imagen / Kling |
-| AI 视频 | Seedance / Kling / Veo |
+| 图像/视频 | **ComfyUI** (本地) :8188 |
+| 文本 LLM | **IFF Proxy** :8999 → deepseek-v4-flash |
+| VL 视觉 | **IFF Proxy** :8999 → qwen3-vl-4b (vLLM :8002) |
 | 视频处理 | FFmpeg (fluent-ffmpeg) |
-| 包管理 | pnpm |
+| 包管理 | pnpm / npm |
 
 ## 快速开始
 
 ### 环境要求
 
 - Node.js 18+
-- pnpm
-- FFmpeg（视频合成功能需要）
+- **ComfyUI**（localhost:8188）— 详见下方配置
+- **IFF Proxy**（localhost:8999）— 文本/VL 统一网关
+- **vLLM**（localhost:8002，可选）— qwen3-vl-4b 本地 VL
+- FFmpeg
 
 ### 安装
 
 ```bash
-pnpm install
+git clone git@github.com:vincentlau2046-sudo/AIComicFactory.git
+cd AIComicFactory
+npm install
+cp .env.example .env     # 配置本地模型地址
 ```
 
-### 初始化数据库
+### 环境变量
 
-```bash
-pnpm drizzle-kit push
+```env
+DATABASE_URL=file:./data/aicomic.db
+UPLOAD_DIR=./uploads
+
+# ComfyUI（图像/视频生成）
+COMFYUI_BASE_URL=http://localhost:8188
+COMFYUI_WORKFLOWS_DIR=/path/to/ComfyUI/workflows/AIComicFactory/atomic
+COMFYUI_PIPELINES_DIR=./src/lib/pipeline-engine/pipelines
+
+# IFF Proxy（文本+VL 统一网关）
+OPENAI_BASE_URL=http://localhost:8999/v1
+OPENAI_API_KEY=***
+OPENAI_MODEL=deepseek-v4-flash
+OPENAI_VL_MODEL=qwen3-vl-4b
 ```
 
 ### 启动
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 访问 [http://localhost:3000](http://localhost:3000)
 
-## Docker 部署
+### 配置 ComfyUI 工作流
 
-### 快速启动
-
-```bash
-docker run -d \
-  --name ai-comic-builder \
-  -p 3000:3000 \
-  -v ./data:/app/data \
-  -v ./uploads:/app/uploads \
-  --platform linux/amd64 \
-  twwch/aicomicbuilder:latest
-```
-
-启动后在设置页面中配置 AI 模型供应商（OpenAI / Gemini / Seedance）。
-
-### Docker Compose
-
-创建 `docker-compose.yml`：
-
-```yaml
-services:
-  ai-comic-builder:
-    image: twwch/aicomicbuilder:latest
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
-    restart: unless-stopped
-```
-
-```bash
-docker compose up -d
-```
-
-### 数据持久化
-
-通过 volume 挂载保持数据：
-
-- `./data` — SQLite 数据库文件
-- `./uploads` — 上传的文件及生成的资源（图片、视频等）
-
-### 手动构建镜像
-
-```bash
-git clone https://github.com/twwch/AIComicBuilder.git
-cd AIComicBuilder
-docker build -t ai-comic-builder .
-```
-
-## 生成流水线
-
-```
-剧本输入 → 剧本解析 → 角色提取 → 角色四视图
-                                      ↓
-                                   智能分镜
-                                      ↓
-                         参考帧生成 / 首尾帧生成（逐镜头）
-                                      ↓
-                              视频提示词生成（逐镜头）
-                                      ↓
-                              视频生成（逐镜头）
-                                      ↓
-                                 视频合成 + 字幕
-```
-
-每个阶段支持单独触发或批量生成，用户可完全控制流水线节奏。分镜页提供列表视图和看板视图，看板按生成进度自动分列。支持分镜版本管理，可创建多个版本进行对比迭代。
+1. 将 `ComfyUI/workflows/AIComicFactory/atomic/` 目录复制到你的 ComfyUI 实例
+2. 确保 7 个工作流 JSON + `meta.yaml` 文件在同一个扁平目录下
+3. 安装必要节点：ComfyUI-Manager、ComfyUI-Qwen、MiniMax-H3 wrapper
 
 ## 项目结构
 
 ```
 src/
 ├── app/
-│   ├── [locale]/                # i18n 路由
-│   │   ├── (dashboard)/         # 项目列表
-│   │   ├── project/[id]/        # 项目编辑器
-│   │   │   ├── script/          # 剧本编辑
-│   │   │   ├── characters/      # 角色管理
-│   │   │   ├── storyboard/      # 分镜面板
-│   │   │   └── preview/         # 预览 & 合成
-│   │   └── settings/            # 模型配置
-│   └── api/                     # API 路由
-├── components/
-│   ├── ui/                      # 基础 UI 组件
-│   ├── editor/                  # 编辑器组件
-│   └── settings/                # 设置组件
+│   ├── [locale]/           # i18n 路由
+│   │   ├── (dashboard)/    # 项目列表
+│   │   ├── project/[id]/   # 项目编辑器
+│   │   └── settings/       # 模型配置
+│   └── api/                # API 路由
+├── components/             # UI 组件
 ├── lib/
-│   ├── ai/                      # AI 供应商 & Prompt
-│   ├── pipeline/                # 生成流水线
-│   ├── db/                      # 数据库 Schema
-│   └── video/                   # FFmpeg 处理
-└── stores/                      # Zustand 状态管理
+│   ├── ai/                 # AI 供应商层
+│   │   ├── providers/      # OpenAI (IFF), ComfyUI
+│   │   ├── composite-provider.ts  # 三路路由
+│   │   ├── setup.ts        # 启动配置
+│   │   └── types.ts
+│   ├── comfyui/            # ComfyUI 客户端 + 工作流注册
+│   │   ├── client.ts       # HTTP poll 客户端
+│   │   ├── registry.ts     # meta.yaml 注册表
+│   │   ├── executor.ts     # 工作流执行器
+│   │   └── provider.ts     # ComfyUIProvider（AIProvider + VideoProvider）
+│   ├── pipeline-engine/    # DAG 管线引擎
+│   │   ├── pipelines/      # YAML 管线定义
+│   │   ├── steps/          # Atomic/Script 执行器
+│   │   ├── scripts/        # Python 后处理
+│   │   ├── template.ts    # ￼模板解析
+│   │   ├── executor.ts    # DAG 执行器
+│   │   ├── gpu-scheduler.ts # GPU 调度
+│   │   └─ types.ts
+│   ├── pipeline/         # 业务处理器
+│   │   ├── character-image.ts  # 角色四视图
+│   │   ├── frame-generate.ts   # 首尾帧生成
+│   │   └── video-generate.ts   # 视频生成
+│   ├── db/
+│   └── task-queue/         # 后台任务队列
+└── stores/                  # Zustand 状态管理
 ```
 
-## 数据模型
+## 版本
 
-- **Project** — 项目（剧本、状态）
-- **Character** — 角色（名称、描述、参考图）
-- **Shot** — 镜头（序号、提示词、时长、首尾帧、视频）
-- **Dialogue** — 对白（角色、文本、音频）
-- **Task** — 后台任务队列
-
-## 界面截图
-
-| 项目列表 | 分集管理 |
-|:---:|:---:|
-| ![项目列表](images/demo/list.png) | ![分集管理](images/demo/分集管理.png) |
-
-| 剧本导入 | 导入 — 角色解析 | 导入 — 自动分集 |
-|:---:|:---:|:---:|
-| ![剧本导入](images/demo/剧本上传.png) | ![角色解析](images/demo/剧本上传-角色解析.png) | ![自动分集](images/demo/剧本上传-自动分集.png) |
-
-| 角色管理 | 剧本生成 |
-|:---:|:---:|
-| ![角色管理](images/demo/角色管理.png) | ![剧本生成](images/demo/剧本生成.png) |
-
-| 角色解析 | 分镜 | 分镜看板 |
-|:---:|:---:|:---:|
-| ![角色解析](images/demo/角色解析.png) | ![分镜](images/demo/分镜.png) | ![分镜看板](images/demo/分镜看板.png) |
-
-| 看板 | 看板详情 |
-|:---:|:---:|
-| ![看板](images/demo/看板.png) | ![看板详情](images/demo/看板详情.png) |
-
-| 预览 | 模型配置 |
-|:---:|:---:|
-| ![预览](images/demo/预览.png) | ![模型配置](images/demo/模型配置.png) |
-
-| 提示词管理 | 提示词修改 |
-|:---:|:---:|
-| ![提示词管理](images/demo/提示词管理.png) | ![提示词修改](images/demo/提示词修改.png) |
-
-| 提示词快捷入口 | 分镜 AI 优化 |
-|:---:|:---:|
-| ![提示词快捷入口](images/demo/提示词快捷入口.png) | ![分镜AI优化](images/demo/分镜AI优化.png) |
-
-## Demo
-
-https://www.bilibili.com/video/BV19rwVzUEeD/
-
-https://www.bilibili.com/video/BV1RrwVzUE3x/
-
-https://www.bilibili.com/video/BV15rwVzSEKZ/
-
-https://www.bilibili.com/video/BV15kwiz7E6Q/
-
-https://www.bilibili.com/video/BV1hTw1zAEgY/
-
-最新版生成
-
-[《拳魂·最后一回合》-seedance1.5](https://www.bilibili.com/video/BV1WGAPzrEs1/)
-
-[《拳魂·最后一回合》-seedance2](https://www.bilibili.com/video/BV1fVAuzLEAX/)
-
-[基于 Seedance 2.0 生成](https://www.bilibili.com/video/BV1g5SDBSECs/)
-
+| 版本 | 内容 |
+|------|------|
+| v0.0.1 | 初始版本 · ComfyUI 原子工作流 + Pipeline Engine + CompositeAIProvider + git remote |
 
 ## License
 
