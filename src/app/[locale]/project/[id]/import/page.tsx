@@ -112,6 +112,23 @@ export default function ImportPage({
               setStepStatus((prev) => ({ ...prev, [s]: "done" }));
             }
           }
+
+          // Restore intermediate data from log metadata
+          const step1Meta = data.find((l: LogEntry) => l.step === 1 && l.status === "done")?.metadata;
+          if (step1Meta?.fullText) {
+            setFullText(step1Meta.fullText);
+          }
+          const step2Meta = data.find((l: LogEntry) => l.step === 2 && l.status === "done")?.metadata;
+          if (step2Meta?.characters) {
+            setCharacters(step2Meta.characters);
+          }
+          if (step2Meta?.relationships) {
+            setRelationships(step2Meta.relationships);
+          }
+          const step3Meta = data.find((l: LogEntry) => l.step === 3 && l.status === "done")?.metadata;
+          if (step3Meta?.episodes) {
+            setEpisodes(step3Meta.episodes);
+          }
         }
       } catch {
         // No logs, fresh import
