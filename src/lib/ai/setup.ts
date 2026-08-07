@@ -3,6 +3,7 @@ import { OpenAIProvider } from "./providers/openai";
 import { GeminiProvider } from "./providers/gemini";
 import { SeedanceProvider } from "./providers/seedance";
 import { ComfyUIProvider } from "@/lib/comfyui";
+import { CompositeAIProvider } from "./composite-provider";
 
 let initialized = false;
 
@@ -18,9 +19,50 @@ function createComfyUIProvider(): ComfyUIProvider {
 export function initializeProviders() {
   if (initialized) return;
 
-  // Text/image: OpenAI-compatible (IFF Proxy) or Gemini
-  // This provider handles both generateText() and generateImage()
-  if (process.env.OPENAI_API_KEY) {
+  // ─── Detect configured providers ────────────────────────
+  const iffConfigured = !!(process.env.OPENAI_BASE_URL || process.env.OPENAI_API_KEY)
+  const comfyConfigured = !!(process.env.COMFYUI_BASE_URL || process.env.COMFYUI_WORKFLOWS_DIR)
+  const vlConfigured = !!(process.env.OPENAI_VL_BASE_URL)
+
+  // ─── Composite mode: IFF text + ComfyUI image + vLLM VL ─
+  if (iffConfigured && comfyConfigured) {
+    const textProvider = new OpenAIProvider()
+    const imageProvider = createComfyUIProvider()
+
+    let vlProvider: OpenAIProvider | undefined
+    if (vlConfigured) {
+      vlProvider = new OpenAIProvider({
+        baseURL: process.env.OPENAI_VL_BASE_URL,
+        model: process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b',
+      })
+    }
+
+    setDefaultAIProvider(
+      new CompositeAIProvider(textProvider, imageProvider, vlProvider,
+        (u) => new OpenAIProvider({ ...(u && { uploadDir: u }) }),
+        (u) => createComfyUIProvider(),
+        vlConfigured ? (u) => new OpenAIProvider({
+          baseURL: process.env.OPENAI_VL_BASE_URL,
+          model: process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b',
+          ...(u && { uploadDir: u }),
+        }) : undefined,
+      ),
+      CompositeAIProvider.createFactory(
+        textProvider, imageProvider,
+        (u) => new OpenAIProvider({ ...(u && { uploadDir: u }) }),
+        (u) => createComfyUIProvider(),
+        vlProvider,
+        vlConfigured ? (u) => new OpenAIProvider({
+          baseURL: process.env.OPENAI_VL_BASE_URL,
+          model: process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b',
+          ...(u && { uploadDir: u }),
+        }) : undefined,
+      ),
+    )
+  }
+  // ─── Legacy single-provider modes ───────────────────────
+  else if (process.env.OPENAI_API_KEY) {
+    // Text + image: both through IFF proxy (image gen may fail)
     setDefaultAIProvider(
       new OpenAIProvider(),
       (uploadDir) => new OpenAIProvider({ ...(uploadDir && { uploadDir }) }),
@@ -30,26 +72,15 @@ export function initializeProviders() {
       new GeminiProvider(),
       (uploadDir) => new GeminiProvider({ ...(uploadDir && { uploadDir }) }),
     );
+  } else if (comfyConfigured) {
+    // ComfyUI only (text will throw — image + video only)
+    setDefaultAIProvider(
+      createComfyUIProvider(),
+      (_uploadDir) => createComfyUIProvider(),
+    );
   }
 
-  // Image/video: ComfyUI local provider
-  // NOTE: ComfyUI does NOT support generateText() — only register it as
-  // AIProvider if no text provider was set above. Otherwise, use it only
-  // for video generation. Image generation via ComfyUI is accessed through
-  // PipelineEngine (internal to ComfyUIProvider), not through the default AIProvider.
-  const comfyConfigured = !!(process.env.COMFYUI_BASE_URL || process.env.COMFYUI_WORKFLOWS_DIR)
-  if (comfyConfigured) {
-    // Only set as AI provider if no text provider was configured
-    // (otherwise ComfyUI's generateText() would throw)
-    if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
-      setDefaultAIProvider(
-        createComfyUIProvider(),
-        (_uploadDir) => createComfyUIProvider(),
-      );
-    }
-  }
-
-  // Video generation
+  // ─── Video Provider ────────────────────────────────────
   if (process.env.SEEDANCE_API_KEY) {
     setDefaultVideoProvider(
       new SeedanceProvider(),
@@ -57,7 +88,7 @@ export function initializeProviders() {
     );
   }
 
-  // ComfyUI also serves as video provider if configured
+  // ComfyUI video: when configured and no cloud video API
   if (comfyConfigured && !process.env.SEEDANCE_API_KEY) {
     setDefaultVideoProvider(
       createComfyUIProvider(),
