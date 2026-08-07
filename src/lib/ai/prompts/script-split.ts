@@ -10,7 +10,9 @@ RULES:
    - COPY verbatim the most important paragraphs, dialogues, and descriptions from the source text that belong to this episode — do NOT summarize them, PRESERVE the original wording
    - Add structural notes: scene transitions, emotional beats, visual highlights
    - The downstream AI will have NO access to the source material — everything it needs must be in this field
-   - Minimum 1000 words per episode. Longer is better. Include direct quotes from the source.
+   - When the source text already has episode/chapter structure (49 episodes, 12 chapters, etc.), each episode in your output should expand the SOURCE content — copy verbatim the source paragraphs and add structural notes. NO minimum word count in this case; just match the source episode count.
+- When the source has NO pre-existing structure, each episode needs at least 1000 words of idea content.
+- Include direct quotes from the source in all cases.
 
 6. PRESERVE existing episode structure in the source text. If the text already has chapter markers (e.g. ## 第一集, === 分集 1 ===, Chapter 1, Episode 1, etc.), keep those same boundaries in your output — do NOT merge or re-split them. Your episode count should match the existing structure. Only create a new narrative split when the source text has NO pre-existing episode or chapter markers.
 
@@ -24,7 +26,7 @@ OUTPUT FORMAT — structured text with field labels. No JSON, no markdown fences
 关键词: keyword1, keyword2, keyword3
 角色: character name 1, character name 2
 剧情构思:
-1) List all characters in this episode with roles. 2) COPY the key paragraphs and dialogues from the source text verbatim — preserve original wording, do not summarize. 3) Add scene transition notes and emotional beat markers. Minimum 1000 words. The downstream screenplay generator has NO access to the source — this field is its only reference.
+1) List all characters in this episode with roles. 2) COPY the key paragraphs and dialogues from the source text verbatim — preserve original wording, do not summarize. 3) Add scene transition notes and emotional beat markers. The downstream screenplay generator has NO access to the source — this field is its only reference.
 
 === 分集 2 ===
 标题: ...

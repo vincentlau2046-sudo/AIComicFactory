@@ -84,8 +84,10 @@ export async function POST(
           model,
           system: scriptSplitSystem,
           prompt,
+          maxOutputTokens: 40000,
         });
 
+        console.log(`[ImportSplit] Chunk ${idx + 1} LLM response (first 1500 chars):\n${result.text.slice(0, 1500)}`);
         return parseSplitText(result.text);
       })
     );
@@ -125,6 +127,7 @@ function parseSplitText(text: string): SplitEpisode[] {
 
   // Split by episode markers
   const blocks = normalized.split(EPISODE_SEP);
+  console.log(`[ImportSplit] Split into ${blocks.length} blocks, total ${normalized.length} chars`);
 
   for (const block of blocks) {
     const trimmed = block.trim();
