@@ -22,41 +22,21 @@ export function initializeProviders() {
   // ─── Detect configured providers ────────────────────────
   const iffConfigured = !!(process.env.OPENAI_BASE_URL || process.env.OPENAI_API_KEY)
   const comfyConfigured = !!(process.env.COMFYUI_BASE_URL || process.env.COMFYUI_WORKFLOWS_DIR)
-  const vlConfigured = !!(process.env.OPENAI_VL_BASE_URL)
 
-  // ─── Composite mode: IFF text + ComfyUI image + vLLM VL ─
+  // ─── Composite mode: IFF text/VL + ComfyUI image ─────────
   if (iffConfigured && comfyConfigured) {
     const textProvider = new OpenAIProvider()
     const imageProvider = createComfyUIProvider()
 
-    let vlProvider: OpenAIProvider | undefined
-    if (vlConfigured) {
-      vlProvider = new OpenAIProvider({
-        baseURL: process.env.OPENAI_VL_BASE_URL,
-        model: process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b',
-      })
-    }
-
     setDefaultAIProvider(
-      new CompositeAIProvider(textProvider, imageProvider, vlProvider,
+      new CompositeAIProvider(textProvider, imageProvider,
         (u) => new OpenAIProvider({ ...(u && { uploadDir: u }) }),
         (u) => createComfyUIProvider(),
-        vlConfigured ? (u) => new OpenAIProvider({
-          baseURL: process.env.OPENAI_VL_BASE_URL,
-          model: process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b',
-          ...(u && { uploadDir: u }),
-        }) : undefined,
       ),
       CompositeAIProvider.createFactory(
         textProvider, imageProvider,
         (u) => new OpenAIProvider({ ...(u && { uploadDir: u }) }),
         (u) => createComfyUIProvider(),
-        vlProvider,
-        vlConfigured ? (u) => new OpenAIProvider({
-          baseURL: process.env.OPENAI_VL_BASE_URL,
-          model: process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b',
-          ...(u && { uploadDir: u }),
-        }) : undefined,
       ),
     )
   }

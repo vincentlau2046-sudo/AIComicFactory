@@ -2,35 +2,37 @@
  * CompositeAIProvider — routes text/image generation to different backends.
  *
  * Route table:
- *   generateText() without images  → textProvider (→ IFF proxy, deepseek-v4-flash)
- *   generateText() with images     → vlProvider   (→ vLLM, qwen3-vl-4b)
- *   generateImage()                → imageProvider (→ ComfyUI, local)
+ *   generateText() without images  → textProvider (→ IFF :8999, deepseek-v4-flash)
+ *   generateText() with images     → textProvider (→ IFF :8999, qwen3-vl-4b)
+ *   generateImage()                → imageProvider (→ ComfyUI :8188)
  *
- * VL provider is optional — system degrades gracefully when not configured.
+ * Both text routes go through IFF proxy — only the model name differs.
+ * IFF handles backend routing based on model name.
  */
 
 import type { AIProvider, ImageOptions, TextOptions } from './types'
+
+const VL_MODEL = process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b'
+const TEXT_MODEL = process.env.OPENAI_MODEL || 'deepseek-v4-flash'
 
 export class CompositeAIProvider implements AIProvider {
   constructor(
     private textProvider: AIProvider,
     private imageProvider: AIProvider,
-    private vlProvider?: AIProvider,
-    private textFactory?: (uploadDir?: string) => AIProvider,
-    private imageFactory?: (uploadDir?: string) => AIProvider,
-    private vlFactory?: (uploadDir?: string) => AIProvider,
+    private factory: (uploadDir?: string) => AIProvider,
+    private imageFactory: (uploadDir?: string) => AIProvider,
   ) {}
 
   async generateText(prompt: string, options?: TextOptions): Promise<string> {
-    // VL routing: when images are provided, use the VL provider
-    if (options?.images?.length && this.vlProvider) {
-      return this.vlProvider.generateText(prompt, {
+    // When images provided, switch to VL model (IFF routes to correct backend)
+    // Both go through the same IFF proxy — just the model changes
+    if (options?.images?.length) {
+      return this.textProvider.generateText(prompt, {
         ...options,
-        model: options.model || process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b',
+        model: options.model || VL_MODEL,
       })
     }
-
-    // Pure text: use the text provider (IFF proxy → deepseek-v4-flash)
+    // Pure text: default model (deepseek-v4-flash)
     return this.textProvider.generateText(prompt, options)
   }
 
@@ -38,27 +40,20 @@ export class CompositeAIProvider implements AIProvider {
     return this.imageProvider.generateImage(prompt, options)
   }
 
-  /**
-   * Creates a factory function for setDefaultAIProvider.
-   * When uploadDir is provided, creates fresh instances with the upload dir.
-   */
+  /** Factory for setDefaultAIProvider — creates fresh CompositeAIProvider with upload dir support */
   static createFactory(
     textProvider: AIProvider,
     imageProvider: AIProvider,
     textFactory: (uploadDir?: string) => AIProvider,
     imageFactory: (uploadDir?: string) => AIProvider,
-    vlProvider?: AIProvider,
-    vlFactory?: (uploadDir?: string) => AIProvider,
   ): (uploadDir?: string) => CompositeAIProvider {
     return (uploadDir?: string) => {
-      if (!uploadDir) return new CompositeAIProvider(textProvider, imageProvider, vlProvider, textFactory, imageFactory, vlFactory)
+      if (!uploadDir) return new CompositeAIProvider(textProvider, imageProvider, textFactory, imageFactory)
       return new CompositeAIProvider(
         textFactory(uploadDir),
         imageFactory(uploadDir),
-        vlFactory?.(uploadDir),
         textFactory,
         imageFactory,
-        vlFactory,
       )
     }
   }
