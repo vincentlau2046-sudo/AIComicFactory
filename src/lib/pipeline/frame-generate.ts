@@ -159,7 +159,7 @@ export async function handleFrameGenerate(task: Task) {
     ? (await getActiveAsset(previousShot.id, "last_frame", 0))?.fileUrl ?? undefined
     : undefined;
 
-  // Generate first frame
+  // Generate first frame + last frame via pipeline (single orchestrated call)
   let firstFramePrompt = buildFirstFramePrompt({
     sceneDescription: shot.prompt || "",
     startFrameDesc: startFrameDescText,
@@ -168,24 +168,36 @@ export async function handleFrameGenerate(task: Task) {
     slotContents: frameFirstSlots,
   });
   if (compositionSuffix) firstFramePrompt += compositionSuffix;
-  const firstFramePath = await ai.generateImage(firstFramePrompt, {
-    quality: "hd",
-    referenceImages: charRefImages,
-  });
 
-  // Generate last frame
   let lastFramePrompt = buildLastFramePrompt({
     sceneDescription: shot.prompt || "",
     endFrameDesc: endFrameDescText,
     characterDescriptions,
-    firstFramePath,
+    firstFramePath: "__PIPELINE_FIRST_FRAME__",  // placeholder — pipeline resolves internally
     slotContents: frameLastSlots,
   });
   if (compositionSuffix) lastFramePrompt += compositionSuffix;
+
+  // Scene prompt derived from first character name (same logic as atomic mode)
+  const scenePrompt = relevantChars.length > 0
+    ? `A scene with ${relevantChars[0].name}`
+    : "A scene with characters";
+
   const lastFramePath = await ai.generateImage(lastFramePrompt, {
     quality: "hd",
-    referenceImages: [firstFramePath, ...charRefImages],
+    referenceImages: charRefImages,
+    pipeline: "frame-generate",
+    pipelineParams: {
+      first_prompt: firstFramePrompt,
+      last_prompt: lastFramePrompt,
+      scene_prompt: scenePrompt,
+    },
   });
+
+  // Extract first frame from pipeline intermediates
+  const pipelineResult = (ai as any).lastPipelineResult;
+  const firstFramePath: string = pipelineResult?.intermediates?.gen_first_frame
+    ?? lastFramePath;  // fallback (should not happen)
 
   // Patch asset rows with the resulting file URLs (or insert if they didn't
   // exist yet — happens for shots whose keyframe asset prompts haven't been

@@ -19,7 +19,7 @@ import { ComfyUIClient } from './client'
 import { WorkflowRegistry } from './registry'
 import { AtomicWorkflowExecutor } from './executor'
 import { PipelineEngine } from '@/lib/pipeline-engine'
-import type { PipelineInputs } from '@/lib/pipeline-engine'
+import type { PipelineInputs, PipelineResult } from '@/lib/pipeline-engine'
 import type { AIProvider, ImageOptions, TextOptions } from '@/lib/ai/types'
 import type { VideoProvider, VideoGenerateParams, VideoGenerateResult } from '@/lib/ai/types'
 
@@ -45,6 +45,9 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
   private pipelineEngine: PipelineEngine | null = null
   private outputDir: string
   private initialized = false
+
+  /** Last pipeline execution result — callers can read intermediates from this */
+  lastPipelineResult: PipelineResult | null = null
 
   constructor(private config: ComfyUIProviderConfig) {
     this.client = new ComfyUIClient({ baseUrl: config.baseUrl })
@@ -120,9 +123,19 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       await this.ensureInitialized()
 
       try {
-        const result = await this.pipelineEngine.execute(options.pipeline, { prompt }, {
+        const pipelineInputs: PipelineInputs = {
+          prompt,
+          ...(options.referenceImages?.length
+            ? { referenceImages: options.referenceImages }
+            : {}),
+          ...(options.pipelineParams || {}),
+        }
+
+        const result = await this.pipelineEngine.execute(options.pipeline, pipelineInputs, {
           outputDir: this.outputDir,
         })
+
+        this.lastPipelineResult = result
 
         if (!result.primaryOutput) {
           throw new Error(`Pipeline '${options.pipeline}' produced no primary output`)

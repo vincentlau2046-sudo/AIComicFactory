@@ -16,6 +16,8 @@ export interface ImageOptions {
   referenceLabels?: string[];
   /** Pipeline ID for multi-step workflow orchestration (ComfyUIProvider only) */
   pipeline?: string;
+  /** Extra pipeline-specific parameters (e.g. first_prompt, last_prompt, seed) */
+  pipelineParams?: Record<string, unknown>;
 }
 
 export interface AIProvider {

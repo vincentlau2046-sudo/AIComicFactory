@@ -11,33 +11,38 @@
  */
 
 import type { AIProvider, ImageOptions, TextOptions } from './types'
+import type { PipelineResult } from '@/lib/pipeline-engine'
 
 const VL_MODEL = process.env.OPENAI_VL_MODEL || 'qwen3-vl-4b'
-const TEXT_MODEL = process.env.OPENAI_MODEL || 'deepseek-v4-flash'
 
 export class CompositeAIProvider implements AIProvider {
+  /** Last pipeline result from imageProvider — callers can read intermediates */
+  lastPipelineResult: PipelineResult | null = null
+
   constructor(
     private textProvider: AIProvider,
     private imageProvider: AIProvider,
-    private factory: (uploadDir?: string) => AIProvider,
+    private textFactory: (uploadDir?: string) => AIProvider,
     private imageFactory: (uploadDir?: string) => AIProvider,
   ) {}
 
   async generateText(prompt: string, options?: TextOptions): Promise<string> {
-    // When images provided, switch to VL model (IFF routes to correct backend)
-    // Both go through the same IFF proxy — just the model changes
     if (options?.images?.length) {
       return this.textProvider.generateText(prompt, {
         ...options,
         model: options.model || VL_MODEL,
       })
     }
-    // Pure text: default model (deepseek-v4-flash)
     return this.textProvider.generateText(prompt, options)
   }
 
   async generateImage(prompt: string, options?: ImageOptions): Promise<string> {
-    return this.imageProvider.generateImage(prompt, options)
+    const result = await this.imageProvider.generateImage(prompt, options)
+    // Propagate lastPipelineResult from ComfyUIProvider
+    if ('lastPipelineResult' in this.imageProvider) {
+      this.lastPipelineResult = (this.imageProvider as any).lastPipelineResult
+    }
+    return result
   }
 
   /** Factory for setDefaultAIProvider — creates fresh CompositeAIProvider with upload dir support */

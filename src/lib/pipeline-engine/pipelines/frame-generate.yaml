@@ -9,16 +9,11 @@ steps:
     workflow_id: qwen-2511-edit
     description: "基于场景描述和角色参考图生成首帧"
     inputs:
-      prompt: ${params.first_prompt}
-      image: ${params.referenceImages[0]}
-      seed: ${params.seed}
-      steps: 20
-      cfg: 3.0
+      composite_prompt: ${params.first_prompt}
+      scene_prompt: ${params.scene_prompt}
+      character_ref: ${params.referenceImages[0]}
     outputs:
       first_frame: ${outputs[0].localPath}
-    retry:
-      max: 2
-      delay: 2000
 
   - id: gen_last_frame
     type: atomic_workflow
@@ -26,17 +21,12 @@ steps:
     description: "基于首帧+角色参考生成尾帧"
     depends_on: [gen_first_frame]
     inputs:
-      prompt: ${params.last_prompt}
-      image: ${steps.gen_first_frame.outputs[0]}
-      image_2: ${params.referenceImages[1]}
-      seed: ${params.seed + 1}
-      steps: 20
-      cfg: 3.0
+      composite_prompt: ${params.last_prompt}
+      scene_prompt: ${params.scene_prompt}
+      character_ref_1: ${steps.gen_first_frame.outputs[0]}
+      character_ref_2: ${params.referenceImages[0]}
     outputs:
       last_frame: ${outputs[0].localPath}
-    retry:
-      max: 2
-      delay: 2000
 
 outputs:
   primary: ${steps.gen_last_frame.outputs[0]}
