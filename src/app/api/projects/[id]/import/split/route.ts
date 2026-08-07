@@ -84,7 +84,7 @@ export async function POST(
           model,
           system: scriptSplitSystem,
           prompt,
-          maxOutputTokens: 40000,
+          maxOutputTokens: 80000,
         });
 
         console.log(`[ImportSplit] Chunk ${idx + 1} LLM response (first 1500 chars):\n${result.text.slice(0, 1500)}`);

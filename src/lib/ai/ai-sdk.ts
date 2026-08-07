@@ -37,5 +37,9 @@ export function extractJSON(text: string): string {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const raw = match ? match[1].trim() : text.trim();
   // Remove control characters that break JSON.parse (except \n \r \t)
-  return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+  let result = raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+  // Sanitize invalid escape sequences (e.g. \x, \g) by removing the backslash
+  // Valid JSON escapes: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+  result = result.replace(/\\([^"\\\/bfnrtu])/g, "$1");
+  return result;
 }

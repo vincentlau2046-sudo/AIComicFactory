@@ -420,7 +420,7 @@ const SCRIPT_SPLIT_IDEA_REQUIREMENTS = `5. "idea"字段将作为独立AI剧本�
    - 逐字复制原文中属于本集的最重要段落、对白和描写——不要概括，保留原文措辞
    - 添加结构性注释：场景过渡、情感节拍、视觉亮点
    - 下游AI完全无法访问原始素材——它需要的一切都必须在此字段中
-   - 包含原文直接引用。`;
+   - 包含原文直接引用。每集最少800字。`;
 
 const SCRIPT_SPLIT_LANGUAGE_RULES = `【关键语言规则】所有输出字段（title、description、keywords、script）必须使用与原始素材相同的语言。中文输入 → 中文输出。英文输入 → 英文输出。`;
 

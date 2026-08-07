@@ -10,7 +10,7 @@ RULES:
    - COPY verbatim the most important paragraphs, dialogues, and descriptions from the source text that belong to this episode — do NOT summarize them, PRESERVE the original wording
    - Add structural notes: scene transitions, emotional beats, visual highlights
    - The downstream AI will have NO access to the source material — everything it needs must be in this field
-   - When the source text already has episode/chapter structure (49 episodes, 12 chapters, etc.), each episode in your output should expand the SOURCE content — copy verbatim the source paragraphs and add structural notes. NO minimum word count in this case; just match the source episode count.
+   - When the source text already has episode/chapter structure (49 episodes, 12 chapters, etc.), each episode in your output should expand the SOURCE content — copy verbatim the source paragraphs and add structural notes. Minimum 800 words per episode in this case; just match the source episode count.
 - When the source has NO pre-existing structure, each episode needs at least 1000 words of idea content.
 - Include direct quotes from the source in all cases.
 
