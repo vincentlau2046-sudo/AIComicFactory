@@ -2,7 +2,7 @@
 
 > v0.0.1 — 全功能本地化漫剧生成器
 
-从剧本到动画视频的**全自动本地流水线**。基于 [AI Comic Builder](https://github.com/twwch/AIComicBuilder) fork，将图像/视频生成从云端 API 迁移到本地 ComfyUI + vLLM + IFF Proxy。
+从剧本到动画视频的全自动本地流水线。
 
 ---
 
