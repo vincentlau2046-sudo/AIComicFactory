@@ -109,46 +109,53 @@ export async function POST(
 // LLM outputs structured text with markers instead of JSON.
 // This parser extracts fields losslessly and handles multi-line 剧情构思.
 
-const EPISODE_SEP = /^=== (?:分集|Episode) \d+ ===$/m;
-const FIELD_TITLE = /^标题: (.+)/m;
-const FIELD_DESC = /^描述: (.+)/m;
-const FIELD_KW = /^关键词: (.+)/m;
-const FIELD_CHARS = /^角色: (.+)/m;
-const FIELD_IDEA_LABEL = /^剧情构思:/m;
+// Field regexes accept both half-width : and full-width ：(common LLM variation)
+const EPISODE_SEP = /^=== (?:分集|Episode|episode|EPISODE) \d+ ===\r?$/m;
+const FIELD_TITLE = /^\u6807\u9898[\uFF1A:] (.+)/m;
+const FIELD_DESC = /^\u63cf\u8ff0[\uFF1A:] (.+)/m;
+const FIELD_KW = /^\u5173\u952e\u8bcd[\uFF1A:] (.+)/m;
+const FIELD_CHARS = /^\u89d2\u8272[\uFF1A:] (.+)/m;
+const FIELD_IDEA_LABEL = /^\u5267\u60c5\u6784\u601d[\uFF1A:]/m;
 
 function parseSplitText(text: string): SplitEpisode[] {
   const episodes: SplitEpisode[] = [];
 
+  // Normalize: replace CRLF with LF, full-width colon with half-width
+  let normalized = text.replace(/\r\n/g, "\n").replace(/\uff1a/g, ":");
+
   // Split by episode markers
-  const blocks = text.split(EPISODE_SEP);
+  const blocks = normalized.split(EPISODE_SEP);
 
   for (const block of blocks) {
     const trimmed = block.trim();
     if (!trimmed) continue;
 
-    const title = trimmed.match(FIELD_TITLE)?.[1]?.trim();
-    // Skip blocks that don't look like episode data (pre-amble, etc.)
-    if (!title) continue;
+    // Find the header portion: everything before 剧情构思: label
+    // This prevents idea content from polluting field regex matches.
+    const ideaMatch = trimmed.match(FIELD_IDEA_LABEL);
+    const header = ideaMatch ? trimmed.slice(0, ideaMatch.index!).trim() : trimmed;
+    const idea = ideaMatch
+      ? trimmed.slice(ideaMatch.index! + ideaMatch[0].length).trim()
+      : "";
 
-    const description = trimmed.match(FIELD_DESC)?.[1]?.trim() ?? "";
-    const keywords = trimmed.match(FIELD_KW)?.[1]?.trim() ?? "";
+    // Only extract single-line fields from the header (not from idea content)
+    const title = header.match(FIELD_TITLE)?.[1]?.trim();
+    if (!title) continue;  // Skip blocks that don't look like episode data
+
+    const description = header.match(FIELD_DESC)?.[1]?.trim() ?? "";
+    const keywords = header.match(FIELD_KW)?.[1]?.trim() ?? "";
 
     // characters is comma-separated on one line
-    const charsLine = trimmed.match(FIELD_CHARS)?.[1];
+    const charsLine = header.match(FIELD_CHARS)?.[1];
     const characters = charsLine
-      ? charsLine.split(/,\s*/).filter(Boolean)
+      ? charsLine.split(/[,，]\s*/).filter(Boolean)
       : undefined;
 
-    // 剧情构思: everything after the label until end of block
-    const ideaMatch = trimmed.match(FIELD_IDEA_LABEL);
-    let idea = "";
-    if (ideaMatch) {
-      idea = trimmed.slice(ideaMatch.index! + ideaMatch[0].length).trim();
-      // Remove trailing whitespace lines
-      idea = idea.replace(/\s+$/, "");
-    }
-
     episodes.push({ title, description, keywords, idea, characters });
+  }
+
+  if (episodes.length === 0) {
+    console.error(`[ImportSplit] parseSplitText produced 0 episodes. Raw:\n${text.slice(0, 500)}...`);
   }
 
   return episodes;
