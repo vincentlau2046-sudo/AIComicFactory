@@ -25,6 +25,7 @@ export async function handleCharacterImage(task: Task) {
     size: "2560x1440",
     aspectRatio: "16:9",
     quality: "hd",
+    pipeline: "character-image",
   });
 
   await db

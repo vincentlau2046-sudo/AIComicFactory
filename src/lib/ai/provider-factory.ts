@@ -7,6 +7,7 @@ import { KlingVideoProvider } from "./providers/kling-video";
 import { WanVideoProvider } from "./providers/wan-video";
 import { UCloudSeedanceProvider } from "./providers/ucloud-seedance";
 import { DashScopeImageProvider } from "./providers/dashscope-image";
+import { ComfyUIProvider } from "@/lib/comfyui";
 import { getAIProvider, getVideoProvider } from "./index";
 import type { AIProvider, VideoProvider } from "./types";
 
@@ -55,6 +56,12 @@ export function createAIProvider(config: ProviderConfig, uploadDir?: string): AI
         model: config.modelId,
         ...(uploadDir && { uploadDir }),
       });
+    case "comfyui":
+      return new ComfyUIProvider({
+        baseUrl: config.baseUrl,
+        workflowsDir: config.modelId || process.env.COMFYUI_WORKFLOWS_DIR || "/home/vince/ComfyUI/workflows/AIComicFactory/atomic",
+        outputDir: uploadDir || config.apiKey || undefined,
+      });
     default:
       throw new Error(`Unsupported AI protocol: ${config.protocol}`);
   }
@@ -97,6 +104,12 @@ export function createVideoProvider(config: ProviderConfig, uploadDir?: string):
         baseUrl: config.baseUrl,
         model: config.modelId,
         ...(uploadDir && { uploadDir }),
+      });
+    case "comfyui":
+      return new ComfyUIProvider({
+        baseUrl: config.baseUrl,
+        workflowsDir: config.modelId || process.env.COMFYUI_WORKFLOWS_DIR || "/home/vince/ComfyUI/workflows/AIComicFactory/atomic",
+        outputDir: uploadDir || config.apiKey || undefined,
       });
     default:
       throw new Error(`Unsupported video protocol: ${config.protocol}`);

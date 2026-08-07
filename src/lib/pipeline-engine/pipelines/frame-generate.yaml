@@ -1,0 +1,45 @@
+id: frame-generate
+display_name: "帧生成管线"
+description: "首帧(带角色参考) → 尾帧(带首帧+角色参考)"
+version: "1.0"
+
+steps:
+  - id: gen_first_frame
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit
+    description: "基于场景描述和角色参考图生成首帧"
+    inputs:
+      prompt: ${params.first_prompt}
+      image: ${params.referenceImages[0]}
+      seed: ${params.seed}
+      steps: 20
+      cfg: 3.0
+    outputs:
+      first_frame: ${outputs[0].localPath}
+    retry:
+      max: 2
+      delay: 2000
+
+  - id: gen_last_frame
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit-plus
+    description: "基于首帧+角色参考生成尾帧"
+    depends_on: [gen_first_frame]
+    inputs:
+      prompt: ${params.last_prompt}
+      image: ${steps.gen_first_frame.outputs[0]}
+      image_2: ${params.referenceImages[1]}
+      seed: ${params.seed + 1}
+      steps: 20
+      cfg: 3.0
+    outputs:
+      last_frame: ${outputs[0].localPath}
+    retry:
+      max: 2
+      delay: 2000
+
+outputs:
+  primary: ${steps.gen_last_frame.outputs[0]}
+  intermediates:
+    first_frame: ${steps.gen_first_frame.outputs[0]}
+    last_frame: ${steps.gen_last_frame.outputs[0]}

@@ -14,6 +14,8 @@ export interface ImageOptions {
   referenceImages?: string[];
   /** Labels for reference images, e.g. character names. Must match referenceImages order. */
   referenceLabels?: string[];
+  /** Pipeline ID for multi-step workflow orchestration (ComfyUIProvider only) */
+  pipeline?: string;
 }
 
 export interface AIProvider {
