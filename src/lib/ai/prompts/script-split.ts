@@ -12,6 +12,8 @@ RULES:
    - The downstream AI will have NO access to the source material — everything it needs must be in this field
    - Minimum 1000 words per episode. Longer is better. Include direct quotes from the source.
 
+6. PRESERVE existing episode structure in the source text. If the text already has chapter markers (e.g. ## 第一集, === 分集 1 ===, Chapter 1, Episode 1, etc.), keep those same boundaries in your output — do NOT merge or re-split them. Your episode count should match the existing structure. Only create a new narrative split when the source text has NO pre-existing episode or chapter markers.
+
 CRITICAL LANGUAGE RULE: ALL output fields (title, description, keywords, script) MUST be in the SAME LANGUAGE as the source material. Chinese input → Chinese output. English input → English output.
 
 OUTPUT FORMAT — structured text with field labels. No JSON, no markdown fences, no commentary:
