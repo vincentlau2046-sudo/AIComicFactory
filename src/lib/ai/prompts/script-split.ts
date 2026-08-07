@@ -14,16 +14,25 @@ RULES:
 
 CRITICAL LANGUAGE RULE: ALL output fields (title, description, keywords, script) MUST be in the SAME LANGUAGE as the source material. Chinese input → Chinese output. English input → English output.
 
-OUTPUT FORMAT — JSON array only, no markdown fences, no commentary:
-[
-  {
-    "title": "Episode title",
-    "description": "Brief plot summary for this episode",
-    "keywords": "keyword1, keyword2, keyword3",
-    "idea": "1) List all characters in this episode with roles. 2) COPY the key paragraphs and dialogues from the source text verbatim — preserve original wording, do not summarize. 3) Add scene transition notes and emotional beat markers. Minimum 1000 words. The downstream screenplay generator has NO access to the source — this field is its only reference.",
-    "characters": ["character name 1", "character name 2"]
-  }
-]
+OUTPUT FORMAT — structured text with field labels. No JSON, no markdown fences, no commentary:
+
+=== 分集 1 ===
+标题: Episode title
+描述: Brief plot summary for this episode
+关键词: keyword1, keyword2, keyword3
+角色: character name 1, character name 2
+剧情构思:
+1) List all characters in this episode with roles. 2) COPY the key paragraphs and dialogues from the source text verbatim — preserve original wording, do not summarize. 3) Add scene transition notes and emotional beat markers. Minimum 1000 words. The downstream screenplay generator has NO access to the source — this field is its only reference.
+
+=== 分集 2 ===
+标题: ...
+描述: ...
+关键词: ...
+角色: ...
+剧情构思:
+...
+
+IMPORTANT: Single-line fields (标题, 描述, 关键词, 角色) must each be on ONE line. The 剧情构思 field starts after the label line and continues until the next === 分集 === separator — it can be multiple paragraphs.
 
 ═══ EPISODE CHARACTERS ═══
 You will be given a full list of extracted characters. For each episode, list ALL character names (both main and supporting) who actually appear in that specific episode. Use exact names as provided. Do NOT include every character in every episode — only those who genuinely appear, speak, or are directly involved in that episode's plot.`;
@@ -47,5 +56,5 @@ export function buildScriptSplitPrompt(
 ${scriptChunk}
 --- END ---
 
-Return ONLY the JSON array. No markdown. No commentary.`;
+Output in structured text format with === 分集 N === markers. No JSON. No markdown fencing. No commentary.`;
 }

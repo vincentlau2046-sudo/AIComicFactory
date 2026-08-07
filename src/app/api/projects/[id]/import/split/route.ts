@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateText } from "ai";
-import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
+import { createLanguageModel } from "@/lib/ai/ai-sdk";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
 import { projects } from "@/lib/db/schema";
@@ -80,32 +80,13 @@ export async function POST(
           { chunkIndex: idx, totalChunks: chunks.length, episodeOffset: 0 }
         );
 
-        const jsonMode = {
-          openai: { response_format: { type: "json_object" } },
-        };
         const result = await generateText({
           model,
           system: scriptSplitSystem,
           prompt,
-          providerOptions: jsonMode,
         });
 
-        try {
-          return JSON.parse(extractJSON(result.text)) as SplitEpisode[];
-        } catch {
-          console.error(`[ImportSplit] Chunk ${idx + 1} JSON parse failed. Raw output:\n${result.text.slice(0, 500)}...`);
-          await addImportLog(
-            projectId, 3, "running",
-            `第 ${idx + 1} 块 JSON 解析失败，正在重试...`
-          );
-          const retry = await generateText({
-            model,
-            system: scriptSplitSystem,
-            prompt: prompt + "\n\nIMPORTANT: Return COMPLETE, VALID JSON. Fewer episodes is better than broken JSON.",
-            providerOptions: jsonMode,
-          });
-          return JSON.parse(extractJSON(retry.text)) as SplitEpisode[];
-        }
+        return parseSplitText(result.text);
       })
     );
     allEpisodes = chunkResults.flat();
@@ -122,4 +103,53 @@ export async function POST(
   );
 
   return NextResponse.json({ episodes: allEpisodes });
+}
+
+// ── Deterministic text parser — replaces JSON mode for robustness ──
+// LLM outputs structured text with markers instead of JSON.
+// This parser extracts fields losslessly and handles multi-line 剧情构思.
+
+const EPISODE_SEP = /^=== (?:分集|Episode) \d+ ===$/m;
+const FIELD_TITLE = /^标题: (.+)/m;
+const FIELD_DESC = /^描述: (.+)/m;
+const FIELD_KW = /^关键词: (.+)/m;
+const FIELD_CHARS = /^角色: (.+)/m;
+const FIELD_IDEA_LABEL = /^剧情构思:/m;
+
+function parseSplitText(text: string): SplitEpisode[] {
+  const episodes: SplitEpisode[] = [];
+
+  // Split by episode markers
+  const blocks = text.split(EPISODE_SEP);
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+
+    const title = trimmed.match(FIELD_TITLE)?.[1]?.trim();
+    // Skip blocks that don't look like episode data (pre-amble, etc.)
+    if (!title) continue;
+
+    const description = trimmed.match(FIELD_DESC)?.[1]?.trim() ?? "";
+    const keywords = trimmed.match(FIELD_KW)?.[1]?.trim() ?? "";
+
+    // characters is comma-separated on one line
+    const charsLine = trimmed.match(FIELD_CHARS)?.[1];
+    const characters = charsLine
+      ? charsLine.split(/,\s*/).filter(Boolean)
+      : undefined;
+
+    // 剧情构思: everything after the label until end of block
+    const ideaMatch = trimmed.match(FIELD_IDEA_LABEL);
+    let idea = "";
+    if (ideaMatch) {
+      idea = trimmed.slice(ideaMatch.index! + ideaMatch[0].length).trim();
+      // Remove trailing whitespace lines
+      idea = idea.replace(/\s+$/, "");
+    }
+
+    episodes.push({ title, description, keywords, idea, characters });
+  }
+
+  return episodes;
 }
