@@ -370,9 +370,9 @@ export default function ImportPage({
   };
 
   // Show characters review after step 2 done + step 3 idle
-  const showCharReview = stepStatus[2] === "done" && stepStatus[3] === "idle" && !historyMode;
+  const showCharReview = stepStatus[2] === "done" && stepStatus[3] === "idle";
   // Show episodes review after step 3 done + step 4 idle
-  const showEpReview = stepStatus[3] === "done" && stepStatus[4] === "idle" && !historyMode;
+  const showEpReview = stepStatus[3] === "done" && stepStatus[4] === "idle";
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
@@ -656,8 +656,8 @@ export default function ImportPage({
 
               <div className="rounded-xl border border-[--border-subtle] bg-white p-4">
                 <div className="max-h-[30vh] space-y-1.5 overflow-y-auto font-mono text-xs">
-                  {filteredLogs.map((log) => (
-                    <div key={log.id} className="flex items-start gap-2">
+                  {filteredLogs.map((log, idx) => (
+                    <div key={idx} className="flex items-start gap-2">
                       <span
                         className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${
                           log.status === "done"
