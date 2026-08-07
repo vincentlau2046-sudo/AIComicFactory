@@ -149,8 +149,10 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       }
     }
 
-    // Atomic mode: single workflow
-    await this.ensureInitialized()
+    // Pipeline mode requested but engine not configured
+    if (options?.pipeline && !this.pipelineEngine) {
+      console.warn(`[ComfyUIProvider] Pipeline '${options.pipeline}' requested but pipeline engine not configured (missing pipelinesDir). Falling back to atomic mode.`)
+    }
 
     const refImages = options?.referenceImages || []
 

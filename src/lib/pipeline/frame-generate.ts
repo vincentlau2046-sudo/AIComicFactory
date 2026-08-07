@@ -159,45 +159,83 @@ export async function handleFrameGenerate(task: Task) {
     ? (await getActiveAsset(previousShot.id, "last_frame", 0))?.fileUrl ?? undefined
     : undefined;
 
-  // Generate first frame + last frame via pipeline (single orchestrated call)
-  let firstFramePrompt = buildFirstFramePrompt({
-    sceneDescription: shot.prompt || "",
-    startFrameDesc: startFrameDescText,
-    characterDescriptions,
-    previousLastFrame: prevLastFrameUrl ?? undefined,
-    slotContents: frameFirstSlots,
-  });
-  if (compositionSuffix) firstFramePrompt += compositionSuffix;
+  // ─── Generate frames ───────────────────────────────────
+  let firstFramePath: string;
+  let lastFramePath: string;
 
-  let lastFramePrompt = buildLastFramePrompt({
-    sceneDescription: shot.prompt || "",
-    endFrameDesc: endFrameDescText,
-    characterDescriptions,
-    firstFramePath: "__PIPELINE_FIRST_FRAME__",  // placeholder — pipeline resolves internally
-    slotContents: frameLastSlots,
-  });
-  if (compositionSuffix) lastFramePrompt += compositionSuffix;
+  try {
+    if (charRefImages.length === 0) {
+      // No character refs — fallback to atomic T2I (pipeline requires refs)
+      let firstFramePrompt = buildFirstFramePrompt({
+        sceneDescription: shot.prompt || "",
+        startFrameDesc: startFrameDescText,
+        characterDescriptions,
+        previousLastFrame: prevLastFrameUrl ?? undefined,
+        slotContents: frameFirstSlots,
+      });
+      if (compositionSuffix) firstFramePrompt += compositionSuffix;
+      firstFramePath = await ai.generateImage(firstFramePrompt, { quality: "hd" });
 
-  // Scene prompt derived from first character name (same logic as atomic mode)
-  const scenePrompt = relevantChars.length > 0
-    ? `A scene with ${relevantChars[0].name}`
-    : "A scene with characters";
+      let lastFramePrompt = buildLastFramePrompt({
+        sceneDescription: shot.prompt || "",
+        endFrameDesc: endFrameDescText,
+        characterDescriptions,
+        firstFramePath,
+        slotContents: frameLastSlots,
+      });
+      if (compositionSuffix) lastFramePrompt += compositionSuffix;
+      lastFramePath = await ai.generateImage(lastFramePrompt, {
+        quality: "hd",
+        referenceImages: [firstFramePath],
+      });
+    } else {
+      // Pipeline mode: single orchestrated call generates both frames
+      let firstFramePrompt = buildFirstFramePrompt({
+        sceneDescription: shot.prompt || "",
+        startFrameDesc: startFrameDescText,
+        characterDescriptions,
+        previousLastFrame: prevLastFrameUrl ?? undefined,
+        slotContents: frameFirstSlots,
+      });
+      if (compositionSuffix) firstFramePrompt += compositionSuffix;
 
-  const lastFramePath = await ai.generateImage(lastFramePrompt, {
-    quality: "hd",
-    referenceImages: charRefImages,
-    pipeline: "frame-generate",
-    pipelineParams: {
-      first_prompt: firstFramePrompt,
-      last_prompt: lastFramePrompt,
-      scene_prompt: scenePrompt,
-    },
-  });
+      let lastFramePrompt = buildLastFramePrompt({
+        sceneDescription: shot.prompt || "",
+        endFrameDesc: endFrameDescText,
+        characterDescriptions,
+        firstFramePath: "",  // not needed — pipeline passes first frame as image
+        slotContents: frameLastSlots,
+      });
+      if (compositionSuffix) lastFramePrompt += compositionSuffix;
 
-  // Extract first frame from pipeline intermediates
-  const pipelineResult = (ai as any).lastPipelineResult;
-  const firstFramePath: string = pipelineResult?.intermediates?.gen_first_frame
-    ?? lastFramePath;  // fallback (should not happen)
+      const scenePrompt = relevantChars.length > 0
+        ? `A scene with ${relevantChars[0].name}`
+        : "A scene with characters";
+
+      lastFramePath = await ai.generateImage(lastFramePrompt, {
+        quality: "hd",
+        referenceImages: charRefImages,
+        pipeline: "frame-generate",
+        pipelineParams: {
+          first_prompt: firstFramePrompt,
+          last_prompt: lastFramePrompt,
+          scene_prompt: scenePrompt,
+        },
+      });
+
+      // Extract first frame from pipeline intermediates
+      const pipelineResult = 'lastPipelineResult' in ai
+        ? (ai as any).lastPipelineResult
+        : undefined;
+      firstFramePath = pipelineResult?.intermediates?.gen_first_frame;
+      if (!firstFramePath) {
+        throw new Error(`Pipeline produced no first frame intermediate: gen_first_frame not found in pipeline result`);
+      }
+    }
+  } catch (err) {
+    await db.update(shots).set({ status: "failed" }).where(eq(shots.id, payload.shotId));
+    throw err;
+  }
 
   // Patch asset rows with the resulting file URLs (or insert if they didn't
   // exist yet — happens for shots whose keyframe asset prompts haven't been
