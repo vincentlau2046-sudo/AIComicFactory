@@ -9,6 +9,7 @@ import { UCloudSeedanceProvider } from "./providers/ucloud-seedance";
 import { DashScopeImageProvider } from "./providers/dashscope-image";
 import { ComfyUIProvider } from "@/lib/comfyui";
 import { getAIProvider, getVideoProvider } from "./index";
+import path from 'node:path';
 import type { AIProvider, VideoProvider } from "./types";
 
 interface ProviderConfig {
@@ -60,6 +61,7 @@ export function createAIProvider(config: ProviderConfig, uploadDir?: string): AI
       return new ComfyUIProvider({
         baseUrl: config.baseUrl,
         workflowsDir: config.modelId || process.env.COMFYUI_WORKFLOWS_DIR || "/home/vince/ComfyUI/workflows/AIComicFactory/atomic",
+        pipelinesDir: path.join(process.cwd(), 'src', 'lib', 'pipeline-engine', 'pipelines'),
         outputDir: uploadDir || config.apiKey || undefined,
       });
     default:
@@ -109,6 +111,7 @@ export function createVideoProvider(config: ProviderConfig, uploadDir?: string):
       return new ComfyUIProvider({
         baseUrl: config.baseUrl,
         workflowsDir: config.modelId || process.env.COMFYUI_WORKFLOWS_DIR || "/home/vince/ComfyUI/workflows/AIComicFactory/atomic",
+        pipelinesDir: path.join(process.cwd(), 'src', 'lib', 'pipeline-engine', 'pipelines'),
         outputDir: uploadDir || config.apiKey || undefined,
       });
     default:

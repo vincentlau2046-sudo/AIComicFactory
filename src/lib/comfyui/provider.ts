@@ -53,7 +53,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     this.client = new ComfyUIClient({ baseUrl: config.baseUrl })
     this.registry = new WorkflowRegistry()
     this.executor = new AtomicWorkflowExecutor(this.client, this.registry)
-    this.outputDir = config.outputDir || process.env.OUTPUT_DIR || './outputs'
+    this.outputDir = path.resolve(config.outputDir || process.env.OUTPUT_DIR || './outputs')
 
     // Lazy-init pipeline engine if pipelines dir is configured
     if (config.pipelinesDir) {
@@ -118,7 +118,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
    *   Workflow selection by reference image count.
    */
   async generateImage(prompt: string, options?: ImageOptions): Promise<string> {
-    // Pipeline mode: multi-step orchestration
+    await this.ensureInitialized()
     if (options?.pipeline && this.pipelineEngine) {
       await this.ensureInitialized()
 
@@ -129,6 +129,15 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             ? { referenceImages: options.referenceImages }
             : {}),
           ...(options.pipelineParams || {}),
+          ...(options.size ? (() => {
+            const parts = options.size!.split('x');
+            if (parts.length === 2) {
+              const w = parseInt(parts[0], 10);
+              const h = parseInt(parts[1], 10);
+              return { width: w, height: h };
+            }
+            return {};
+          })() : {}),
         }
 
         const result = await this.pipelineEngine.execute(options.pipeline, pipelineInputs, {
@@ -160,18 +169,15 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     const inputs: Record<string, string | number | undefined> = { prompt }
 
     if (refImages.length === 0) {
+      // 0 ref → 纯文生图，不引入随机人物
       workflowId = 'qwen-2512-t2i'
-    } else if (refImages.length === 1) {
-      workflowId = 'qwen-2511-edit-scene-composite'
-      // 2511-edit uses two prompts: scene_prompt and composite_prompt
-      // When called via the generic generateImage interface, treat prompt as composite and auto-generate scene
-      inputs.composite_prompt = prompt
-      inputs.scene_prompt = `A scene with ${path.basename(refImages[0], path.extname(refImages[0]))}`
-      inputs.character_ref = refImages[0]
     } else {
+      // ≥1 ref → edit-plus，带角色参考图合成
       workflowId = 'qwen-2511-edit-plus'
       inputs.composite_prompt = prompt
-      inputs.scene_prompt = `A scene with multiple characters`
+      inputs.scene_prompt = refImages.length === 1
+        ? `A scene with ${path.basename(refImages[0], path.extname(refImages[0]))}`
+        : `A scene with multiple characters`
       for (let i = 0; i < Math.min(refImages.length, 3); i++) {
         inputs[`character_ref_${i + 1}`] = refImages[i]
       }

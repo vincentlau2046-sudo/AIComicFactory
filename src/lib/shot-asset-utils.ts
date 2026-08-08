@@ -12,6 +12,8 @@
 import { db } from "@/lib/db";
 import { shotAssets } from "@/lib/db/schema";
 import { and, eq, desc } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
 import { id as genId } from "@/lib/id";
 
 export type ShotAssetType =
@@ -399,4 +401,18 @@ export async function loadShotLegacyViewsBatch(
     });
   }
   return result;
+}
+
+/**
+ * Copy a generated file to the uploads directory for browser serving.
+ * Detects source extension (e.g. .png, .jpg, .webp) to avoid hardcoding.
+ * Returns the destination path.
+ */
+export function copyToUploads(srcPath: string, baseName: string): string {
+  const ext = path.extname(srcPath) || ".png";
+  const uploadsDir = process.env.UPLOAD_DIR || "./uploads";
+  const destPath = path.join(uploadsDir, genId(), `${baseName}${ext}`);
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  fs.copyFileSync(srcPath, destPath);
+  return destPath;
 }
