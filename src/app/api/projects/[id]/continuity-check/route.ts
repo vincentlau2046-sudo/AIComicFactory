@@ -1,11 +1,12 @@
-import { db } from "@/lib/db";
-import { shots } from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
-import { NextResponse } from "next/server";
-import { checkContinuity } from "@/lib/pipeline/continuity-check";
-import { resolveAIProvider } from "@/lib/ai/provider-factory";
-import { loadShotLegacyViewsBatch } from "@/lib/shot-asset-utils";
-import { assertProjectOwnership } from "@/lib/assert-project-ownership";
+import { db } from '@/lib/db'
+import { shots } from '@/lib/db/schema'
+import { eq, asc } from 'drizzle-orm'
+import { NextResponse } from 'next/server'
+import { checkContinuity } from '@/lib/pipeline/continuity-check'
+import { resolveAIProvider } from '@/lib/ai/provider-factory'
+import { loadShotLegacyViewsBatch } from '@/lib/shot-asset-utils'
+import { assertProjectOwnership } from '@/lib/assert-project-ownership'
+import { RetryStrategy } from '@/lib/retry'
 
 export async function POST(
   req: Request,
@@ -37,7 +38,8 @@ export async function POST(
     return NextResponse.json({ results: [], message: "Need at least 2 shots with frames" });
   }
 
-  const provider = resolveAIProvider(body.modelConfig);
+  const provider = resolveAIProvider(body.modelConfig)
+  const retryStrategy = new RetryStrategy({ maxRetries: 2, baseDelay: 1000, jitter: true })
 
   const results: {
     shotASequence: number;
@@ -51,11 +53,13 @@ export async function POST(
     const next = shotsWithFrames[i + 1];
 
     if (current.lastFrame && next.firstFrame) {
-      const result = await checkContinuity(
-        provider,
-        current.lastFrame,
-        next.firstFrame
-      );
+      const result = await retryStrategy.execute(async () => {
+        return checkContinuity(
+          provider,
+          current.lastFrame!,
+          next.firstFrame!,
+        )
+      })
       results.push({
         shotASequence: current.sequence,
         shotBSequence: next.sequence,
