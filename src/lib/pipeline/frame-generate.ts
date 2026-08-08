@@ -9,7 +9,8 @@ import {
 import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { eq, and, lt, desc } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
-import { getActiveAsset, insertAssetVersion, patchAsset } from "@/lib/shot-asset-utils";
+import { getActiveAsset, insertAssetVersion, patchAsset, copyToUploads } from "@/lib/shot-asset-utils";
+import { ratioToSize } from "@/lib/ai/size";
 
 export async function handleFrameGenerate(task: Task) {
   const payload = task.payload as {
@@ -17,7 +18,9 @@ export async function handleFrameGenerate(task: Task) {
     projectId: string;
     userId?: string;
     modelConfig?: ModelConfigPayload;
+    ratio?: string;
   };
+  const frameSize = ratioToSize(payload.ratio);
 
   const [shot] = await db
     .select()
@@ -174,7 +177,7 @@ export async function handleFrameGenerate(task: Task) {
         slotContents: frameFirstSlots,
       });
       if (compositionSuffix) firstFramePrompt += compositionSuffix;
-      firstFramePath = await ai.generateImage(firstFramePrompt, { quality: "hd" });
+      firstFramePath = await ai.generateImage(firstFramePrompt, { quality: "hd", size: frameSize });
 
       let lastFramePrompt = buildLastFramePrompt({
         sceneDescription: shot.prompt || "",
@@ -186,6 +189,7 @@ export async function handleFrameGenerate(task: Task) {
       if (compositionSuffix) lastFramePrompt += compositionSuffix;
       lastFramePath = await ai.generateImage(lastFramePrompt, {
         quality: "hd",
+        size: frameSize,
         referenceImages: [firstFramePath],
       });
     } else {
@@ -214,12 +218,14 @@ export async function handleFrameGenerate(task: Task) {
 
       lastFramePath = await ai.generateImage(lastFramePrompt, {
         quality: "hd",
+        size: frameSize,
         referenceImages: charRefImages,
         pipeline: "frame-generate",
         pipelineParams: {
           first_prompt: firstFramePrompt,
           last_prompt: lastFramePrompt,
           scene_prompt: scenePrompt,
+          seed: shot.sequence,
         },
       });
 
@@ -231,6 +237,10 @@ export async function handleFrameGenerate(task: Task) {
       if (!firstFramePath) {
         throw new Error(`Pipeline produced no first frame intermediate: gen_first_frame not found in pipeline result`);
       }
+
+      // Copy to uploads for browser serving
+      firstFramePath = copyToUploads(firstFramePath, 'first_frame');
+      lastFramePath = copyToUploads(lastFramePath, 'last_frame');
     }
   } catch (err) {
     await db.update(shots).set({ status: "failed" }).where(eq(shots.id, payload.shotId));

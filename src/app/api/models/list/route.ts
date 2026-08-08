@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import fs from 'node:fs';
 
 interface ListRequest {
   protocol: string;
@@ -115,6 +116,22 @@ export async function POST(request: Request) {
           { id: "qwen-image-max", name: "Qwen Image Max" },
           { id: "qwen-image-plus", name: "Qwen Image Plus" },
           { id: "z-image-turbo", name: "Z-Image Turbo" },
+        ],
+      });
+    }
+
+    if (body.protocol === "comfyui") {
+      const workflowsDir = process.env.COMFYUI_WORKFLOWS_DIR || "/home/vince/ComfyUI/workflows/AIComicFactory/atomic";
+      let workflowCount = 0;
+      try {
+        if (fs.existsSync(workflowsDir)) {
+          const entries = fs.readdirSync(workflowsDir, { withFileTypes: true });
+          workflowCount = entries.filter(e => e.name.endsWith(".meta.yaml")).length;
+        }
+      } catch {}
+      return NextResponse.json({
+        models: [
+          { id: workflowsDir, name: `原子工作流目录 (含 ${workflowCount} 个 workflows)` },
         ],
       });
     }

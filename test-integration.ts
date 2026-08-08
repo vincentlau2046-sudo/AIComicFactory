@@ -87,8 +87,9 @@ async function main() {
     console.log(`   seed: ${result.seed}`)
     console.log(`   outputs: ${result.outputs.length}`)
     for (const o of result.outputs) {
-      console.log(`     📄 ${o.type}: ${o.localPath} (${fs.statSync(o.localPath).size} bytes)`)
-      globalThis.testImagePath = o.localPath
+      const fileSize = fs.statSync(o.localPath).size
+      console.log(`     📄 ${o.type}: ${o.localPath} (${fileSize} bytes)`)
+      (globalThis as any).testImagePath = o.localPath
     }
     if (result.status === 'success' && result.outputs.length > 0) {
       console.log('   ✅ PASS')

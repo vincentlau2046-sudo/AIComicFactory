@@ -15,6 +15,7 @@ import { assertProjectOwnership } from '@/lib/assert-project-ownership'
 import { resolveImageProvider } from '@/lib/ai/provider-factory'
 import { RetryStrategy } from '@/lib/retry'
 import { id as genId } from '@/lib/id'
+import { ratioToSize } from '@/lib/ai/size'
 
 export async function POST(
   request: Request,
@@ -39,12 +40,15 @@ export async function POST(
 
   const body = (await request.json()) as {
     prompt: string
+    ratio?: string
     modelConfig?: import('@/lib/ai/provider-factory').ModelConfigPayload
   }
 
   if (!body.prompt) {
     return NextResponse.json({ error: 'No prompt provided' }, { status: 400 })
   }
+
+  const size = ratioToSize(body.ratio)
 
   const runId = genId()
   const startedAt = new Date().toISOString()
@@ -81,7 +85,7 @@ export async function POST(
     })
 
     const imagePath = await strategy.execute(async () => {
-      return ai.generateImage(body.prompt)
+      return ai.generateImage(body.prompt, { size })
     })
 
     // Mark success
