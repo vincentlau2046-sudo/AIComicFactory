@@ -22,6 +22,8 @@ export interface ClientOptions {
   defaultTimeout?: number
   pollInterval?: number
   maxRetries?: number
+  /** Total timeout for reconnection attempts (ms, default: 60000 = 60s) */
+  reconnectTimeout?: number
 }
 
 const DEFAULTS = {
@@ -29,6 +31,7 @@ const DEFAULTS = {
   defaultTimeout: 300_000, // 5 min
   pollInterval: 500,
   maxRetries: 3,
+  reconnectTimeout: 60_000, // 60s
 }
 
 export class ComfyUIClient {
@@ -36,18 +39,97 @@ export class ComfyUIClient {
   private defaultTimeout: number
   private pollInterval: number
   private maxRetries: number
+  private reconnectTimeout: number
+
+  /** Track connection health state */
+  private isHealthy: boolean = true
+  private reconnecting: boolean = false
+  private healthCheckInFlight: Promise<boolean> | null = null
 
   constructor(opts?: ClientOptions) {
     this.baseUrl = (opts?.baseUrl || DEFAULTS.baseUrl).replace(/\/+$/, '')
     this.defaultTimeout = opts?.defaultTimeout ?? DEFAULTS.defaultTimeout
     this.pollInterval = opts?.pollInterval ?? DEFAULTS.pollInterval
     this.maxRetries = opts?.maxRetries ?? DEFAULTS.maxRetries
+    this.reconnectTimeout = opts?.reconnectTimeout ?? DEFAULTS.reconnectTimeout
+  }
+
+  /**
+   * Ensure ComfyUI is connected and healthy.
+   * Returns true if healthy, false if not reachable.
+   * Caches concurrent calls to avoid duplicate health checks.
+   */
+  async ensureConnected(): Promise<boolean> {
+    if (this.isHealthy) return true
+    return this.reconnect()
+  }
+
+  /**
+   * Attempt to reconnect to ComfyUI with backoff.
+   * Sets isHealthy based on success.
+   */
+  async reconnect(): Promise<boolean> {
+    // Deduplicate concurrent reconnect attempts
+    if (this.reconnecting && this.healthCheckInFlight) {
+      return this.healthCheckInFlight
+    }
+
+    this.reconnecting = true
+    this.healthCheckInFlight = this._doReconnect()
+
+    try {
+      const result = await this.healthCheckInFlight
+      return result
+    } finally {
+      this.reconnecting = false
+      this.healthCheckInFlight = null
+    }
+  }
+
+  private async _doReconnect(): Promise<boolean> {
+    const deadline = Date.now() + this.reconnectTimeout
+    let attempt = 0
+
+    while (Date.now() < deadline) {
+      attempt++
+      try {
+        const ok = await this.healthCheck()
+        if (ok) {
+          this.isHealthy = true
+          console.log(`[ComfyUIClient] Reconnected after ${attempt} attempt(s)`)
+          return true
+        }
+      } catch {
+        // Connection failed, will retry
+      }
+
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) break
+
+      // Exponential backoff with jitter (max 5s per wait)
+      const delay = Math.min(500 * Math.pow(2, attempt - 1), 5000)
+      const jittered = Math.round(delay * (0.75 + Math.random() * 0.5))
+      await sleep(Math.min(jittered, remaining))
+    }
+
+    this.isHealthy = false
+    console.error(`[ComfyUIClient] Reconnection failed after timeout (${this.reconnectTimeout}ms)`)
+    return false
   }
 
   // ─── Core API ─────────────────────────────────────────────
 
   /** Submit a workflow and return the prompt_id */
   async submit(workflow: object): Promise<string> {
+    // Pre-execution health check
+    const connected = await this.ensureConnected()
+    if (!connected) {
+      throw new ComfyUIConnectionError(
+        this.baseUrl,
+        new Error('ComfyUI is not reachable — cannot submit workflow')
+      )
+    }
+
     const body = { prompt: workflow, client_id: `aicf-${randomUUID().slice(0, 8)}` }
     const data = await this.request<PromptResponse>('POST', '/prompt', body)
     return data.prompt_id
@@ -63,7 +145,29 @@ export class ComfyUIClient {
     const deadline = Date.now() + timeout
 
     while (Date.now() < deadline) {
-      const data = await this.request<HistoryResponse>('GET', `/history/${promptId}`)
+      // If we know we're disconnected, attempt reconnect before polling
+      if (!this.isHealthy) {
+        const reconnected = await this.reconnect()
+        if (!reconnected) {
+          throw new ComfyUIConnectionError(
+            this.baseUrl,
+            new Error('Connection lost during poll — reconnection failed')
+          )
+        }
+      }
+
+      let data: HistoryResponse
+      try {
+        data = await this.request<HistoryResponse>('GET', `/history/${promptId}`)
+      } catch (err) {
+        // If request fails due to connection, mark unhealthy and continue loop
+        if (err instanceof ComfyUIConnectionError) {
+          this.isHealthy = false
+          await sleep(interval)
+          continue
+        }
+        throw err
+      }
 
       // History endpoint returns {} until the prompt is completed
       if (data[promptId]) {
@@ -187,16 +291,47 @@ export class ComfyUIClient {
           throw new Error(`ComfyUI ${method} ${path}: ${res.status} ${text}`)
         }
 
+        // Successful request — mark as healthy
+        this.isHealthy = true
         return await res.json() as T
       } catch (err) {
         lastErr = err instanceof Error ? err : new Error(String(err))
+
+        // Detect connection errors and mark unhealthy
+        if (this.isConnectionError(lastErr)) {
+          this.isHealthy = false
+          // Wrap in ComfyUIConnectionError and throw immediately — let caller decide reconnection
+          throw new ComfyUIConnectionError(this.baseUrl, lastErr)
+        }
+
         if (attempt < this.maxRetries - 1) {
           await sleep(500 * Math.pow(2, attempt)) // exponential backoff
         }
       }
     }
 
-    throw new ComfyUIConnectionError(this.baseUrl, lastErr)
+    throw lastErr ?? new Error(`ComfyUI request failed: ${method} ${path}`)
+  }
+
+  /**
+   * Detect if an error is a connection-level issue (network, DNS, ECONNREFUSED, etc.)
+   * vs. an application-level error.
+   */
+  private isConnectionError(err: Error): boolean {
+    const msg = err.message.toLowerCase()
+    return (
+      msg.includes('fetch failed') ||
+      msg.includes('econnrefused') ||
+      msg.includes('econnreset') ||
+      msg.includes('enotfound') ||
+      msg.includes('etimedout') ||
+      msg.includes('networkerror') ||
+      msg.includes('abort') ||
+      msg.includes('timeout') ||
+      msg.includes('fetch is not defined') ||
+      err.name === 'TypeError' && msg.includes('fetch') ||
+      err.name === 'AbortError'
+    )
   }
 
   private async rawRequest(method: string, path: string, body?: BodyInit): Promise<Response> {

@@ -84,10 +84,13 @@ export async function POST(
           model,
           system: scriptSplitSystem,
           prompt,
-          maxOutputTokens: 80000,
+          maxOutputTokens: 40000,
         });
 
-        console.log(`[ImportSplit] Chunk ${idx + 1} LLM response (first 1500 chars):\n${result.text.slice(0, 1500)}`);
+        try {
+          require('fs').writeFileSync('/tmp/aicf-split-llm-response.txt', result.text, 'utf-8');
+        } catch(e) {}
+        console.log(`[ImportSplit] Chunk ${idx + 1} LLM response length: ${result.text.length}`);
         return parseSplitText(result.text);
       })
     );

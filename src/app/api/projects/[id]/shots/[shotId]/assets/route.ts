@@ -27,7 +27,7 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { shotAssets, shots } from "@/lib/db/schema";
+import { shotAssets, shots, taskLogs } from "@/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { id as genId } from "@/lib/id";
 import { assertProjectOwnership } from "@/lib/assert-project-ownership";
@@ -58,11 +58,34 @@ export async function PUT(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const [shotRow] = await db
-    .select({ id: shots.id })
+    .select({ id: shots.id, status: shots.status })
     .from(shots)
     .where(and(eq(shots.id, shotId), eq(shots.projectId, projectId)));
   if (!shotRow) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Status protection: refuse writes if shot is in "failed" state
+  if (shotRow.status === "failed") {
+    const startedAt = new Date().toISOString();
+    await db.insert(taskLogs).values({
+      id: genId(),
+      projectId,
+      shotId,
+      taskType: "asset_write",
+      runId: `assets-${shotId}`,
+      stepId: "asset-write",
+      stepName: "Asset Write",
+      startedAt,
+      completedAt: new Date().toISOString(),
+      status: "failed",
+      error: "Cannot modify assets: shot is in failed state",
+      errorType: "ShotFailedError",
+    });
+    return NextResponse.json(
+      { error: "Cannot modify assets: shot is in failed state. Please retry the shot first." },
+      { status: 409 }
+    );
   }
   const body = (await request.json()) as { items: AssetPatchItem[] };
   if (!Array.isArray(body.items)) {

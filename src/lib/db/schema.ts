@@ -421,3 +421,23 @@ export const agentBindings = sqliteTable("agent_bindings", {
   }).notNull(),
   agentId: text("agent_id").references(() => agents.id, { onDelete: "set null" }),
 });
+
+// ─── Task Logs ─────────────────────────────────────────────
+
+export const taskLogs = sqliteTable("task_logs", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  shotId: text("shot_id"),
+  taskType: text("task_type").notNull(),
+  runId: text("run_id").notNull(),
+  stepId: text("step_id"),
+  stepName: text("step_name"),
+  startedAt: text("started_at").notNull(),
+  completedAt: text("completed_at"),
+  status: text("status").notNull(),
+  durationMs: integer("duration_ms"),
+  error: text("error"),
+  errorType: text("error_type"),
+  retryCount: integer("retry_count"),
+  metadata: text("metadata"), // JSON string
+});
