@@ -6,17 +6,12 @@ version: "1.0"
 steps:
   - id: gen_first_frame
     type: atomic_workflow
-    workflow_id: qwen-2511-edit-plus
+    workflow_id: qwen-2511-edit
     description: "基于场景描述和角色参考图生成首帧"
     inputs:
       composite_prompt: ${params.first_prompt}
       scene_prompt: ${params.scene_prompt}
-      character_ref_1: ${params.referenceImages[0]}
-      character_ref_2: ${params.referenceImages[1]}
-      character_ref_3: ${params.referenceImages[2]}
-      seed: ${params.seed}
-      width: ${params.width}
-      height: ${params.height}
+      character_ref: ${params.referenceImages[0]}
     outputs:
       first_frame: ${outputs[0].localPath}
 
@@ -30,10 +25,6 @@ steps:
       scene_prompt: ${params.scene_prompt}
       character_ref_1: ${steps.gen_first_frame.outputs[0]}
       character_ref_2: ${params.referenceImages[0]}
-      character_ref_3: ${params.referenceImages[1]}
-      seed: ${params.seed + 1}
-      width: ${params.width}
-      height: ${params.height}
     outputs:
       last_frame: ${outputs[0].localPath}
 

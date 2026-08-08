@@ -21,7 +21,6 @@ const DEFAULT_BASE_URLS: Record<Protocol, string> = {
   kling: "https://api.klingai.com",
   wan: "https://dashscope.aliyuncs.com/api/v1",
   dashscope: "https://dashscope.aliyuncs.com/api/v1",
-  comfyui: "http://localhost:8188",
 };
 
 function getProtocolOptions(capability: Capability): { value: Protocol; label: string }[] {
@@ -37,7 +36,6 @@ function getProtocolOptions(capability: Capability): { value: Protocol; label: s
       { value: "gemini", label: "Gemini" },
       { value: "kling", label: "Kling" },
       { value: "dashscope", label: "百炼 (图片)" },
-      { value: "comfyui", label: "ComfyUI" },
     ];
   }
   // video
@@ -47,7 +45,6 @@ function getProtocolOptions(capability: Capability): { value: Protocol; label: s
     { value: "gemini", label: "Gemini (Veo)" },
     { value: "kling", label: "Kling" },
     { value: "wan", label: "百炼 (视频)" },
-    { value: "comfyui", label: "ComfyUI" },
   ];
 }
 
@@ -67,7 +64,6 @@ export function ProviderForm({ provider }: ProviderFormProps) {
   const [modelSearch, setModelSearch] = useState("");
 
   const isKling = provider.protocol === "kling";
-  const isComfyui = provider.protocol === "comfyui";
 
   async function handleFetchModels() {
     setFetching(true);
@@ -147,7 +143,7 @@ export function ProviderForm({ provider }: ProviderFormProps) {
         </div>
       </div>
 
-      {/* Row 2: Base URL + API Key (or AK+SK stacked for Kling, or Base URL only for ComfyUI) */}
+      {/* Row 2: Base URL + API Key (or AK+SK stacked for Kling) */}
       {isKling ? (
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -205,18 +201,6 @@ export function ProviderForm({ provider }: ProviderFormProps) {
             </div>
           </div>
         </div>
-      ) : isComfyui ? (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Base URL</Label>
-          <Input
-            value={provider.baseUrl}
-            onChange={(e) =>
-              updateProvider(provider.id, { baseUrl: e.target.value })
-            }
-            placeholder="http://localhost:8188"
-          />
-          <p className="text-[10px] text-[--text-muted]">ComfyUI 不需要 API Key。Base URL 指向 ComfyUI 服务地址。</p>
-        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -264,7 +248,7 @@ export function ProviderForm({ provider }: ProviderFormProps) {
             size="sm"
             variant="outline"
             onClick={handleFetchModels}
-            disabled={fetching || (!provider.apiKey && provider.protocol !== "kling" && provider.protocol !== "comfyui")}
+            disabled={fetching || (!provider.apiKey && provider.protocol !== "kling")}
           >
             {fetching ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -9,10 +9,8 @@ steps:
     workflow_id: qwen-2512-t2i
     description: "根据角色描述生成正面形象"
     inputs:
-      prompt: "Front view full-body portrait. ${params.character_desc} Single figure, centered on pure white background. From head to toe."
+      prompt: ${params.prompt}
       seed: ${params.seed}
-      width: ${params.width}
-      height: ${params.height}
       steps: 20
       cfg: 3.5
     outputs:

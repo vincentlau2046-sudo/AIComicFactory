@@ -16,7 +16,6 @@ export class AtomicStepRunner {
     ctx: ResolveContext,
     deps: {
       executor: AtomicWorkflowExecutor
-      outputDir?: string
     }
   ): Promise<StepOutput> {
     const startTime = Date.now()
@@ -37,9 +36,7 @@ export class AtomicStepRunner {
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          const result = await deps.executor.execute(step.workflow_id, resolvedInputs, {
-            outputDir: deps.outputDir,
-          })
+          const result = await deps.executor.execute(step.workflow_id, resolvedInputs)
 
           // Check for non-success status (timeout, error, etc.)
           if (result.status !== 'success' || result.outputs.length === 0) {

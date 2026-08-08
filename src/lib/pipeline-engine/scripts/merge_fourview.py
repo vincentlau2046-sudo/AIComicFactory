@@ -45,15 +45,15 @@ def main():
     min_h = min(img.height for img in images)
     resized = [img.resize((min_w, min_h), Image.LANCZOS) for img in images]
 
-    # Create 1x4 grid canvas
-    canvas = Image.new('RGB', (min_w * 4, min_h), (255, 255, 255))
+    # Create 2x2 grid canvas
+    canvas = Image.new('RGB', (min_w * 2, min_h * 2), (255, 255, 255))
 
-    # Place images: front, left, side, back horizontally
+    # Place images: top-left=front, top-right=left, bottom-left=side, bottom-right=back
     placements = [
-        (resized[0], 0, 0),              # front
-        (resized[1], min_w, 0),           # left
-        (resized[2], min_w * 2, 0),       # side
-        (resized[3], min_w * 3, 0),       # back
+        (resized[0], 0, 0),          # front → top-left
+        (resized[1], min_w, 0),      # left → top-right
+        (resized[2], 0, min_h),      # side → bottom-left
+        (resized[3], min_w, min_h),  # back → bottom-right
     ]
     for img, x, y in placements:
         canvas.paste(img, (x, y))

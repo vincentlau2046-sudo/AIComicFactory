@@ -171,7 +171,6 @@ export class DAGExecutor {
       case 'atomic_workflow':
         return this.atomicRunner.execute(step, ctx, {
           executor: this.atomicExecutor,
-          outputDir: opts.outputDir,
         })
       case 'script':
         return this.scriptRunner.execute(step, ctx, { outputDir: opts.outputDir })
