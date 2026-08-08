@@ -23,6 +23,7 @@ import { useModelGuard } from "@/hooks/use-model-guard";
 import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   Loader2,
   ImageIcon,
   VideoIcon,
@@ -236,6 +237,36 @@ export function ShotCard({
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [rewritingText, setRewritingText] = useState(false);
+
+  // Error log panel state
+  const [errorLogs, setErrorLogs] = useState<
+    {
+      id: string;
+      stepName: string;
+      status: string;
+      error?: string;
+      startedAt: string;
+    }[]
+  >([]);
+  const [showErrorLog, setShowErrorLog] = useState(false);
+
+  // Load error logs from API
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await apiFetch(`/api/projects/${projectId}/shots/${id}/logs?status=failed&limit=20`);
+        if (!cancelled && resp.ok) {
+          const data = await resp.json();
+          setErrorLogs(data.logs ?? []);
+        }
+      } catch {
+        // silently ignore if endpoint not available
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, id]);
 
   // Project characters (reactive)
   const projectCharacters = useProjectStore((s) => s.project?.characters || []);
@@ -1459,6 +1490,39 @@ export function ShotCard({
             }
           </Button>
         </StepRow>
+
+        {/* Error History Panel */}
+        {errorLogs.length > 0 && (
+          <StepRow
+            label={`Errors (${errorLogs.length})`}
+            state="error"
+            defaultOpen={errorLogs.length > 0}
+          >
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {errorLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/3 px-2.5 py-1.5 text-xs"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-destructive">{log.stepName}</span>
+                      <span className="text-[10px] text-[--text-muted]">
+                        {new Date(log.startedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    {log.error && (
+                      <p className="mt-0.5 truncate text-[11px] text-[--text-secondary]">
+                        {log.error}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </StepRow>
+        )}
 
       </div>
 

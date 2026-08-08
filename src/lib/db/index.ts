@@ -3,7 +3,7 @@ import * as schema from "./schema";
 import fs from "node:fs";
 import path from "node:path";
 
-type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>;
+export type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>;
 type SqliteConnection = import("better-sqlite3").Database;
 type MigrationMeta = {
   folderMillis: number;

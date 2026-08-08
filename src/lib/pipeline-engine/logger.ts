@@ -1,3 +1,6 @@
+import type { DrizzleDB } from '@/lib/db'
+import { taskLogs } from '@/lib/db/schema'
+
 /**
  * PipelineRunLogger — structured execution logging at step level.
  *
@@ -26,6 +29,7 @@ interface RunMeta {
   startedAt: string
   status: 'running' | 'success' | 'failed'
   steps: PipelineRunLog[]
+  flushedStepKeys: Set<string>
 }
 
 export class PipelineRunLogger {
@@ -43,6 +47,7 @@ export class PipelineRunLogger {
       startedAt: new Date().toISOString(),
       status: 'running',
       steps: [],
+      flushedStepKeys: new Set(),
     })
   }
 
@@ -139,6 +144,60 @@ export class PipelineRunLogger {
       allSteps.push(...run.steps)
     }
     return allSteps
+  }
+
+  /**
+   * Flush completed (unflushed) steps to the task_logs DB table.
+   * Idempotent: already-flushed steps are skipped.
+   * Returns the number of rows inserted.
+   */
+  async flush(
+    runId: string,
+    projectId: string,
+    shotId: string,
+    db: DrizzleDB,
+  ): Promise<number> {
+    const run = this.runs.get(runId)
+    if (!run) {
+      console.warn(`[PipelineRunLogger] No run found for flush: ${runId}`)
+      return 0
+    }
+
+    const pending = run.steps.filter(
+      (s) =>
+        s.completedAt !== undefined &&
+        s.status !== 'running' &&
+        !run.flushedStepKeys.has(`${s.stepId}:${s.startedAt}`),
+    )
+
+    if (pending.length === 0) return 0
+
+    const rows = pending.map((s) => ({
+      id: crypto.randomUUID(),
+      projectId,
+      shotId,
+      taskType: run.pipelineName,
+      runId,
+      stepId: s.stepId,
+      stepName: s.stepName,
+      startedAt: s.startedAt,
+      completedAt: s.completedAt,
+      status: s.status,
+      durationMs: s.durationMs,
+      error: s.error,
+      errorType: s.errorType,
+      retryCount: s.retryCount,
+      metadata: s.metadata ? JSON.stringify(s.metadata) : undefined,
+    }))
+
+    await db.insert(taskLogs).values(rows)
+
+    for (const s of pending) {
+      run.flushedStepKeys.add(`${s.stepId}:${s.startedAt}`)
+    }
+
+    console.log(`[PipelineRunLogger] Flushed ${rows.length} steps for run ${runId}`)
+    return rows.length
   }
 
   /**
