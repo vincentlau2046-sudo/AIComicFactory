@@ -11,8 +11,8 @@ steps:
     inputs:
       prompt: "Front view full-body portrait. ${params.character_desc} Single figure, centered on pure white background. From head to toe."
       seed: ${params.seed}
-      width: ${params.width}
-      height: ${params.height}
+      width: 640
+      height: 1440
       steps: 20
       cfg: 3.5
     outputs:
