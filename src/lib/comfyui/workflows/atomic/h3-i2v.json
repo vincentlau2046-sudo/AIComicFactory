@@ -104,7 +104,7 @@
         0
       ],
       "scheduler": "simple",
-      "steps": 20,
+      "steps": 12,
       "denoise": 1.0
     }
   },

@@ -37,11 +37,11 @@ inputs:
     name: seed
     type: int
     default: 42
-  - node_id: 9
+  - node_id: 10
     field: steps
     name: steps
     type: int
-    default: 20
+    default: 12
     constraints: { min: 1, max: 100 }
   - node_id: 9
     field: cfg

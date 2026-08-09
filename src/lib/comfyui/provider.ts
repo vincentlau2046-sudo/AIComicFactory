@@ -221,7 +221,6 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     if (params.firstFrame && params.lastFrame) {
       workflowId = 'h3-i2v'
       inputs.first_frame = params.firstFrame
-      inputs.last_frame = params.lastFrame
     } else if (params.initialImage) {
       workflowId = 'h3-r2v'
       inputs.ref_image = params.initialImage
@@ -239,6 +238,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
 
     const result = await this.executor.execute(workflowId, inputs, {
       outputDir: this.outputDir,
+      timeout: 1_200_000, // 20 min — H3 video generation is slow
     })
 
     if (result.status !== 'success' || result.outputs.length === 0) {
