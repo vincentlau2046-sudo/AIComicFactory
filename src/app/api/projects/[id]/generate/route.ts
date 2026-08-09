@@ -3789,87 +3789,77 @@ async function handleGenerateKeyframePrompts(
     projectId,
   });
 
-  // Concurrent per-shot generation: each shot is one LLM call, all run in parallel.
+  // Sequential per-shot generation: one LLM call at a time with immediate DB writes.
   const total = allShots.length;
   let doneCount = 0;
-  console.log(`[GenerateKeyframePrompts] Starting concurrent generation: 0/${total}`);
-  const results = await Promise.allSettled(
-    allShots.map(async (shot) => {
-      try {
-        const basePromptRequest = buildKeyframePromptsRequest(
-          [{
-            sequence: shot.sequence,
-            prompt: shot.prompt || "",
-            motionScript: shot.motionScript,
-            cameraDirection: shot.cameraDirection,
-          }],
-          projectCharacters.map((c) => ({
-            name: c.name,
-            description: c.description,
-            visualHint: c.visualHint,
-          })),
-          visualStyle
-        );
-        const promptRequest = kfRelationsText
-          ? basePromptRequest + kfRelationsText
-          : basePromptRequest;
+  console.log(`[GenerateKeyframePrompts] Starting sequential generation: 0/${total}`);
+  let updatedCount = 0;
 
-        const result = await textProvider.generateText(promptRequest, {
-          systemPrompt: keyframeSystemPrompt,
-          temperature: 0.5,
-        });
+  for (const shot of allShots) {
+    try {
+      const basePromptRequest = buildKeyframePromptsRequest(
+        [{
+          sequence: shot.sequence,
+          prompt: shot.prompt || "",
+          motionScript: shot.motionScript,
+          cameraDirection: shot.cameraDirection,
+        }],
+        projectCharacters.map((c) => ({
+          name: c.name,
+          description: c.description,
+          visualHint: c.visualHint,
+        })),
+        visualStyle
+      );
+      const promptRequest = kfRelationsText
+        ? basePromptRequest + kfRelationsText
+        : basePromptRequest;
 
-        const jsonMatch = result.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) {
-          throw new Error(`Shot ${shot.sequence}: invalid JSON response`);
-        }
-        const parsed = JSON.parse(jsonMatch[0]) as Array<{
-          shotSequence: number;
-          characters?: string[];
-          prompts: string[];
-        }>;
-        const entry = parsed.find((e) => e.shotSequence === shot.sequence) || parsed[0];
-        if (!entry || !Array.isArray(entry.prompts) || entry.prompts.length < 2) {
-          throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
-        }
+      const result = await textProvider.generateText(promptRequest, {
+        systemPrompt: keyframeSystemPrompt,
+        temperature: 0.5,
+      });
 
-        // Use LLM-provided per-shot character list (only visible chars in this shot).
-        // Fall back to empty array if LLM omitted the field — never default to all chars.
-        const charsForShot = Array.isArray(entry.characters) ? entry.characters : [];
-        await insertAssetVersion({
-          shotId: shot.id,
-          type: "first_frame",
-          sequenceInType: 0,
-          prompt: entry.prompts[0],
-          status: "pending",
-          characters: charsForShot,
-        });
-        await insertAssetVersion({
-          shotId: shot.id,
-          type: "last_frame",
-          sequenceInType: 0,
-          prompt: entry.prompts[1],
-          status: "pending",
-          characters: charsForShot,
-        });
-        doneCount++;
-        console.log(`[GenerateKeyframePrompts] ✓ shot ${shot.sequence} (${doneCount}/${total})`);
-        return shot.sequence;
-      } catch (err) {
-        doneCount++;
-        console.warn(`[GenerateKeyframePrompts] ✗ shot ${shot.sequence} (${doneCount}/${total}): ${String(err)}`);
-        throw err;
+      const jsonMatch = result.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error(`Shot ${shot.sequence}: invalid JSON response`);
       }
-    })
-  );
+      const parsed = JSON.parse(jsonMatch[0]) as Array<{
+        shotSequence: number;
+        characters?: string[];
+        prompts: string[];
+      }>;
+      const entry = parsed.find((e) => e.shotSequence === shot.sequence) || parsed[0];
+      if (!entry || !Array.isArray(entry.prompts) || entry.prompts.length < 2) {
+        throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
+      }
 
-  const updatedCount = results.filter((r) => r.status === "fulfilled").length;
-  const failed = results
-    .map((r, i) => (r.status === "rejected" ? { seq: allShots[i].sequence, err: String(r.reason) } : null))
-    .filter(Boolean);
-  if (failed.length > 0) {
-    console.warn(`[GenerateKeyframePrompts] ${failed.length} shots failed:`, failed);
+      const charsForShot = Array.isArray(entry.characters) ? entry.characters : [];
+      await insertAssetVersion({
+        shotId: shot.id,
+        type: "first_frame",
+        sequenceInType: 0,
+        prompt: entry.prompts[0],
+        status: "pending",
+        characters: charsForShot,
+      });
+      await insertAssetVersion({
+        shotId: shot.id,
+        type: "last_frame",
+        sequenceInType: 0,
+        prompt: entry.prompts[1],
+        status: "pending",
+        characters: charsForShot,
+      });
+      doneCount++;
+      updatedCount++;
+      console.log(`[GenerateKeyframePrompts] ✓ shot ${shot.sequence} (${doneCount}/${total})`);
+    } catch (err) {
+      doneCount++;
+      console.warn(`[GenerateKeyframePrompts] ✗ shot ${shot.sequence} (${doneCount}/${total}): ${String(err)}`);
+    }
   }
-  console.log(`[GenerateKeyframePrompts] Updated ${updatedCount}/${allShots.length} shots (concurrent)`);
+
+  console.log(`[GenerateKeyframePrompts] Updated ${updatedCount}/${allShots.length} shots (sequential)`);
   return NextResponse.json({ updatedCount, totalShots: allShots.length });
 }
