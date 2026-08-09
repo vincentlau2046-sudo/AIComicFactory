@@ -1,0 +1,12 @@
+{
+  "1": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_2.5_vl_7b_nvfp4.safetensors", "type": "qwen_image", "device": "default"}},
+  "2": {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": "qwen-image-2512-Q4_K_M.gguf"}},
+  "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
+  "4": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 0], "text": "a cute cat sitting on a windowsill, watercolor style"}},
+  "5": {"class_type": "EmptySD3LatentImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+  "6": {"class_type": "KSampler", "inputs": {"seed": 42, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0, "model": ["10", 0], "positive": ["4", 0], "negative": ["9", 0], "latent_image": ["5", 0]}},
+  "7": {"class_type": "VAEDecode", "inputs": {"samples": ["6", 0], "vae": ["3", 0]}},
+  "8": {"class_type": "SaveImage", "inputs": {"filename_prefix": "qwen_2512_t2i", "images": ["7", 0]}},
+  "9": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 0], "text": ""}},
+  "10": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["2", 0], "lora_name": "Wuli-Qwen-Image-2512-Turbo-LoRA-4steps-V2.0-bf16.safetensors", "strength_model": 1.0}}
+}

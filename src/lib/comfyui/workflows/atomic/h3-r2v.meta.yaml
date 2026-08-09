@@ -1,0 +1,78 @@
+name: h3-r2v
+display_name: "MiniMax H3 Reference-to-Video"
+description: "多参考图(≤10张)+文字→视频+音频。prompt格式 <Picture N> 引用参考图。用于角色参考动画"
+gpu_model: minimax_h3
+
+models:
+  - name: minimax_h3_ref2va_pruned_nvfp4.safetensors
+    type: diffusion_models
+  - name: qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
+    type: text_encoders
+  - name: minimax_h3_video_vae_fp16.safetensors
+    type: vae
+  - name: minimax_h3_audio_vae_fp32.safetensors
+    type: vae
+
+inputs:
+  - node_id: 8
+    field: prompt
+    name: prompt
+    type: string
+    required: true
+    description: "视频描述。用 <Picture 1> <Picture 2> 等标签引用参考图"
+  - node_id: 6
+    field: image
+    name: ref_image
+    type: image
+    required: true
+    description: "参考图"
+  - node_id: 9
+    field: seed
+    name: seed
+    type: int
+    default: 42
+  - node_id: 9
+    field: steps
+    name: steps
+    type: int
+    default: 20
+    constraints: { min: 1, max: 100 }
+  - node_id: 9
+    field: cfg
+    name: cfg
+    type: float
+    default: 7.0
+  - node_id: 8
+    field: width
+    name: width
+    type: int
+    default: 960
+    constraints: { min: 32, max: 16384, step: 32 }
+  - node_id: 8
+    field: height
+    name: height
+    type: int
+    default: 544
+    constraints: { min: 32, max: 16384, step: 32 }
+  - node_id: 8
+    field: length
+    name: length
+    type: int
+    default: 73
+    constraints: { min: 5, max: 3600, step: 17 }
+  - node_id: 12
+    field: fps
+    name: fps
+    type: int
+    default: 24
+  - node_id: 13
+    field: filename_prefix
+    name: filename_prefix
+    type: string
+    default: h3_r2v
+
+outputs:
+  - name: video
+    type: video
+    description: "含音频的视频"
+    filename_pattern: "{filename_prefix}_*.mp4"

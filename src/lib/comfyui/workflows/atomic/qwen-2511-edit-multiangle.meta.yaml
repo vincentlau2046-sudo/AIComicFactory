@@ -1,0 +1,65 @@
+name: qwen-2511-edit-multiangle
+display_name: "Qwen Image 2511 Edit + Multi-Angle LoRA"
+description: "多角度相机控制：输入一张正面全身像，生成指定视角（前/3/4/侧/背）。使用<sks> [azimuth] [elevation] [distance] 格式的prompt。需Multi-Angle LoRA和Lightning LoRA"
+gpu_model: qwen_image_2511
+
+models:
+  - name: qwen-image-edit-2511-Q4_K_M.gguf
+    type: unet
+  - name: qwen_2.5_vl_7b_nvfp4.safetensors
+    type: text_encoders
+  - name: qwen_image_vae.safetensors
+    type: vae
+  - name: qwen-image-edit-2511-multiple-angles-lora.safetensors
+    type: loras
+  - name: Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
+    type: loras
+
+inputs:
+  - node_id: 41
+    field: image
+    name: source_image
+    type: image
+    required: true
+    description: "输入参考图（正面全身像）"
+  - node_id: 112
+    field: prompt
+    name: prompt
+    type: string
+    required: true
+    description: "角度描述。格式: <sks> [azimuth] [elevation] [distance]。例: <sks> right side view eye-level shot medium shot"
+  - node_id: 106
+    field: seed
+    name: seed
+    type: int
+    default: 42
+  - node_id: 106
+    field: steps
+    name: steps
+    type: int
+    default: 4
+    constraints: { min: 1, max: 100 }
+  - node_id: 102
+    field: strength_model
+    name: lightning_strength
+    type: float
+    default: 0.8
+    constraints: { min: 0.0, max: 2.0 }
+    description: "Lightning LoRA强度"
+  - node_id: 109
+    field: strength_model
+    name: angle_strength
+    type: float
+    default: 1.0
+    constraints: { min: 0.0, max: 2.0 }
+    description: "Multi-Angle LoRA强度"
+  - node_id: 9
+    field: filename_prefix
+    name: filename_prefix
+    type: string
+    default: qwen_multiangle
+
+outputs:
+  - name: image
+    type: image
+    filename_pattern: "{filename_prefix}_*.png"

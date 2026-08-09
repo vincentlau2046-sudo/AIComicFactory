@@ -1,0 +1,64 @@
+name: qwen-2512-t2i
+display_name: "Qwen Image 2512 Text-to-Image"
+description: "纯文生图，用于场景帧和角色参考图生成。Turbo LoRA 加速，8步出图"
+gpu_model: qwen_image_2512
+
+models:
+  - name: qwen-image-2512-Q4_K_M.gguf
+    type: diffusion_models
+  - name: qwen_2.5_vl_7b_nvfp4.safetensors
+    type: text_encoders
+  - name: qwen_image_vae.safetensors
+    type: vae
+
+inputs:
+  - node_id: 4
+    field: text
+    name: prompt
+    type: string
+    required: true
+    description: "图像描述"
+  - node_id: 6
+    field: seed
+    name: seed
+    type: int
+    default: 42
+  - node_id: 6
+    field: steps
+    name: steps
+    type: int
+    default: 8
+    constraints: { min: 1, max: 100 }
+  - node_id: 6
+    field: cfg
+    name: cfg
+    type: float
+    default: 1.0
+  - node_id: 5
+    field: width
+    name: width
+    type: int
+    default: 1024
+    constraints: { min: 16, max: 16384, step: 16 }
+  - node_id: 5
+    field: height
+    name: height
+    type: int
+    default: 1024
+    constraints: { min: 16, max: 16384, step: 16 }
+  - node_id: 8
+    field: filename_prefix
+    name: filename_prefix
+    type: string
+    default: qwen_2512_t2i
+  - node_id: 10
+    field: lora_name
+    name: lora_name
+    type: string
+    default: "Wuli-Qwen-Image-2512-Turbo-LoRA-4steps-V2.0-bf16.safetensors"
+    description: "LoRA filename in ComfyUI/models/loras/"
+
+outputs:
+  - name: image
+    type: image
+    filename_pattern: "{filename_prefix}_*.png"

@@ -1,0 +1,58 @@
+name: qwen-2511-edit-scene-composite
+display_name: "Qwen 2511 Edit Scene Composite"
+description: "内嵌T2I生成场景，latent直通Edit嵌入角色。场景描述+角色参考→角色在场景中的合成图"
+gpu_model: qwen_image_2511
+
+models:
+  - name: qwen-image-edit-2511-Q4_K_M.gguf
+    type: unet
+  - name: qwen_2.5_vl_7b_nvfp4.safetensors
+    type: text_encoders
+  - name: qwen_image_vae.safetensors
+    type: vae
+
+inputs:
+  - node_id: 4
+    field: text
+    name: scene_prompt
+    type: string
+    required: true
+    description: "场景描述（T2I生成用）"
+  - node_id: 9
+    field: prompt
+    name: composite_prompt
+    type: string
+    required: true
+    description: "合成描述，用 'Picture 1' 引用角色。例: Picture 1 in this scene, foreground"
+  - node_id: 8
+    field: image
+    name: character_ref
+    type: image
+    required: true
+    description: "角色参考图"
+  - node_id: 11
+    field: seed
+    name: seed
+    type: int
+    default: 42
+  - node_id: 11
+    field: steps
+    name: steps
+    type: int
+    default: 20
+    constraints: { min: 1, max: 100 }
+  - node_id: 11
+    field: cfg
+    name: cfg
+    type: float
+    default: 3.0
+  - node_id: 13
+    field: filename_prefix
+    name: filename_prefix
+    type: string
+    default: qwen_composite
+
+outputs:
+  - name: image
+    type: image
+    filename_pattern: "{filename_prefix}_*.png"

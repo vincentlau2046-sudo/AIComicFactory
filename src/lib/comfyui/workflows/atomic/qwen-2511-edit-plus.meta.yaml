@@ -1,0 +1,84 @@
+name: qwen-2511-edit-plus
+display_name: "Qwen 2511 Edit Plus Scene Composite"
+description: "内嵌T2I生成场景+多角色嵌入(≤3参考图)。latent直通不损失质量。Lightning 8步LoRA加速"
+gpu_model: qwen_image_2511
+
+models:
+  - name: qwen-image-edit-2511-Q4_K_M.gguf
+    type: unet
+  - name: qwen_2.5_vl_7b_nvfp4.safetensors
+    type: text_encoders
+  - name: qwen_image_vae.safetensors
+    type: vae
+
+inputs:
+  - node_id: 4
+    field: text
+    name: scene_prompt
+    type: string
+    required: true
+    description: 场景描述
+  - node_id: 11
+    field: prompt
+    name: composite_prompt
+    type: string
+    required: true
+    description: 合成描述，用 Picture 1/2/3 引用角色
+  - node_id: 8
+    field: image
+    name: character_ref_1
+    type: image
+    required: true
+  - node_id: 9
+    field: image
+    name: character_ref_2
+    type: image
+    required: false
+  - node_id: 10
+    field: image
+    name: character_ref_3
+    type: image
+    required: false
+  - node_id: 5
+    field: width
+    name: width
+    type: int
+    default: 1024
+    constraints: { min: 64, max: 4096, step: 16 }
+  - node_id: 5
+    field: height
+    name: height
+    type: int
+    default: 1024
+    constraints: { min: 64, max: 4096, step: 16 }
+  - node_id: 13
+    field: seed
+    name: seed
+    type: int
+    default: 42
+  - node_id: 13
+    field: steps
+    name: steps
+    type: int
+    default: 8
+  - node_id: 13
+    field: cfg
+    name: cfg
+    type: float
+    default: 1.0
+  - node_id: 15
+    field: filename_prefix
+    name: filename_prefix
+    type: string
+    default: qwen_composite_plus
+  - node_id: 16
+    field: lora_name
+    name: lora_name
+    type: string
+    default: "Qwen-Image-Edit-2511-Lightning-8steps-V1.0-fp32.safetensors"
+    description: "LoRA filename in ComfyUI/models/loras/"
+
+outputs:
+  - name: image
+    type: image
+    filename_pattern: "{filename_prefix}_*.png"
