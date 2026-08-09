@@ -175,9 +175,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       // ≥1 ref → edit-plus，带角色参考图合成
       workflowId = 'qwen-2511-edit-plus'
       inputs.composite_prompt = prompt
-      inputs.scene_prompt = refImages.length === 1
-        ? `A scene with ${path.basename(refImages[0], path.extname(refImages[0]))}`
-        : `A scene with multiple characters`
+      inputs.scene_prompt = options?.scenePrompt || prompt
       for (let i = 0; i < Math.min(refImages.length, 3); i++) {
         inputs[`character_ref_${i + 1}`] = refImages[i]
       }

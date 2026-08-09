@@ -55,9 +55,11 @@ import {
   loadShotLegacyView,
   loadShotLegacyViewsBatch,
   getActiveAsset,
+  getLatestCompletedAsset,
   insertAssetVersion,
   patchAsset,
   copyToUploads,
+  stripCharHint,
 } from "@/lib/shot-asset-utils";
 import { buildRefImagePromptsRequest } from "@/lib/ai/prompts/ref-image-prompts";
 import { buildKeyframePromptsRequest } from "@/lib/ai/prompts/keyframe-prompts";
@@ -1557,137 +1559,105 @@ async function handleBatchFrameGenerate(
   const frameFirstSlots = await resolveSlotContents("frame_generate_first", { userId, projectId });
   const frameLastSlots = await resolveSlotContents("frame_generate_last", { userId, projectId });
 
-  // ── Concurrent per-shot generation ──
-  // Each shot is fully independent under the new shot_assets architecture:
-  // first/last frame prompts are pre-generated and stored, no continuity
-  // chain needed. Run all shots in parallel via Promise.allSettled.
+  // ── Sequential per-shot generation ──
+  // Process shots one at a time so each completion is immediately
+  // persisted to DB. If the process is interrupted, previously
+  // completed shots remain saved and can be skipped on retry.
   const total = allShots.length;
   let doneCount = 0;
-  console.log(`[BatchFrameGenerate] Starting concurrent generation: 0/${total}`);
+  console.log(`[BatchFrameGenerate] Starting sequential generation: 0/${total}`);
 
-  const settled = await Promise.allSettled(
-    allShots.map(async (shot) => {
-      const shotLegacy = allShotsLegacy.get(shot.id);
+  for (const shot of allShots) {
+    const shotLegacy = allShotsLegacy.get(shot.id);
 
-      if (!overwrite && shotLegacy?.firstFrame && shotLegacy?.lastFrame) {
-        doneCount++;
-        console.log(`[BatchFrameGenerate] ⊙ shot ${shot.sequence} skipped (${doneCount}/${total})`);
-        return {
-          shotId: shot.id,
-          sequence: shot.sequence,
-          status: "skipped" as const,
-        };
-      }
+    if (!overwrite && shotLegacy?.firstFrame && shotLegacy?.lastFrame) {
+      doneCount++;
+      console.log(`[BatchFrameGenerate] ⊙ shot ${shot.sequence} skipped (${doneCount}/${total})`);
+      results.push({ shotId: shot.id, sequence: shot.sequence, status: "skipped" });
+      continue;
+    }
 
-      const startTime = Date.now();
-      try {
-        await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
+    const startTime = Date.now();
+    try {
+      await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
 
-        // Per-shot character filter: read the first_frame / last_frame asset
-        // characters metadata (set by handleGenerateKeyframePrompts). Only
-        // inject those characters' ref images into the image model, so shots
-        // only see their relevant characters.
-        const ffAssetExisting = await getActiveAsset(shot.id, "first_frame", 0);
-        const lfAssetExisting = await getActiveAsset(shot.id, "last_frame", 0);
-        const shotCharNameSet = new Set<string>([
-          ...(ffAssetExisting?.characters ?? []),
-          ...(lfAssetExisting?.characters ?? []),
-        ]);
-        const filteredChars = shotCharNameSet.size > 0
-          ? charsWithImages.filter((c) => shotCharNameSet.has(c.name))
-          : charsWithImages;
-        const shotCharRefImages = filteredChars.map((c) => c.referenceImage!);
-        const shotCharRefLabels = filteredChars.map((c) => c.name);
-        const shotCharsForPersist = filteredChars.length > 0 ? filteredChars.map((c) => c.name) : undefined;
+      const ffAssetExisting = await getActiveAsset(shot.id, "first_frame", 0);
+      const lfAssetExisting = await getActiveAsset(shot.id, "last_frame", 0);
+      const shotCharNameSet = new Set<string>([
+        ...(ffAssetExisting?.characters ?? []).map(stripCharHint),
+        ...(lfAssetExisting?.characters ?? []).map(stripCharHint),
+      ]);
+      const filteredChars = shotCharNameSet.size > 0
+        ? charsWithImages.filter((c) => shotCharNameSet.has(c.name))
+        : [];
+      const shotCharRefImages = filteredChars.map((c) => c.referenceImage!);
+      const shotCharRefLabels = filteredChars.map((c) => c.name);
+      const shotCharsForPersist = filteredChars.length > 0 ? filteredChars.map((c) => c.name) : undefined;
 
-        // Each shot is independent — generate its own first frame from prompt.
-        const firstPrompt = buildFirstFramePrompt({
-          sceneDescription: shot.prompt || "",
-          startFrameDesc: shotLegacy?.startFrameDesc || shot.prompt || "",
-          characterDescriptions,
-          slotContents: frameFirstSlots,
-        });
-        const firstFramePath = await ai.generateImage(firstPrompt, {
-          ...imageOpts,
-          quality: "hd",
-          referenceImages: shotCharRefImages,
-          referenceLabels: shotCharRefLabels,
-        });
+      const ffAsset = await getLatestCompletedAsset(shot.id, "first_frame")
+        || await getActiveAsset(shot.id, "first_frame", 0);
+      const lfAsset = await getLatestCompletedAsset(shot.id, "last_frame")
+        || await getActiveAsset(shot.id, "last_frame", 0);
+      const startFrameText = ffAsset?.prompt || shotLegacy?.startFrameDesc || shot.prompt || "";
+      const endFrameText = lfAsset?.prompt || shotLegacy?.endFrameDesc || shot.prompt || "";
 
-        const lastPrompt = buildLastFramePrompt({
-          sceneDescription: shot.prompt || "",
-          endFrameDesc: shotLegacy?.endFrameDesc || shot.prompt || "",
-          characterDescriptions,
-          firstFramePath,
-          slotContents: frameLastSlots,
-        });
-        const lastFramePath = await ai.generateImage(lastPrompt, {
-          ...imageOpts,
-          quality: "hd",
-          referenceImages: [firstFramePath, ...shotCharRefImages],
-          referenceLabels: ["首帧/First Frame", ...shotCharRefLabels],
-        });
-
-        await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
-
-        if (ffAssetExisting) await patchAsset(ffAssetExisting.id, { fileUrl: firstFramePath, status: "completed" });
-        else
-          await insertAssetVersion({
-            shotId: shot.id,
-            type: "first_frame",
-            sequenceInType: 0,
-            prompt: shotLegacy?.startFrameDesc ?? "",
-            fileUrl: firstFramePath,
-            status: "completed",
-            characters: shotCharsForPersist,
-          });
-        if (lfAssetExisting) await patchAsset(lfAssetExisting.id, { fileUrl: lastFramePath, status: "completed" });
-        else
-          await insertAssetVersion({
-            shotId: shot.id,
-            type: "last_frame",
-            sequenceInType: 0,
-            prompt: shotLegacy?.endFrameDesc ?? "",
-            fileUrl: lastFramePath,
-            status: "completed",
-            characters: shotCharsForPersist,
-          });
-
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        doneCount++;
-        console.log(`[BatchFrameGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
-
-        return {
-          shotId: shot.id,
-          sequence: shot.sequence,
-          status: "ok" as const,
-          firstFrame: firstFramePath,
-          lastFrame: lastFramePath,
-        };
-      } catch (err) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        doneCount++;
-        console.error(`[BatchFrameGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
-        await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
-        return {
-          shotId: shot.id,
-          sequence: shot.sequence,
-          status: "error" as const,
-          error: extractErrorMessage(err),
-        };
-      }
-    })
-  );
-
-  for (const r of settled) {
-    if (r.status === "fulfilled") results.push(r.value);
-    else
-      results.push({
-        shotId: "",
-        sequence: -1,
-        status: "error",
-        error: String(r.reason),
+      const firstPrompt = buildFirstFramePrompt({
+        sceneDescription: shot.prompt || "",
+        startFrameDesc: startFrameText,
+        characterDescriptions: "",
+        slotContents: frameFirstSlots,
       });
+      const firstFramePath = await ai.generateImage(firstPrompt, {
+        ...imageOpts,
+        quality: "hd",
+        referenceImages: shotCharRefImages,
+        referenceLabels: shotCharRefLabels,
+        scenePrompt: shot.prompt || "",
+      });
+
+      const lastPrompt = buildLastFramePrompt({
+        sceneDescription: shot.prompt || "",
+        endFrameDesc: endFrameText,
+        characterDescriptions: "",
+        firstFramePath,
+        slotContents: frameLastSlots,
+      });
+      const lastFramePath = await ai.generateImage(lastPrompt, {
+        ...imageOpts,
+        quality: "hd",
+        referenceImages: shotCharRefImages,
+        referenceLabels: shotCharRefLabels,
+        scenePrompt: shot.prompt || "",
+      });
+
+      // Persist immediately — survives process interruption
+      await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
+
+      if (ffAssetExisting) await patchAsset(ffAssetExisting.id, { fileUrl: firstFramePath, status: "completed" });
+      else
+        await insertAssetVersion({
+          shotId: shot.id, type: "first_frame", sequenceInType: 0,
+          prompt: shotLegacy?.startFrameDesc ?? "", fileUrl: firstFramePath, status: "completed", characters: shotCharsForPersist,
+        });
+      if (lfAssetExisting) await patchAsset(lfAssetExisting.id, { fileUrl: lastFramePath, status: "completed" });
+      else
+        await insertAssetVersion({
+          shotId: shot.id, type: "last_frame", sequenceInType: 0,
+          prompt: shotLegacy?.endFrameDesc ?? "", fileUrl: lastFramePath, status: "completed", characters: shotCharsForPersist,
+        });
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      doneCount++;
+      console.log(`[BatchFrameGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
+
+      results.push({ shotId: shot.id, sequence: shot.sequence, status: "ok", firstFrame: firstFramePath, lastFrame: lastFramePath });
+    } catch (err) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      doneCount++;
+      console.error(`[BatchFrameGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
+      await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
+      results.push({ shotId: shot.id, sequence: shot.sequence, status: "error", error: extractErrorMessage(err) });
+    }
   }
 
   const okCount = results.filter((r) => r.status === "ok").length;
@@ -1721,8 +1691,11 @@ async function handleSingleFrameGenerate(
 
   // Read prompts from shot_assets — they were generated by the dedicated
   // "生成首尾帧提示词" step. Each shot is independent: no continuity chain.
-  const ffAsset = await getActiveAsset(shotId, "first_frame", 0);
-  const lfAsset = await getActiveAsset(shotId, "last_frame", 0);
+  // Use latest completed asset regardless of is_active.
+  const ffAsset = await getLatestCompletedAsset(shotId, "first_frame")
+    || await getActiveAsset(shotId, "first_frame", 0);
+  const lfAsset = await getLatestCompletedAsset(shotId, "last_frame")
+    || await getActiveAsset(shotId, "last_frame", 0);
   const startFramePromptText = ffAsset?.prompt || shot.prompt || "";
   const endFramePromptText = lfAsset?.prompt || shot.prompt || "";
 
@@ -1730,19 +1703,15 @@ async function handleSingleFrameGenerate(
   const shotEpisodeId = episodeId || shot.episodeId;
   const projectCharacters = await getEpisodeCharacters(projectId, shotEpisodeId);
 
-  const characterDescriptions = projectCharacters
-    .map((c) => `${c.name}: ${c.description}`)
-    .join("\n");
-
   // Per-shot character filter: only inject refs for characters declared
   // on the first_frame / last_frame asset metadata for this shot.
   const shotCharNameSet = new Set<string>([
-    ...(ffAsset?.characters ?? []),
-    ...(lfAsset?.characters ?? []),
+    ...(ffAsset?.characters ?? []).map(stripCharHint),
+    ...(lfAsset?.characters ?? []).map(stripCharHint),
   ]);
   const filteredChars = shotCharNameSet.size > 0
     ? projectCharacters.filter((c) => c.referenceImage && shotCharNameSet.has(c.name))
-    : projectCharacters.filter((c) => c.referenceImage);
+    : [];
   const shotCharRefImages = filteredChars.map((c) => c.referenceImage as string);
 
   const ai = resolveImageProvider(modelConfig, versionedUploadDir);
@@ -1757,26 +1726,28 @@ async function handleSingleFrameGenerate(
     const firstPrompt = buildFirstFramePrompt({
       sceneDescription: shot.prompt || "",
       startFrameDesc: startFramePromptText,
-      characterDescriptions,
+      characterDescriptions: "",
       slotContents: frameFirstSlots,
     });
     const firstFramePath = await ai.generateImage(firstPrompt, {
       ...imageOpts,
       quality: "hd",
       referenceImages: shotCharRefImages,
+      scenePrompt: shot.prompt || "",
     });
 
     const lastPrompt = buildLastFramePrompt({
       sceneDescription: shot.prompt || "",
       endFrameDesc: endFramePromptText,
-      characterDescriptions,
+      characterDescriptions: "",
       firstFramePath,
       slotContents: frameLastSlots,
     });
     const lastFramePath = await ai.generateImage(lastPrompt, {
       ...imageOpts,
       quality: "hd",
-      referenceImages: [firstFramePath, ...shotCharRefImages],
+      referenceImages: shotCharRefImages,
+      scenePrompt: shot.prompt || "",
     });
 
     await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shotId));
@@ -2259,7 +2230,7 @@ async function handleSingleReferenceVideo(
   // will act in this shot. Only these get passed to the video model.
   const shotCharNameSet = new Set<string>();
   for (const r of shotView.referenceImages) {
-    for (const n of r.characters ?? []) shotCharNameSet.add(n);
+    for (const n of r.characters ?? []) shotCharNameSet.add(stripCharHint(n));
   }
 
   const charRefs = projectCharacters
@@ -2538,7 +2509,7 @@ async function handleBatchReferenceVideo(
         // Per-shot character set from ref assets' metadata
         const shotCharNameSet = new Set<string>();
         for (const r of shotLegacy.referenceImages) {
-          for (const n of r.characters ?? []) shotCharNameSet.add(n);
+          for (const n of r.characters ?? []) shotCharNameSet.add(stripCharHint(n));
         }
         const charRefs = charsWithRefsAll
           .filter((c) => shotCharNameSet.size === 0 || shotCharNameSet.has(c.name))
@@ -2862,7 +2833,7 @@ async function handleSingleVideoPrompt(
     // Filter to characters declared on this shot's reference assets
     const shotCharNameSetVP = new Set<string>();
     for (const r of shotView.referenceImages) {
-      for (const n of r.characters ?? []) shotCharNameSetVP.add(n);
+      for (const n of r.characters ?? []) shotCharNameSetVP.add(stripCharHint(n));
     }
     const charsWithRefsHere = shotCharacters.filter(
       (c) => !!c.referenceImage && (shotCharNameSetVP.size === 0 || shotCharNameSetVP.has(c.name))

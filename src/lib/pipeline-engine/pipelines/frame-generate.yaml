@@ -28,9 +28,9 @@ steps:
     inputs:
       composite_prompt: ${params.last_prompt}
       scene_prompt: ${params.scene_prompt}
-      character_ref_1: ${steps.gen_first_frame.outputs[0]}
-      character_ref_2: ${params.referenceImages[0]}
-      character_ref_3: ${params.referenceImages[1]}
+      character_ref_1: ${params.referenceImages[0]}
+      character_ref_2: ${params.referenceImages[1]}
+      character_ref_3: ${params.referenceImages[2]}
       seed: ${params.seed + 1}
       width: ${params.width}
       height: ${params.height}

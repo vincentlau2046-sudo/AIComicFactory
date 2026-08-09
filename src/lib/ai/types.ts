@@ -18,6 +18,10 @@ export interface ImageOptions {
   pipeline?: string;
   /** Extra pipeline-specific parameters (e.g. first_prompt, last_prompt, seed) */
   pipelineParams?: Record<string, unknown>;
+  /** Scene-only prose description for the baseline environment (Edit-plus scene_prompt).
+   *  When set, provider.ts uses this as node_4.text instead of deriving from the primary prompt.
+   *  This separate the baseline scene (scenePrompt) from the frame description (prompt). */
+  scenePrompt?: string;
 }
 
 export interface AIProvider {

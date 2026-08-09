@@ -1239,6 +1239,7 @@ ${themeStyleMappingBlock()}
 - **共享环境**：背景、光线、色温、地点完全一致——只有角色姿态/位置/表情变化
 - **首帧**：motionScript 第一段开始前的瞬间——角色处于起始位置，开场表情
 - **尾帧**：motionScript 最后一段结束后的瞬间——角色完成动作，停在稳定姿态（不能是模糊运动中态）
+- 尾帧是一张静态照片（still photograph），不是动画的中间帧。从 motionScript 中推断动作完成后的最终状态，然后以一张静态照片的语言来描述：角色已完成动作、位置已固定、表情已收束。禁止"正在"/"向前行走"/"踏出一步"/"缓缓"等过程性动作描述。禁止镜头运动。尾帧只输出动作完成后那一刻的凝固画面。
 - **不要包含对白文字**`;
 
 const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一个对象。**prompts 数组必须恰好有 2 个元素：第 0 个是首帧、第 1 个是尾帧**。**characters 数组必须只包含此镜头画面中实际出现的角色**（不是项目里所有角色），名字必须与角色列表中完全一致：
@@ -1340,28 +1341,8 @@ const frameGenerateFirstDef: PromptDefinition = {
       (params?.previousLastFrame as string) ?? "";
 
     const lines: string[] = [];
-    lines.push(`生成此镜头的首帧，作为一张高质量图像。`);
-    lines.push("");
-    lines.push(r("style_matching"));
-    lines.push("");
-    lines.push(`=== 场景环境 ===`);
-    lines.push(sceneDescription);
-    lines.push("");
-    lines.push(`=== 帧描述 ===`);
     lines.push(startFrameDesc);
-    lines.push("");
-    lines.push(`=== 角色描述 ===`);
-    lines.push(characterDescriptions);
-    lines.push("");
-    lines.push(r("reference_rules"));
-    lines.push("");
-
-    if (previousLastFrame) {
-      lines.push(r("continuity_rules"));
-      lines.push("");
-    }
-
-    lines.push(r("rendering_quality"));
+    return lines.join("\n");
     return lines.join("\n");
   },
 };
@@ -1417,29 +1398,8 @@ const frameGenerateLastDef: PromptDefinition = {
       (params?.characterDescriptions as string) ?? "";
 
     const lines: string[] = [];
-    lines.push(`生成此镜头的尾帧，作为一张高质量图像。`);
-    lines.push("");
-    lines.push(r("style_matching"));
-    lines.push("");
-    lines.push(`=== 场景环境 ===`);
-    lines.push(sceneDescription);
-    lines.push("");
-    lines.push(`=== 帧描述 ===`);
     lines.push(endFrameDesc);
-    lines.push("");
-    lines.push(`=== 角色描述 ===`);
-    lines.push(characterDescriptions);
-    lines.push("");
-    lines.push(`=== 参考图 ===`);
-    lines.push(`第一张附带图像是此镜头的首帧——以它为视觉锚点。`);
-    lines.push(`其余附带图像是角色设定图（每张4个视角，名字印在底部）。`);
-    lines.push(`将每张设定图的角色名与场景中的角色对应。`);
-    lines.push("");
-    lines.push(r("relationship_to_first"));
-    lines.push("");
-    lines.push(r("next_shot_readiness"));
-    lines.push("");
-    lines.push(r("rendering_quality"));
+    return lines.join("\n");
     return lines.join("\n");
   },
 };

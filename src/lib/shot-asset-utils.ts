@@ -16,6 +16,16 @@ import fs from "fs";
 import path from "path";
 import { id as genId } from "@/lib/id";
 
+/**
+ * Strip visual hint annotations from character names stored in shot_assets.
+ * Characters are stored as "朱元璋（明黄衮服锐眼）" by the LLM,
+ * but the characters table stores clean names "朱元璋".
+ * This strips the （hint） suffix so downstream matching works.
+ */
+export function stripCharHint(name: string): string {
+  return name.replace(/[（(][^）)]*[）)]/g, '').trim();
+}
+
 export type ShotAssetType =
   | "first_frame"
   | "last_frame"
@@ -103,6 +113,29 @@ export async function getActiveAsset(
         eq(shotAssets.isActive, 1)
       )
     )
+    .limit(1);
+  return row ? rowToAsset(row) : null;
+}
+
+/** Get the latest completed asset regardless of is_active flag.
+ *  Every shot has a meaningful end-state last_frame — use the newest completed one. */
+export async function getLatestCompletedAsset(
+  shotId: string,
+  type: ShotAssetType,
+  sequenceInType = 0
+): Promise<ShotAssetRow | null> {
+  const [row] = await db
+    .select()
+    .from(shotAssets)
+    .where(
+      and(
+        eq(shotAssets.shotId, shotId),
+        eq(shotAssets.type, type),
+        eq(shotAssets.sequenceInType, sequenceInType),
+        eq(shotAssets.status, "completed")
+      )
+    )
+    .orderBy(desc(shotAssets.assetVersion))
     .limit(1);
   return row ? rowToAsset(row) : null;
 }

@@ -9,7 +9,7 @@ import {
 import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { eq, and, lt, desc } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
-import { getActiveAsset, insertAssetVersion, patchAsset, copyToUploads } from "@/lib/shot-asset-utils";
+import { getActiveAsset, getLatestCompletedAsset, insertAssetVersion, patchAsset, copyToUploads, stripCharHint } from "@/lib/shot-asset-utils";
 import { ratioToSize } from "@/lib/ai/size";
 
 export async function handleFrameGenerate(task: Task) {
@@ -131,8 +131,11 @@ export async function handleFrameGenerate(task: Task) {
   // Read first/last frame ASSET PROMPTS from the unified shot_assets table.
   // These were generated independently by `shot_keyframe_assets_generate`.
   // Fall back to legacy startFrameDesc/endFrameDesc if no asset rows exist (back-compat).
-  const firstFrameAsset = await getActiveAsset(payload.shotId, "first_frame", 0);
-  const lastFrameAsset = await getActiveAsset(payload.shotId, "last_frame", 0);
+  // Use latest completed asset regardless of is_active — every shot has valid prompts.
+  const firstFrameAsset = await getLatestCompletedAsset(payload.shotId, "first_frame")
+    || await getActiveAsset(payload.shotId, "first_frame", 0);
+  const lastFrameAsset = await getLatestCompletedAsset(payload.shotId, "last_frame")
+    || await getActiveAsset(payload.shotId, "last_frame", 0);
 
   const startFrameDescText = firstFrameAsset?.prompt || shot.prompt || "";
   const endFrameDescText = lastFrameAsset?.prompt || shot.prompt || "";
@@ -145,13 +148,21 @@ export async function handleFrameGenerate(task: Task) {
       ? firstFrameAsset.characters
       : [];
 
+  const normalizedStored = storedCharNames.length > 0
+    ? storedCharNames.map(stripCharHint)
+    : [];
   const relevantChars =
-    storedCharNames.length > 0
-      ? charsWithRefs.filter((c) => storedCharNames.includes(c.name))
-      : charsWithRefs.slice(0, 3);
+    normalizedStored.length > 0
+      ? charsWithRefs.filter((c) => normalizedStored.includes(c.name))
+      : [];
   const charRefImages = relevantChars.map((c) => c.referenceImage as string);
 
-  console.log(`[FrameGenerate] Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ") || "fallback"}`);
+  // Character descriptions are redundant with reference images — the four-view
+  // sheets already convey all visual identity info. Set to empty to avoid
+  // double-text conditioning that can confuse diffusion models.
+  const shotCharacterDescriptions = "";
+
+  console.log(`[FrameGenerate-v2] Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ") || "none"} | lastFrameAsset=${lastFrameAsset ? "found" : "null"} | endFrameDesc=${endFrameDescText.slice(0, 40)}...`);
 
   // Mark assets as generating
   if (firstFrameAsset) await patchAsset(firstFrameAsset.id, { status: "generating" });
@@ -167,81 +178,50 @@ export async function handleFrameGenerate(task: Task) {
   let lastFramePath: string;
 
   try {
-    if (charRefImages.length === 0) {
-      // No character refs — fallback to atomic T2I (pipeline requires refs)
-      let firstFramePrompt = buildFirstFramePrompt({
-        sceneDescription: shot.prompt || "",
-        startFrameDesc: startFrameDescText,
-        characterDescriptions,
-        previousLastFrame: prevLastFrameUrl ?? undefined,
-        slotContents: frameFirstSlots,
-      });
-      if (compositionSuffix) firstFramePrompt += compositionSuffix;
-      firstFramePath = await ai.generateImage(firstFramePrompt, { quality: "hd", size: frameSize });
+    // Build prompts once — then dispatch to appropriate workflow per frame
+    let firstFramePrompt = buildFirstFramePrompt({
+      sceneDescription: shot.prompt || "",
+      startFrameDesc: startFrameDescText,
+      characterDescriptions: shotCharacterDescriptions,
+      previousLastFrame: prevLastFrameUrl ?? undefined,
+      slotContents: frameFirstSlots,
+    });
+    if (compositionSuffix) firstFramePrompt += compositionSuffix;
 
-      let lastFramePrompt = buildLastFramePrompt({
-        sceneDescription: shot.prompt || "",
-        endFrameDesc: endFrameDescText,
-        characterDescriptions,
-        firstFramePath,
-        slotContents: frameLastSlots,
-      });
-      if (compositionSuffix) lastFramePrompt += compositionSuffix;
-      lastFramePath = await ai.generateImage(lastFramePrompt, {
+    let lastFramePrompt = buildLastFramePrompt({
+      sceneDescription: shot.prompt || "",
+      endFrameDesc: endFrameDescText,
+      characterDescriptions: shotCharacterDescriptions,
+      firstFramePath: "",
+      slotContents: frameLastSlots,
+    });
+    if (compositionSuffix) lastFramePrompt += compositionSuffix;
+
+    // First frame: T2I (no refs) or Edit-plus (with character refs)
+    if (charRefImages.length === 0) {
+      firstFramePath = await ai.generateImage(firstFramePrompt, { quality: "hd", size: frameSize });
+    } else {
+      firstFramePath = await ai.generateImage(firstFramePrompt, {
         quality: "hd",
         size: frameSize,
-        referenceImages: [firstFramePath],
+        referenceImages: charRefImages,
+        scenePrompt: shot.prompt || "",
       });
+    }
+    firstFramePath = copyToUploads(firstFramePath, 'first_frame');
+
+    // Last frame: T2I (no refs) or Edit-plus (with character refs)
+    if (charRefImages.length === 0) {
+      lastFramePath = await ai.generateImage(lastFramePrompt, { quality: "hd", size: frameSize });
     } else {
-      // Pipeline mode: single orchestrated call generates both frames
-      let firstFramePrompt = buildFirstFramePrompt({
-        sceneDescription: shot.prompt || "",
-        startFrameDesc: startFrameDescText,
-        characterDescriptions,
-        previousLastFrame: prevLastFrameUrl ?? undefined,
-        slotContents: frameFirstSlots,
-      });
-      if (compositionSuffix) firstFramePrompt += compositionSuffix;
-
-      let lastFramePrompt = buildLastFramePrompt({
-        sceneDescription: shot.prompt || "",
-        endFrameDesc: endFrameDescText,
-        characterDescriptions,
-        firstFramePath: "",  // not needed — pipeline passes first frame as image
-        slotContents: frameLastSlots,
-      });
-      if (compositionSuffix) lastFramePrompt += compositionSuffix;
-
-      const scenePrompt = relevantChars.length > 0
-        ? `A scene with ${relevantChars[0].name}`
-        : "A scene with characters";
-
       lastFramePath = await ai.generateImage(lastFramePrompt, {
         quality: "hd",
         size: frameSize,
         referenceImages: charRefImages,
-        pipeline: "frame-generate",
-        pipelineParams: {
-          first_prompt: firstFramePrompt,
-          last_prompt: lastFramePrompt,
-          scene_prompt: scenePrompt,
-          seed: shot.sequence,
-        },
+        scenePrompt: shot.prompt || "",
       });
-
-      // Extract first frame from pipeline intermediates
-      const pipelineResult = 'lastPipelineResult' in ai
-        ? (ai as any).lastPipelineResult
-        : undefined;
-      firstFramePath = pipelineResult?.intermediates?.gen_first_frame;
-      if (!firstFramePath) {
-        throw new Error(`Pipeline produced no first frame intermediate: gen_first_frame not found in pipeline result`);
-      }
-
-      // Copy to uploads for browser serving
-      firstFramePath = copyToUploads(firstFramePath, 'first_frame');
-      lastFramePath = copyToUploads(lastFramePath, 'last_frame');
     }
+    lastFramePath = copyToUploads(lastFramePath, 'last_frame');
   } catch (err) {
     await db.update(shots).set({ status: "failed" }).where(eq(shots.id, payload.shotId));
     throw err;
