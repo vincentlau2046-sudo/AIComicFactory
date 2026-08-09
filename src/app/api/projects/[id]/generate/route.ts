@@ -2857,7 +2857,6 @@ async function handleSingleVideoPrompt(
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequest}`);
     const rawPrompt = await textProvider.generateText(promptRequest, {
       systemPrompt: refVideoSystem,
-      images: visionFrames,
     });
     const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} videoPrompt:\n${videoPrompt}`);
