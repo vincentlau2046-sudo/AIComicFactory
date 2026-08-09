@@ -133,9 +133,10 @@ export function buildReferenceVideoPrompt(params: {
 export function buildVideoPrompt(params: {
   videoScript: string;
   cameraDirection: string;
+  motionScript?: string | null;
   startFrameDesc?: string;
   endFrameDesc?: string;
-  sceneDescription?: string;       // kept for call-site compatibility, not used in output
+  sceneDescription?: string;
   duration?: number;
   characters?: CharacterRef[];
   dialogues?: Array<{ characterName: string; text: string; offscreen?: boolean; visualHint?: string }>;
@@ -145,83 +146,37 @@ export function buildVideoPrompt(params: {
   const L = getLabels(lang);
   const lines: string[] = [];
 
+  // Duration header
   if (params.duration) {
-    lines.push(`${L.duration}${L.colon}${params.duration}s${L.period}`);
+    lines.push(`Duration: ${params.duration}s。`);
     lines.push(``);
   }
 
-  const charLine = buildCharacterLine(params.characters, lang);
-  if (charLine) {
-    lines.push(`${L.characterAppearance}${L.colon}${charLine}${L.period}`);
-    lines.push(``);
-  }
-
-  // Interpolation header from slot or registry default
-  const defaultInterpolation = lang === "zh"
-    ? "从起始帧到结束帧进行平滑插值。"
-    : "Smoothly interpolate from the opening frame to the closing frame.";
-  const interpolationHeader = resolveSlot(
-    params.slotContents,
-    "video_generate",
-    "interpolation_header",
-    defaultInterpolation
-  );
-  lines.push(interpolationHeader);
-  lines.push(``);
-
+  // Main video script (prose)
   lines.push(params.videoScript);
-
   lines.push(``);
+
+  // Motion script — time-based action breakdown
+  if (params.motionScript) {
+    lines.push(`动作脚本：`);
+    lines.push(params.motionScript);
+    lines.push(``);
+  }
+
+  // Camera
   lines.push(`${L.camera}${L.colon}${params.cameraDirection}${L.period}`);
 
+  // Frame anchors
   const hasStart = !!params.startFrameDesc;
   const hasEnd = !!params.endFrameDesc;
   if (hasStart || hasEnd) {
-    // Resolve frame_anchors slot for label text
-    const frameAnchorsText = resolveSlot(
-      params.slotContents,
-      "video_generate",
-      "frame_anchors",
-      ""
-    );
-
-    // Extract anchor header and labels from slot content, or use lang-aware defaults
-    const defaultAnchorHeader = lang === "zh" ? "[帧锚点]" : "[FRAME ANCHORS]";
-    const defaultOpeningLabel = lang === "zh" ? "起始帧：" : "Opening frame:";
-    const defaultClosingLabel = lang === "zh" ? "结束帧：" : "Closing frame:";
-    const anchorHeader = extractAnchorHeader(frameAnchorsText, defaultAnchorHeader);
-    const openingLabel = extractFrameLabel(frameAnchorsText, "首帧", defaultOpeningLabel);
-    const closingLabel = extractFrameLabel(frameAnchorsText, "尾帧", defaultClosingLabel);
-
+    const anchorHeader = lang === "zh" ? "[帧锚点]" : "[FRAME ANCHORS]";
+    const openingLabel = lang === "zh" ? "起始帧：" : "Opening frame:";
+    const closingLabel = lang === "zh" ? "结束帧：" : "Closing frame:";
     lines.push(``);
     lines.push(anchorHeader);
     if (hasStart) lines.push(`${openingLabel} ${params.startFrameDesc}`);
     if (hasEnd) lines.push(`${closingLabel} ${params.endFrameDesc}`);
-  }
-
-  if (params.dialogues?.length) {
-    // Resolve dialogue format slot to extract labels
-    const dialogueFormatText = resolveSlot(
-      params.slotContents,
-      "video_generate",
-      "dialogue_format",
-      ""
-    );
-
-    const defaultOnScreen = lang === "zh" ? "【对白口型】" : "[Dialogue Lip Sync]";
-    const defaultOffScreen = lang === "zh" ? "【画外音】" : "[Off-screen Voice]";
-    const onScreenLabel = extractLabel(dialogueFormatText, "画内对白", defaultOnScreen);
-    const offScreenLabel = extractLabel(dialogueFormatText, "画外旁白", defaultOffScreen);
-
-    lines.push(``);
-    for (const d of params.dialogues) {
-      if (d.offscreen) {
-        lines.push(`${offScreenLabel}${d.characterName}: "${d.text}"`);
-      } else {
-        const label = d.visualHint ? `${d.characterName}${L.paren.open}${d.visualHint}${L.paren.close}` : d.characterName;
-        lines.push(`${onScreenLabel}${label}: "${d.text}"`);
-      }
-    }
   }
 
   return lines.join("\n");

@@ -1855,6 +1855,7 @@ async function handleSingleVideoGenerate(
     const videoPrompt = shot.videoPrompt || buildVideoPrompt({
       videoScript,
       cameraDirection: shot.cameraDirection || "static",
+      motionScript: shot.motionScript,
       startFrameDesc: shotView.startFrameDesc ?? undefined,
       endFrameDesc: shotView.endFrameDesc ?? undefined,
       duration: effectiveDuration,
@@ -1975,6 +1976,7 @@ async function handleBatchVideoGenerate(
       const videoPrompt = shot.videoPrompt || buildVideoPrompt({
         videoScript,
         cameraDirection: shot.cameraDirection || "static",
+        motionScript: shot.motionScript,
         startFrameDesc: shotLegacy?.startFrameDesc ?? undefined,
         endFrameDesc: shotLegacy?.endFrameDesc ?? undefined,
         duration: effectiveDuration,
