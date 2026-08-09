@@ -221,6 +221,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     if (params.firstFrame && params.lastFrame) {
       workflowId = 'h3-i2v'
       inputs.first_frame = params.firstFrame
+      inputs.last_frame = params.lastFrame
     } else if (params.initialImage) {
       workflowId = 'h3-r2v'
       inputs.ref_image = params.initialImage
