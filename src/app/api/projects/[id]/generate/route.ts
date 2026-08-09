@@ -1937,80 +1937,79 @@ async function handleBatchVideoGenerate(
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
   const videoSlots = await resolveSlotContents("video_generate", { userId, projectId });
 
-  // Mark all as generating
-  await Promise.all(
-    eligible.map((shot) =>
-      db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id))
-    )
-  );
+  // ── Sequential per-shot generation ──
+  // Process shots one at a time with immediate DB persistence.
+  const total = eligible.length;
+  let doneCount = 0;
+  console.log(`[BatchVideoGenerate] Starting sequential generation: 0/${total}`);
 
-  const results = await Promise.all(
-    eligible.map(async (shot): Promise<{ shotId: string; sequence: number; status: "ok" | "error"; videoUrl?: string; error?: string }> => {
-      try {
-        const shotLegacy = allShotsLegacy.get(shot.id);
-        const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
-        const shotDialogues = await db
-          .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
-          .from(dialogues)
-          .where(eq(dialogues.shotId, shot.id))
-          .orderBy(asc(dialogues.sequence));
+  const results: Array<{ shotId: string; sequence: number; status: string; videoUrl?: string; error?: string }> = [];
 
-        const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
-        const videoContextForDialogue = videoScript;
-        const onScreenDialogueChars = shotDialogues
-          .map((d) => batchCharacters.find((c) => c.id === d.characterId)?.name ?? "Unknown")
-          .filter((name) => isCharacterOnScreen(name, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null));
+  for (const shot of eligible) {
+    const startTime = Date.now();
+    try {
+      await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
 
-        const dialogueList = shotDialogues.map((d) => {
-          const char = batchCharacters.find((c) => c.id === d.characterId);
-          const characterName = char?.name ?? "Unknown";
-          const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null);
-          const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
-          return {
-            characterName,
-            text: d.text,
-            offscreen: !onScreen,
-            visualHint,
-          };
-        });
+      const shotLegacy = allShotsLegacy.get(shot.id);
+      const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
+      const shotDialogues = await db
+        .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
+        .from(dialogues)
+        .where(eq(dialogues.shotId, shot.id))
+        .orderBy(asc(dialogues.sequence));
 
-        const videoPrompt = shot.videoPrompt || buildVideoPrompt({
-          videoScript,
-          cameraDirection: shot.cameraDirection || "static",
-          startFrameDesc: shotLegacy?.startFrameDesc ?? undefined,
-          endFrameDesc: shotLegacy?.endFrameDesc ?? undefined,
-          duration: effectiveDuration,
-          characters: batchCharacters,
-          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-          slotContents: videoSlots,
-        });
+      const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
+      const videoContextForDialogue = videoScript;
+      const onScreenDialogueChars = shotDialogues
+        .map((d) => batchCharacters.find((c) => c.id === d.characterId)?.name ?? "Unknown")
+        .filter((name) => isCharacterOnScreen(name, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null));
 
-        const result = await videoProvider.generateVideo({
-          firstFrame: shotLegacy!.firstFrame!,
-          lastFrame: shotLegacy!.lastFrame!,
-          prompt: videoPrompt,
-          duration: effectiveDuration,
-          ratio,
-        });
+      const dialogueList = shotDialogues.map((d) => {
+        const char = batchCharacters.find((c) => c.id === d.characterId);
+        const characterName = char?.name ?? "Unknown";
+        const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null);
+        const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
+        return { characterName, text: d.text, offscreen: !onScreen, visualHint };
+      });
 
-        await insertAssetVersion({
-          shotId: shot.id, type: "keyframe_video", sequenceInType: 0,
-          prompt: videoPrompt, fileUrl: result.filePath, status: "completed",
-        });
-        await db
-          .update(shots)
-          .set({ status: "completed" })
-          .where(eq(shots.id, shot.id));
+      const videoPrompt = shot.videoPrompt || buildVideoPrompt({
+        videoScript,
+        cameraDirection: shot.cameraDirection || "static",
+        startFrameDesc: shotLegacy?.startFrameDesc ?? undefined,
+        endFrameDesc: shotLegacy?.endFrameDesc ?? undefined,
+        duration: effectiveDuration,
+        characters: batchCharacters,
+        dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+        slotContents: videoSlots,
+      });
 
-        console.log(`[BatchVideoGenerate] Shot ${shot.sequence} completed`);
-        return { shotId: shot.id, sequence: shot.sequence, status: "ok", videoUrl: result.filePath };
-      } catch (err) {
-        console.error(`[BatchVideoGenerate] Error for shot ${shot.sequence}:`, err);
-        await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
-        return { shotId: shot.id, sequence: shot.sequence, status: "error", error: extractErrorMessage(err) };
-      }
-    })
-  );
+      const genResult = await videoProvider.generateVideo({
+        firstFrame: shotLegacy!.firstFrame!,
+        lastFrame: shotLegacy!.lastFrame!,
+        prompt: videoPrompt,
+        duration: effectiveDuration,
+        ratio,
+      });
+
+      await insertAssetVersion({
+        shotId: shot.id, type: "keyframe_video", sequenceInType: 0,
+        prompt: videoPrompt, fileUrl: genResult.filePath, status: "completed",
+      });
+      await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      doneCount++;
+      console.log(`[BatchVideoGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
+
+      results.push({ shotId: shot.id, sequence: shot.sequence, status: "ok", videoUrl: genResult.filePath });
+    } catch (err) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      doneCount++;
+      console.error(`[BatchVideoGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
+      await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
+      results.push({ shotId: shot.id, sequence: shot.sequence, status: "error", error: extractErrorMessage(err) });
+    }
+  }
 
   return NextResponse.json({ results });
 }
