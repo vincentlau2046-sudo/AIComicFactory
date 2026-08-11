@@ -3035,8 +3035,18 @@ async function handleBatchVideoPrompt(
           const name = sceneMetaList[i]?.sceneName || (visionFrames.length > 1 ? `场景-${i + 1}` : `场景`);
           return { label: name, index: batchCharsWithRefs.length + i + 1 };
         });
+        // Prepend frame text descriptions for text-only fallback
+        const frameDescs = [];
+        if (shotLegacy?.startFrameDesc) frameDescs.push(`[Opening frame] ${shotLegacy.startFrameDesc}`);
+        if (shotLegacy?.endFrameDesc) frameDescs.push(`[Closing frame] ${shotLegacy.endFrameDesc}`);
+        for (const sf of sceneMetaList) {
+          if (sf?.sceneName) frameDescs.push(`[Scene] ${sf.sceneName}`);
+        }
+        const augmentedMotionContext = frameDescs.length > 0
+          ? `${frameDescs.join("\n")}\n\n${motionContext}`
+          : motionContext;
         const promptRequest = buildRefVideoPromptRequest({
-          motionScript: motionContext,
+          motionScript: augmentedMotionContext,
           cameraDirection: shot.cameraDirection || "static",
           duration: effectiveDuration,
           characters: characterRefInfos,
@@ -3045,7 +3055,10 @@ async function handleBatchVideoPrompt(
         });
         const rawPrompt = await textProvider.generateText(promptRequest, {
           systemPrompt: refVideoSystem,
-          images: visionFrames,
+          images: visionFrames.length > 0 ? visionFrames : undefined,
+        }).catch(async () => {
+          // Fallback: text-only (no images) if provider rejects multimodal
+          return textProvider.generateText(promptRequest, { systemPrompt: refVideoSystem });
         });
         const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
         await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
