@@ -131,7 +131,7 @@ export async function handleVideoGenerate(task: Task) {
     .where(eq(shots.id, payload.shotId));
 
   const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
-  const useH3Prompt = process.env.H3_PROMPT_MODE === "enabled";
+  const useH3Prompt = process.env.H3_PROMPT_MODE !== "seedance"; // H3 is default, set seedance to opt out
 
   let prompt: string;
   if (useH3Prompt) {
