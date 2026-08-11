@@ -103,7 +103,7 @@ export function routeLanguage(
       const langTag = detectLanguage(seg.text) === "zh" ? "Chinese" : "English";
       parts.push(`<d>[${langTag}] ${seg.text}</d>`);
     } else if (seg.text.trim()) {
-      parts.push(`[ZH: ${seg.text.trim()}]`);  // P4+: replace with IFF translation
+      parts.push(`[ZH: ${seg.text.trim()}]`);  // fallback if translation unavailable
       needsTranslation = true;
     }
   }
@@ -113,4 +113,46 @@ export function routeLanguage(
     hasDialogue: true,
     needsTranslation,
   };
+}
+
+/**
+ * Translate Chinese narrative text to English via IFF Proxy.
+ * Uses deepseek-v4-flash (fast, free) for translation.
+ *
+ * Call this in the handler BEFORE building the H3 prompt when
+ * detectLanguage(videoScript) === "zh" and H3_PROMPT_MODE=enabled.
+ */
+export async function translateNarrative(
+  chineseText: string,
+  apiBase: string = "http://localhost:8999/v1"
+): Promise<string> {
+  const response = await fetch(`${apiBase}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "deepseek-v4-flash",
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are a video script translator. Translate Chinese to natural English.",
+            "Rules:",
+            "- Preserve character names, place names, and camera directions unchanged",
+            "- Convert Chinese action descriptions to natural English prose",
+            "- Output ONLY the translation, no commentary, no markdown",
+          ].join(" "),
+        },
+        { role: "user", content: chineseText },
+      ],
+      temperature: 0.3,
+      max_tokens: Math.max(chineseText.length, 500),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`IFF translation failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content?.trim() ?? `[ZH: ${chineseText}]`;
 }

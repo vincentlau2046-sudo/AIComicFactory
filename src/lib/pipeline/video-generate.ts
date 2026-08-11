@@ -137,8 +137,38 @@ export async function handleVideoGenerate(task: Task) {
   if (useH3Prompt) {
     // v0.2.0: H3 structured prompt (based on official MiniMax VIDEO_PROMPT_WRITING_GUIDE)
     const { buildVideoPrompt: buildH3Builder } = await import("@/lib/ai/prompts/h3");
+    const { detectLanguage, routeLanguage, translateNarrative } = await import("@/lib/ai/prompts/h3/language-route");
     const generationMode: "keyframe" | "reference" =
       (episode?.generationMode ?? project?.generationMode ?? "keyframe") as "keyframe" | "reference";
+
+    // Auto-translate Chinese script to English (H3 requires English body)
+    let translatedVideoScript = videoScript;
+    if (detectLanguage(videoScript) === "zh") {
+      try {
+        const routed = routeLanguage(videoScript, "auto");
+        if (routed.hasDialogue) {
+          // Dialogue already wrapped in <d> tags → translate only narrative parts
+          translatedVideoScript = routed.body.replace(
+            /\[ZH: ([^\]]+)\]/g,
+            (_: string, zhText: string) => zhText
+          );
+          // Translate the narrative parts (preserving <d> tags)
+          const narrativeParts = translatedVideoScript.replace(/<d>.*?<\/d>/g, "");
+          const translatedNarrative = await translateNarrative(narrativeParts);
+          // Rebuild: translated narrative + original <d> dialogues
+          translatedVideoScript = routed.body.replace(
+            /\[ZH: ([^\]]+)\]/g,
+            () => translatedNarrative
+          );
+        } else {
+          // No dialogue → translate entire script
+          translatedVideoScript = await translateNarrative(videoScript);
+        }
+      } catch (e) {
+        console.warn("[H3] Translation failed, using original script:", e);
+        // Fall through with original videoScript (will have [ZH: ...] markers)
+      }
+    }
 
     const h3Output = buildH3Builder({
       videoScript,
