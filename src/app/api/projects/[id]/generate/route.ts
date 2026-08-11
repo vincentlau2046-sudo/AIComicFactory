@@ -2855,6 +2855,49 @@ async function handleSingleVideoPrompt(
   // Allow text-only prompt when no frames available (non-vision models)
 
   const shotCharacters = await db.select().from(characters).where(eq(characters.projectId, shot.projectId));
+
+  // ── H3 mode: build prompt locally, no LLM call ──
+  const useH3 = process.env.H3_PROMPT_MODE !== "seedance";
+  if (useH3) {
+    try {
+      const { buildVideoPrompt: buildH3 } = await import("@/lib/ai/prompts/h3");
+      let genMode: "keyframe" | "reference" = "keyframe";
+      if (shot.episodeId) {
+        const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, shot.episodeId));
+        genMode = (ep?.gm as "keyframe" | "reference") || "keyframe";
+      } else {
+        const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
+        genMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
+      }
+      const h3Output = buildH3({
+        videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
+        motionScript: shot.motionScript,
+        duration: shot.duration ?? 10,
+        cameraDirection: shot.cameraDirection || "static",
+        generationMode: genMode,
+        characters: shotCharacters.map(c => ({
+          id: c.id, name: c.name, description: c.description,
+          visualHint: c.visualHint, referenceImage: c.referenceImage,
+          performanceStyle: c.performanceStyle, scope: c.scope,
+          heightCm: c.heightCm, bodyType: c.bodyType,
+        })),
+        firstFrame: shotView.firstFrame ? { fileUrl: shotView.firstFrame, prompt: shotView.startFrameDesc } : undefined,
+        lastFrame: shotView.lastFrame ? { fileUrl: shotView.lastFrame, prompt: shotView.endFrameDesc } : undefined,
+        soundDesign: shot.soundDesign || undefined,
+        musicCue: shot.musicCue || undefined,
+        languageMode: "auto",
+      });
+      const h3Text = h3Output.sections.join("\n\n");
+      await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shotId));
+      console.log(`[SingleVideoPrompt] H3 ${h3Output.mode} prompt generated`);
+      return NextResponse.json({ shotId, videoPrompt: h3Text, status: "ok", mode: "h3" });
+    } catch (err: any) {
+      console.error("[SingleVideoPrompt] H3 failed:", err?.message);
+      return NextResponse.json({ error: `H3 prompt failed: ${err?.message}` }, { status: 500 });
+    }
+  }
+
+  // ── Seedance mode: existing LLM-based path ──
   const shotDialogues = await db
     .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
     .from(dialogues)
