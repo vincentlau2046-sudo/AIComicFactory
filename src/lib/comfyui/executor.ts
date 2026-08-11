@@ -225,13 +225,16 @@ export class AtomicWorkflowExecutor {
             throw new Error(`Reference image not found: ${filePath}`)
           }
 
-          // Deduplicate uploads (same file may be referenced by multiple inputs)
-          if (!uploaded.has(filePath)) {
-            const result = await this.client.uploadImage(filePath)
-            uploaded.set(filePath, result)
+          // Deduplicate uploads (same file may be referenced by multiple inputs).
+          // Use input name as unique prefix to avoid basename collisions
+          // (e.g. all character refs saved as "character_reference.png").
+          const cacheKey = `${def.name}::${filePath}`
+          if (!uploaded.has(cacheKey)) {
+            const result = await this.client.uploadImage(filePath, { uniqueName: def.name })
+            uploaded.set(cacheKey, result)
           }
 
-          const upload = uploaded.get(filePath)!
+          const upload = uploaded.get(cacheKey)!
           nodeInputs[def.field] = upload.name
           if (upload.subfolder) {
             nodeInputs.subfolder = upload.subfolder

@@ -200,7 +200,7 @@ export class ComfyUIClient {
   }
 
   /** Upload a local image file to ComfyUI's input directory */
-  async uploadImage(filePath: string): Promise<UploadResult> {
+  async uploadImage(filePath: string, options?: { uniqueName?: string }): Promise<UploadResult> {
     if (!fs.existsSync(filePath)) {
       throw new Error(`Image file not found: ${filePath}`)
     }
@@ -211,9 +211,15 @@ export class ComfyUIClient {
       throw new Error(`Unsupported image format: ${ext}. Supported: ${supportedExts.join(', ')}`)
     }
 
+    // Use unique name to avoid collisions when multiple files share the same basename
+    const baseName = path.basename(filePath)
+    const uploadName = options?.uniqueName
+      ? `${options.uniqueName}_${baseName}`
+      : baseName
+
     const formData = new FormData()
     const blob = new Blob([fs.readFileSync(filePath)], { type: `image/${ext.slice(1)}` })
-    formData.append('image', blob, path.basename(filePath))
+    formData.append('image', blob, uploadName)
     formData.append('overwrite', 'true')
 
     const res = await this.rawRequest('POST', '/upload/image', formData)

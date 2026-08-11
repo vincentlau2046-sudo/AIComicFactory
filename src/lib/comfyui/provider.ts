@@ -181,6 +181,8 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         return `Picture ${i + 1}: ${label}`;
       });
       inputs.composite_prompt = `${picRefs.join(", ")}. ${prompt}`;
+      const compatLabel = (options?.referenceLabels || []).join(",");
+      console.log(`[H3-ComfyUI] edit-plus composite: ${refImages.length} refs, labels=[${compatLabel}], picRefs=[${picRefs.join("; ")}]`);
       inputs.scene_prompt = options?.scenePrompt || prompt
       for (let i = 0; i < Math.min(refImages.length, 3); i++) {
         inputs[`character_ref_${i + 1}`] = refImages[i]

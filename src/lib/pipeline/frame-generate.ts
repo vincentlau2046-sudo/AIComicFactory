@@ -140,29 +140,31 @@ export async function handleFrameGenerate(task: Task) {
   const startFrameDescText = firstFrameAsset?.prompt || shot.prompt || "";
   const endFrameDescText = lastFrameAsset?.prompt || shot.prompt || "";
 
-  // Pick character refs to attach as visual anchors. Prefer characters listed
-  // on the asset row; fall back to first 3 chars with reference images.
+  // Pick character refs to attach as visual anchors. Per-frame: each frame
+  // has its own cast — don't merge. Preserve frame character order (not DB order).
   const charsWithRefs = projectCharacters.filter((c) => !!c.referenceImage);
-  const storedCharNames: string[] =
-    firstFrameAsset?.characters && firstFrameAsset.characters.length > 0
-      ? firstFrameAsset.characters
-      : [];
+  const charMap = new Map(charsWithRefs.map(c => [c.name, c]));
 
-  const normalizedStored = storedCharNames.length > 0
-    ? storedCharNames.map(stripCharHint)
-    : [];
-  const relevantChars =
-    normalizedStored.length > 0
-      ? charsWithRefs.filter((c) => normalizedStored.includes(c.name))
-      : [];
-  const charRefImages = relevantChars.map((c) => c.referenceImage as string);
+  function resolveFrameChars(asset: { characters?: string[] | null } | null): typeof charsWithRefs {
+    if (!asset?.characters?.length) return [];
+    return asset.characters
+      .map((n: string) => charMap.get(stripCharHint(n)))
+      .filter(Boolean) as typeof charsWithRefs;
+  }
+
+  const ffChars = resolveFrameChars(firstFrameAsset);
+  const lfChars = resolveFrameChars(lastFrameAsset);
+  const ffCharRefImages = ffChars.map((c) => c.referenceImage!);
+  const ffCharRefLabels = ffChars.map((c) => c.name);
+  const lfCharRefImages = lfChars.map((c) => c.referenceImage!);
+  const lfCharRefLabels = lfChars.map((c) => c.name);
 
   // Character descriptions are redundant with reference images — the four-view
   // sheets already convey all visual identity info. Set to empty to avoid
   // double-text conditioning that can confuse diffusion models.
   const shotCharacterDescriptions = "";
 
-  console.log(`[FrameGenerate-v2] Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ") || "none"} | lastFrameAsset=${lastFrameAsset ? "found" : "null"} | endFrameDesc=${endFrameDescText.slice(0, 40)}...`);
+  console.log(`[FrameGenerate-v2] Shot ${shot.sequence}: ff=${ffChars.length} chars (${ffChars.map(c => c.name).join(", ") || "none"}), lf=${lfChars.length} chars (${lfChars.map(c => c.name).join(", ") || "none"})`);
 
   // Mark assets as generating
   if (firstFrameAsset) await patchAsset(firstFrameAsset.id, { status: "generating" });
@@ -198,26 +200,28 @@ export async function handleFrameGenerate(task: Task) {
     if (compositionSuffix) lastFramePrompt += compositionSuffix;
 
     // First frame: T2I (no refs) or Edit-plus (with character refs)
-    if (charRefImages.length === 0) {
+    if (ffCharRefImages.length === 0) {
       firstFramePath = await ai.generateImage(firstFramePrompt, { quality: "hd", size: frameSize });
     } else {
       firstFramePath = await ai.generateImage(firstFramePrompt, {
         quality: "hd",
         size: frameSize,
-        referenceImages: charRefImages,
+        referenceImages: ffCharRefImages,
+        referenceLabels: ffCharRefLabels,
         scenePrompt: shot.prompt || "",
       });
     }
     firstFramePath = copyToUploads(firstFramePath, 'first_frame');
 
     // Last frame: T2I (no refs) or Edit-plus (with character refs)
-    if (charRefImages.length === 0) {
+    if (lfCharRefImages.length === 0) {
       lastFramePath = await ai.generateImage(lastFramePrompt, { quality: "hd", size: frameSize });
     } else {
       lastFramePath = await ai.generateImage(lastFramePrompt, {
         quality: "hd",
         size: frameSize,
-        referenceImages: charRefImages,
+        referenceImages: lfCharRefImages,
+        referenceLabels: lfCharRefLabels,
         scenePrompt: shot.prompt || "",
       });
     }
@@ -243,7 +247,7 @@ export async function handleFrameGenerate(task: Task) {
       prompt: startFrameDescText,
       fileUrl: firstFramePath,
       status: "completed",
-      characters: relevantChars.map((c) => c.name),
+      characters: lfChars.map((c) => c.name),
     });
   }
   if (lastFrameAsset) {
@@ -259,7 +263,7 @@ export async function handleFrameGenerate(task: Task) {
       prompt: endFrameDescText,
       fileUrl: lastFramePath,
       status: "completed",
-      characters: relevantChars.map((c) => c.name),
+      characters: lfChars.map((c) => c.name),
     });
   }
 
