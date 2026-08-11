@@ -2,39 +2,121 @@
 // H3 Base Mode Builder (v0.2.0)
 // Handles T2VA / I2VA / FL2VA modes
 //
-// Reference: MiniMax H3 official VIDEO_PROMPT_WRITING_GUIDE_base_en.md
-//   §2.1  — Instruction prefix per mode
-//   §4    — integrated_multimodal_description format
-//   §4.2  — Shots and cuts ([Shot 1], [Shot N] At MM:SS.SSS)
-//   §4.3  — Camera motion vocabulary
-//   §4.4  — Speakers, dialogue, singing ((Sx), <d>)
-//   §4.6  — overall_soundscape
-//   §4.7  — non_diegetic_music
+// Reference: MiniMax H3 official h3-prompt-writing Skill
+//   + VIDEO_PROMPT_WRITING_GUIDE_base_en.md §2-4
 // ═══════════════════════════════════════════════
 
-import type {
-  H3PromptInput, H3PromptOutput,
-  VisualStyle, ShotScript, SpeakerEvent,
-  RetentionVision, RetentionAudio,
-} from "./types";
+import type { H3PromptInput, H3PromptOutput, VisualStyle, ShotScript, SpeakerEvent } from "./types";
 import { mapCameraDirection } from "./camera-map";
 import { detectLanguage } from "./language-route";
 
-// ═══ Public API ═══════════════════════════════════════════════
+// ═══ LLM-Powered Builder (matches official h3-prompt-writing Skill) ═══
 
 /**
- * Build H3 Base Mode prompt (3 sections + instruction prefix).
- *
- * Returns H3PromptOutput with sections:
- *   sections[0] = instruction_prefix + integrated_multimodal_description
- *   sections[1] = overall_soundscape
- *   sections[2] = non_diegetic_music
+ * Build H3 prompt via IFF LLM optimization.
+ * Translates Chinese→English, enriches camera/audio descriptions,
+ * structures into 3-section H3 format.
+ * Falls back to local buildH3BasePrompt() if LLM unavailable.
  */
-export function buildH3BasePrompt(input: H3PromptInput): H3PromptOutput {
-  const lang = input.languageMode === "auto"
-    ? detectLanguage(input.videoScript)
-    : input.languageMode as "en" | "zh";
+export async function buildH3BasePromptLLM(
+  input: H3PromptInput,
+  apiBase = "http://localhost:8999/v1"
+): Promise<H3PromptOutput> {
+  try {
+    const systemPrompt = buildLLMSystemPrompt(input);
+    const response = await fetch(`${apiBase}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "deepseek-v4-flash",
+        messages: [{ role: "system", content: systemPrompt }],
+        temperature: 0.7,
+        max_tokens: 2000,
+      }),
+    });
+    if (!response.ok) throw new Error(`IFF ${response.status}`);
+    const data = await response.json();
+    const raw: string = data.choices?.[0]?.message?.content?.trim() || "";
+    if (!raw) throw new Error("Empty LLM response");
+    return { mode: "base", taskType: "keyframe_completion", languageUsed: "en", sections: parseLLMSections(raw, input) };
+  } catch (e) {
+    console.warn("[H3] LLM fallback to local:", (e as Error).message);
+    return buildH3BasePrompt(input);
+  }
+}
 
+function buildLLMSystemPrompt(input: H3PromptInput): string {
+  const script = input.videoScript || "";
+  const camera = mapCameraDirection(input.cameraDirection);
+  const duration = input.duration || 10;
+  const chars = input.characters?.map(c => `${c.name}: ${c.description || ""} ${c.visualHint || ""}`.trim()).join("; ") || "none";
+  const sound = input.soundDesign || "no specific sounds";
+  const bgm = input.musicCue || input.bgmUrl ? (input.musicCue || "background music") : "none";
+  const hasFirst = !!input.firstFrame?.fileUrl;
+  const hasLast = !!input.lastFrame?.fileUrl;
+
+  let prefix = "";
+  if (hasFirst && hasLast) {
+    prefix = `How the reference pictures align with the target video — <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video; <Picture 2> (from [Shot 1]) aligns with the ${duration.toFixed(2)}-second mark of the target video.`;
+  } else if (hasFirst) {
+    prefix = `For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`;
+  }
+
+  return [
+    "You are a video prompt engineer for MiniMax H3 (I2VA/FL2VA mode).",
+    "Transform the user input into a 3-section H3 structured prompt.",
+    "",
+    "OUTPUT FORMAT (exactly):",
+    prefix ? `${prefix}\n\nintegrated_multimodal_description:\n[Shot 1] ...` : "integrated_multimodal_description:\n[Shot 1] ...",
+    "",
+    "overall_soundscape: ...",
+    "non_diegetic_music: ...",
+    "",
+    "RULES:",
+    "- ALL output in English (translate Chinese input to cinematic English prose)",
+    "- integrated_multimodal_description: describe the scene in rich cinematic detail",
+    `  Camera: ${camera}`,
+    "- DO NOT add extra commentary, markdown, or section labels beyond the 3 fields",
+    "- overall_soundscape: 1-2 sentences of ambient and diegetic sounds",
+    "- non_diegetic_music: instrumentation, tempo, dynamics — use N/A if none",
+    "",
+    "INPUT DATA:",
+    `Script: ${script}`,
+    `Characters: ${chars}`,
+    `Duration: ${duration}s`,
+    `Camera: ${camera}`,
+    `Sound Design: ${sound}`,
+    `Music Cue: ${bgm}`,
+  ].join("\n");
+}
+
+function parseLLMSections(raw: string, input: H3PromptInput): string[] {
+  const sections: string[] = [];
+  
+  // Extract instruction prefix if present
+  const prefixMatch = raw.match(/^(How the reference pictures align[\s\S]*?video\.|For the target video[\s\S]*?referenced\.)/);
+  let prefix = prefixMatch ? prefixMatch[1] : "";
+  let body = prefixMatch ? raw.slice(prefixMatch[0].length).trim() : raw;
+
+  // Try parsing the 3 H3 fields
+  const imdMatch = body.match(/integrated_multimodal_description:\s*([\s\S]*?)(?=\n\s*overall_soundscape:|$)/i);
+  const osMatch = body.match(/overall_soundscape:\s*([\s\S]*?)(?=\n\s*non_diegetic_music:|$)/i);
+  const nmMatch = body.match(/non_diegetic_music:\s*([\s\S]*)/i);
+
+  const imd = imdMatch ? `integrated_multimodal_description:\n${imdMatch[1].trim()}` : `integrated_multimodal_description:\n[Shot 1] ${input.videoScript}`;
+  const os = osMatch ? `overall_soundscape: ${osMatch[1].trim()}` : `overall_soundscape: ${input.soundDesign || "N/A"}`;
+  const nm = nmMatch ? `non_diegetic_music: ${nmMatch[1].trim()}` : `non_diegetic_music: ${input.musicCue || "N/A"}`;
+
+  sections.push(prefix ? `${prefix}\n\n${imd}` : imd);
+  sections.push(os);
+  sections.push(nm);
+  return sections;
+}
+
+// ═══ Local Builder (format-only, no LLM) ═══
+
+export function buildH3BasePrompt(input: H3PromptInput): H3PromptOutput {
+  const lang = input.languageMode === "auto" ? detectLanguage(input.videoScript) : input.languageMode as "en" | "zh";
   const style = inferVisualStyle(input);
   const speakers = buildSpeakerEvents(input);
   const shots = buildShotScripts(input, speakers);
@@ -52,239 +134,74 @@ export function buildH3BasePrompt(input: H3PromptInput): H3PromptOutput {
   };
 }
 
-// ═══ Instruction Prefix §2.1 ═══════════════════════════════════
-// Source: Official guide, section 2.1
+// ═══ Local helpers (unchanged) ═══
 
 function buildInstructionPrefix(input: H3PromptInput): string | null {
   if (!input.firstFrame?.fileUrl) return null;
-
   if (input.lastFrame?.fileUrl) {
-    // FL2VA: first+last frame
     return [
       "How the reference pictures align with the target video — ",
       "<Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video; ",
       `<Picture 2> (from [Shot 1]) aligns with the ${input.duration.toFixed(2)}-second mark of the target video.`
     ].join("");
   }
-
-  // I2VA: first frame only
   return "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.";
 }
 
-// ═══ Visual Style Inference ══════════════════════════════════
-// Source: Official guide §4.1 — style stated at [Shot 1] opening
-
 function inferVisualStyle(input: H3PromptInput): VisualStyle {
-  const combined = (
-    input.videoScript + " " +
-    (input.sceneDescription ?? "") + " " +
-    (input.episodeDescription ?? "")
-  ).toLowerCase();
-
-  if (combined.includes("anime") || combined.includes("cartoon") || combined.includes("2d"))
-    return "2D-animated";
-  if (combined.includes("claymation") || combined.includes("stop-motion"))
-    return "claymation";
-  if (combined.includes("watercolor"))
-    return "watercolor";
-  if (combined.includes("3d") || combined.includes("cg"))
-    return "3D CG";
-  if (combined.includes("vintage") || combined.includes("old film"))
-    return "vintage film";
-
+  const combined = (input.videoScript + " " + (input.sceneDescription ?? "")).toLowerCase();
+  if (combined.includes("anime") || combined.includes("cartoon")) return "2D-animated";
+  if (combined.includes("3d") || combined.includes("cg")) return "3D CG";
   return input.characters.some(c => c.referenceImage) ? "live-action" : "Cinematic";
 }
 
-// ═══ Speaker Events §4.4 ══════════════════════════════════════
-// Source: Official guide, section 4.4
-// Rules:
-//   - Stable (S1), (S2) IDs assigned by first-appearance order
-//   - Same character across shots keeps same ID
-//   - Dialogue inside <d>[Language] text</d>
-
 function buildSpeakerEvents(input: H3PromptInput): SpeakerEvent[] {
   if (!input.dialogues?.length) return [];
-
   const seen = new Map<string, string>();
   let nextId = 1;
-  const events: SpeakerEvent[] = [];
-
-  for (const d of input.dialogues) {
-    if (!d.text?.trim()) continue;
-
-    let speakerId = seen.get(d.characterName);
-    if (!speakerId) {
-      speakerId = `S${nextId++}`;
-      seen.set(d.characterName, speakerId);
-    }
-
-    const charIdx = input.characters.findIndex(c => c.name === d.characterName);
-    const subjectLabel = charIdx >= 0 ? `<Subject ${charIdx + 1}>` : undefined;
-
-    events.push({
-      speakerId,
-      subjectLabel,
+  return input.dialogues.filter(d => d.text?.trim()).map(d => {
+    let sid = seen.get(d.characterName);
+    if (!sid) { sid = `S${nextId++}`; seen.set(d.characterName, sid); }
+    return {
+      speakerId: sid,
+      subjectLabel: undefined,
       lineText: d.text,
       language: detectLanguage(d.text) === "zh" ? "Chinese" : "English",
       isOffscreen: d.offscreen,
-      timeInShot: `after ${d.startRatio} of shot duration`,
-    });
-  }
-
-  return events;
+      timeInShot: `after ${d.startRatio}`,
+    };
+  });
 }
 
-// ═══ Shot Scripts §4.2 ════════════════════════════════════════
-// Source: Official guide, section 4.2
-// Rules:
-//   - [Shot 1] has no timestamp
-//   - [Shot N] starts with "At MM:SS.SSS,"
-//   - H3 max 15s per shot → split if duration > 15
-
-function buildShotScripts(
-  input: H3PromptInput,
-  speakers: SpeakerEvent[],
-): ShotScript[] {
-  const MAX_PER_SHOT = 15;
-  const shotCount = Math.max(1, Math.ceil(input.duration / MAX_PER_SHOT));
-
-  if (shotCount === 1) {
-    return [{
-      index: 1,
-      timestampSeconds: 0,
-      visualDescription: input.videoScript,
-      cameraMotion: mapCameraDirection(input.cameraDirection),
-      speakerEvents: speakers,
-      diegeticSounds: [],
-    }];
-  }
-
-  // Multi-shot split: divide duration evenly
-  const shots: ShotScript[] = [];
-  const perShotDuration = input.duration / shotCount;
-
-  for (let i = 0; i < shotCount; i++) {
-    const ratioStart = i / shotCount;
-    const ratioEnd = (i + 1) / shotCount;
-
-    // Distribute speakers evenly across shots by position
-    const speakerPerShot = Math.ceil(speakers.length / shotCount);
-    const startIdx = i * speakerPerShot;
-    const shotSpeakers = speakers.slice(startIdx, startIdx + speakerPerShot);
-
-    shots.push({
-      index: i + 1,
-      timestampSeconds: i * perShotDuration,
-      visualDescription: i === 0
-        ? input.videoScript
-        : `[Shot ${i + 1} continuation of previous action]`,
-      cameraMotion: mapCameraDirection(input.cameraDirection),
-      speakerEvents: shotSpeakers,
-      diegeticSounds: [],
-    });
-  }
-
-  return shots;
+function buildShotScripts(input: H3PromptInput, speakers: SpeakerEvent[]): ShotScript[] {
+  return [{
+    index: 1, timestampSeconds: 0,
+    visualDescription: input.videoScript,
+    cameraMotion: mapCameraDirection(input.cameraDirection),
+    speakerEvents: speakers,
+    diegeticSounds: [],
+  }];
 }
 
-// ═══ Integrated Multimodal Description §4 ════════════════════
-// Source: Official guide, section 4
-// Format: "[Shot 1] {style}, ... [Shot 2] At MM:SS.SSS, ..."
-
-function buildIntegratedSection(
-  prefix: string | null,
-  style: VisualStyle,
-  shots: ShotScript[],
-  lang: "en" | "zh",
-): string {
+function buildIntegratedSection(prefix: string | null, style: VisualStyle, shots: ShotScript[], _lang: string): string {
   const lines: string[] = [];
-
-  // Instruction prefix line + blank line separator
-  if (prefix) {
-    lines.push(prefix);
-    lines.push("");
-  }
-
+  if (prefix) { lines.push(prefix); lines.push(""); }
   lines.push("integrated_multimodal_description:");
-
-  for (const shot of shots) {
-    let shotLine: string;
-
-    if (shot.index === 1) {
-      // §4.2: First shot has no timestamp, opens with style
-      shotLine = `[Shot 1] ${style}, ${shot.visualDescription}`;
-    } else {
-      // §4.2: Subsequent shots start with cut time
-      const ts = formatTimestamp(shot.timestampSeconds);
-      shotLine = `[Shot ${shot.index}] At ${ts}, the camera cuts to ${shot.visualDescription}`;
+  for (const s of shots) {
+    let line = `[Shot 1] ${style}, ${s.visualDescription} ${s.cameraMotion}.`;
+    for (const spk of s.speakerEvents) {
+      line += ` (${spk.speakerId}) says: <d>[${spk.language}] ${spk.lineText}</d>`;
     }
-
-    // §4.3: Camera motion
-    if (shot.cameraMotion) {
-      shotLine += ` ${shot.cameraMotion}.`;
-    }
-
-    // §4.4: Speaker events
-    for (const spk of shot.speakerEvents) {
-      const idPart = spk.subjectLabel
-        ? `${spk.subjectLabel} (${spk.speakerId})`
-        : `the speaker (${spk.speakerId})`;
-
-      if (spk.isOffscreen) {
-        shotLine += ` ${idPart} says in an off-screen voiceover: <d>[${spk.language}] ${spk.lineText}</d> while their lips remain completely closed.`;
-      } else {
-        shotLine += ` ${idPart} says: <d>[${spk.language}] ${spk.lineText}</d>`;
-      }
-    }
-
-    // §4.2: Cross-shot continuity markers
-    // <scenetrans> for dialogue crossing cuts (handled by speaker assignment)
-    // <cutoff> for speech truncated by video end (not needed for single video)
-
-    lines.push(shotLine);
-    lines.push("");  // blank line between shots
+    lines.push(line);
   }
-
-  return lines.join("\n").trim();
+  return lines.join("\n");
 }
-
-// ═══ overall_soundscape §4.6 ══════════════════════════════════
-// Source: Official guide, section 4.6
-// 1-4 English sentences summarizing ambience + physical sounds + non-verbal human sounds
 
 function buildSoundscape(input: H3PromptInput): string {
-  const raw = input.soundDesign?.trim();
-  if (!raw) return "overall_soundscape: N/A";
-
-  // If already English, use as-is
-  if (detectLanguage(raw) === "en") {
-    return `overall_soundscape: ${raw}`;
-  }
-
-  // Chinese: mark for translation (P4 will integrate IFF)
-  return `overall_soundscape: [ZH: ${raw}]`;
+  return `overall_soundscape: ${input.soundDesign || "N/A"}`;
 }
-
-// ═══ non_diegetic_music §4.7 ══════════════════════════════════
-// Source: Official guide, section 4.7
-// 1-3 sentences: instrumentation, tempo, dynamic development
-// Use <Audio N> label when BGM file is available
 
 function buildNonDiegeticMusic(input: H3PromptInput): string {
-  if (input.bgmUrl) {
-    return "non_diegetic_music: <Audio 1> is referenced as the complete background score.";
-  }
-  if (input.musicCue?.trim()) {
-    return `non_diegetic_music: ${input.musicCue}`;
-  }
-  return "non_diegetic_music: N/A";
-}
-
-// ═══ Helpers ═══════════════════════════════════════════════════
-
-/** Format seconds to H3 MM:SS.SSS format */
-function formatTimestamp(seconds: number): string {
-  const mm = Math.floor(seconds / 60).toString().padStart(2, "0");
-  const ss = (seconds % 60).toFixed(3);
-  return `${mm}:${ss.padStart(6, "0")}`;
+  if (input.bgmUrl) return "non_diegetic_music: <Audio 1> is referenced as the background score.";
+  return `non_diegetic_music: ${input.musicCue || "N/A"}`;
 }

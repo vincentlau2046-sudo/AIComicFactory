@@ -3,23 +3,19 @@
 // ═══════════════════════════════════════════════
 
 import type { H3PromptInput, H3PromptOutput } from "./types";
-import { buildH3BasePrompt } from "./base-mode";
+import { buildH3BasePrompt, buildH3BasePromptLLM } from "./base-mode";
 import { buildH3Ref2VAPrompt } from "./ref-mode";
 
-/**
- * Main entry: build H3 video prompt.
- *
- * Auto-selects Base mode (3 sections, T2VA/I2VA/FL2VA) or
- * Ref2VA mode (6 sections) based on input.generationMode.
- *
- * When H3_PROMPT_MODE=enabled, the handler calls this instead of buildVideoPrompt().
- */
+/** LLM-optimized builder (preferred for production — uses IFF to enrich content) */
+export async function buildVideoPromptLLM(input: H3PromptInput): Promise<H3PromptOutput> {
+  if (input.generationMode === "reference") return buildH3Ref2VAPrompt(input);
+  return buildH3BasePromptLLM(input);
+}
+
+/** Local builder (format-only, no LLM — fast fallback) */
 export function buildVideoPrompt(input: H3PromptInput): H3PromptOutput {
-  if (input.generationMode === "reference") {
-    return buildH3Ref2VAPrompt(input);
-  }
+  if (input.generationMode === "reference") return buildH3Ref2VAPrompt(input);
   return buildH3BasePrompt(input);
 }
 
-// Re-export types for external use
 export type { H3PromptInput, H3PromptOutput };

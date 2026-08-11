@@ -136,7 +136,7 @@ export async function handleVideoGenerate(task: Task) {
   let prompt: string;
   if (useH3Prompt) {
     // v0.2.0: H3 structured prompt (based on official MiniMax VIDEO_PROMPT_WRITING_GUIDE)
-    const { buildVideoPrompt: buildH3Builder } = await import("@/lib/ai/prompts/h3");
+    const { buildVideoPromptLLM: buildH3Builder } = await import("@/lib/ai/prompts/h3");
     const { detectLanguage, routeLanguage, translateNarrative } = await import("@/lib/ai/prompts/h3/language-route");
     const generationMode: "keyframe" | "reference" =
       (episode?.generationMode ?? project?.generationMode ?? "keyframe") as "keyframe" | "reference";
@@ -170,7 +170,7 @@ export async function handleVideoGenerate(task: Task) {
       }
     }
 
-    const h3Output = buildH3Builder({
+    const h3Output = await buildH3Builder({
       videoScript,
       motionScript: shot.motionScript,
       duration: effectiveDuration,

@@ -1857,8 +1857,8 @@ async function handleSingleVideoGenerate(
     if (shot.videoPrompt) {
       videoPrompt = shot.videoPrompt;
     } else if (useH3VP) {
-      const { buildVideoPrompt: buildH3 } = await import("@/lib/ai/prompts/h3");
-      const h3Output = buildH3({
+      const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
+      const h3Output = await buildH3({
         videoScript,
         motionScript: shot.motionScript,
         duration: effectiveDuration,
@@ -2012,8 +2012,8 @@ async function handleBatchVideoGenerate(
       if (shot.videoPrompt) {
         videoPrompt = shot.videoPrompt;
       } else if (useH3VG) {
-        const { buildVideoPrompt: buildH3 } = await import("@/lib/ai/prompts/h3");
-        const h3Output = buildH3({
+        const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
+        const h3Output = await buildH3({
           videoScript,
           motionScript: shot.motionScript,
           duration: effectiveDuration,
@@ -2860,7 +2860,7 @@ async function handleSingleVideoPrompt(
   const useH3 = process.env.H3_PROMPT_MODE !== "seedance";
   if (useH3) {
     try {
-      const { buildVideoPrompt: buildH3 } = await import("@/lib/ai/prompts/h3");
+      const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
       let genMode: "keyframe" | "reference" = "keyframe";
       if (shot.episodeId) {
         const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, shot.episodeId));
@@ -2869,7 +2869,7 @@ async function handleSingleVideoPrompt(
         const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
         genMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
       }
-      const h3Output = buildH3({
+      const h3Output = await buildH3({
         videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
         motionScript: shot.motionScript,
         duration: shot.duration ?? 10,
@@ -3076,7 +3076,7 @@ async function handleBatchVideoPrompt(
     const results = await Promise.all(
       eligible.map(async (shot) => {
         try {
-          const { buildVideoPrompt: buildH3 } = await import("@/lib/ai/prompts/h3");
+          const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
           const shotLegacy = batchShotsLegacy.get(shot.id);
           const effectiveDuration = shot.duration ?? 10;
           // Determine generation mode
@@ -3088,7 +3088,7 @@ async function handleBatchVideoPrompt(
             const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
             genMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
           }
-          const h3Output = buildH3({
+          const h3Output = await buildH3({
             videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
             motionScript: shot.motionScript,
             duration: effectiveDuration,
