@@ -2864,13 +2864,20 @@ async function handleSingleVideoPrompt(
       sceneFrames: sceneFrameInfos,
       dialogues: dialogueList.length > 0 ? dialogueList : undefined,
     });
-    console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequest}`);
-    const rawPrompt = await textProvider.generateText(promptRequest, {
+    // Build text-only variant upfront (IFF has no vision models)
+    const promptRequestText = buildRefVideoPromptRequest({
+      motionScript: augmentedMotionContext,
+      cameraDirection: shot.cameraDirection || "static",
+      duration: effectiveDuration,
+      characters: characterRefInfos,
+      sceneFrames: sceneFrameInfos,
+      dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+      textOnly: true,
+    });
+    console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequestText}`);
+    const rawPrompt = await textProvider.generateText(promptRequestText, {
       systemPrompt: refVideoSystem,
-      images: visionFrames.length > 0 ? visionFrames : undefined, maxTokens: 2000,
-    }).catch(async () => {
-      // Fallback: text-only if provider rejects multimodal
-      return textProvider.generateText(promptRequest, { systemPrompt: refVideoSystem, maxTokens: 2000 });
+      maxTokens: 2000,
     });
     const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} videoPrompt:\n${videoPrompt}`);
@@ -3068,13 +3075,11 @@ async function handleBatchVideoPrompt(
           characters: characterRefInfos,
           sceneFrames: sceneFrameInfos,
           dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+          textOnly: true,  // IFF has no vision models, always use text-only
         });
         const rawPrompt = await textProvider.generateText(promptRequest, {
           systemPrompt: refVideoSystem,
-          images: visionFrames.length > 0 ? visionFrames : undefined, maxTokens: 2000,
-        }).catch(async () => {
-          // Fallback: text-only (no images) if provider rejects multimodal
-          return textProvider.generateText(promptRequest, { systemPrompt: refVideoSystem, maxTokens: 2000 });
+          maxTokens: 2000,
         });
         const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
         await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));

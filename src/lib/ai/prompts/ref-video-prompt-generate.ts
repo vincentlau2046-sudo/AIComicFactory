@@ -31,20 +31,33 @@ export function buildRefVideoPromptRequest(params: {
   characters: CharacterRefInfo[];
   sceneFrames: SceneFrameInfo[];
   dialogues?: Array<{ characterName: string; text: string; offscreen?: boolean; visualHint?: string }>;
+  textOnly?: boolean;  // skip @图片 references when no images are sent
 }): string {
   const lines: string[] = [];
 
-  lines.push(
-    `你会收到以下参考图（顺序严格对应 @图片1、@图片2、@图片3 ...，必须使用 \`@图片N\` 形式，**不能**写成 \`@图片N\`）：`
-  );
-  for (const c of params.characters) {
-    const hint = c.visualHint ? `（${c.visualHint}）` : "";
-    lines.push(`  @图片${c.index} = 角色：${c.name}${hint}`);
+  if (!params.textOnly) {
+    lines.push(
+      `你会收到以下参考图（顺序严格对应 @图片1、@图片2、@图片3 ...，必须使用 \`@图片N\` 形式，**不能**写成 \`@图片N\`）：`
+    );
+    for (const c of params.characters) {
+      const hint = c.visualHint ? `（${c.visualHint}）` : "";
+      lines.push(`  @图片${c.index} = 角色：${c.name}${hint}`);
+    }
+    for (const s of params.sceneFrames) {
+      lines.push(`  @图片${s.index} = 场景：${s.label}`);
+    }
+    lines.push(``);
+  } else {
+    // Text-only mode: describe characters without @图片 references
+    if (params.characters.length > 0) {
+      lines.push(`角色列表：`);
+      for (const c of params.characters) {
+        const hint = c.visualHint ? `（${c.visualHint}）` : "";
+        lines.push(`  - ${c.name}${hint}`);
+      }
+      lines.push(``);
+    }
   }
-  for (const s of params.sceneFrames) {
-    lines.push(`  @图片${s.index} = 场景：${s.label}`);
-  }
-  lines.push(``);
 
   if (params.sceneFrames.length > 1) {
     lines.push(
@@ -74,10 +87,16 @@ export function buildRefVideoPromptRequest(params: {
 
   lines.push(``);
   lines.push(`严格要求：`);
-  lines.push(`1. 使用 \`@图片N\` 形式引用所有角色和场景（例：@图片1、@图片2），禁止写成 \`@图片N\``);
-  lines.push(`2. 写作风格为连贯的自然散文，把 @图片N 直接嵌入描述里，禁止"节拍 1/2/3"结构化标签`);
-  lines.push(`3. 禁止提示词开头写"图像映射：@图片1是 X，@图片2是 Y" 这种单独映射声明行——信息要融进散文`);
-  lines.push(`4. 每次 @图片N 后面都必须加括号注释角色/场景名，写成 @图片N（名字）的格式`);
+  if (!params.textOnly) {
+    lines.push(`1. 使用 \`@图片N\` 形式引用所有角色和场景（例：@图片1、@图片2），禁止写成 \`@图片N\``);
+    lines.push(`2. 写作风格为连贯的自然散文，把 @图片N 直接嵌入描述里，禁止"节拍 1/2/3"结构化标签`);
+    lines.push(`3. 禁止提示词开头写"图像映射：@图片1是 X，@图片2是 Y" 这种单独映射声明行——信息要融进散文`);
+    lines.push(`4. 每次 @图片N 后面都必须加括号注释角色/场景名，写成 @图片N（名字）的格式`);
+  } else {
+    lines.push(`1. 根据角色列表和场景描述，生成一段连贯的视频散文描述`);
+    lines.push(`2. 禁止使用 @图片N 引用或任何图像标签`);
+    lines.push(`3. 禁止提示词开头写映射声明——直接开始描述画面`);
+  }
   lines.push(`5. 对白（如有）直接写在散文末尾：角色名台词：原文台词（不要 【对白口型】 等标签）`);
   lines.push(`6. 仅输出提示词正文，无前言，无 markdown`);
 
