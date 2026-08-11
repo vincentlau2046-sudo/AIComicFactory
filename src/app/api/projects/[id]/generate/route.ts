@@ -1852,17 +1852,41 @@ async function handleSingleVideoGenerate(
         visualHint,
       };
     });
-    const videoPrompt = shot.videoPrompt || buildVideoPrompt({
-      videoScript,
-      cameraDirection: shot.cameraDirection || "static",
-      motionScript: shot.motionScript,
-      startFrameDesc: shotView.startFrameDesc ?? undefined,
-      endFrameDesc: shotView.endFrameDesc ?? undefined,
-      duration: effectiveDuration,
-      characters: shotCharacters,
-      dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-      slotContents: videoSlots,
-    });
+    const useH3VP = process.env.H3_PROMPT_MODE !== "seedance";
+    let videoPrompt: string;
+    if (shot.videoPrompt) {
+      videoPrompt = shot.videoPrompt;
+    } else if (useH3VP) {
+      const { buildVideoPrompt: buildH3 } = await import("@/lib/ai/prompts/h3");
+      const h3Output = buildH3({
+        videoScript,
+        motionScript: shot.motionScript,
+        duration: effectiveDuration,
+        cameraDirection: shot.cameraDirection || "static",
+        generationMode: (shot.episodeId
+          ? (await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, shot.episodeId)))?.[0]?.gm
+          : (await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId)))?.[0]?.gm) as "keyframe" | "reference" || "keyframe",
+        characters: shotCharacters.map(c => ({ id: c.id, name: c.name, description: c.description, visualHint: c.visualHint, referenceImage: c.referenceImage, performanceStyle: c.performanceStyle, scope: c.scope, heightCm: c.heightCm, bodyType: c.bodyType })),
+        firstFrame: { fileUrl: shotView.firstFrame || "", prompt: shotView.startFrameDesc },
+        lastFrame: { fileUrl: shotView.lastFrame || "", prompt: shotView.endFrameDesc },
+        soundDesign: shot.soundDesign || undefined,
+        musicCue: shot.musicCue || undefined,
+        languageMode: "auto",
+      });
+      videoPrompt = h3Output.sections.join("\n\n");
+    } else {
+      videoPrompt = buildVideoPrompt({
+        videoScript,
+        cameraDirection: shot.cameraDirection || "static",
+        motionScript: shot.motionScript,
+        startFrameDesc: shotView.startFrameDesc ?? undefined,
+        endFrameDesc: shotView.endFrameDesc ?? undefined,
+        duration: effectiveDuration,
+        characters: shotCharacters,
+        dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+        slotContents: videoSlots,
+      });
+    }
 
     const result = await videoProvider.generateVideo({
       firstFrame: shotView.firstFrame,
@@ -1938,6 +1962,16 @@ async function handleBatchVideoGenerate(
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
   const videoSlots = await resolveSlotContents("video_generate", { userId, projectId });
 
+  // Generation mode for H3 prompt builder
+  let batchGenMode: "keyframe" | "reference" = "keyframe";
+  if (episodeId) {
+    const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, episodeId));
+    batchGenMode = (ep?.gm as "keyframe" | "reference") || "keyframe";
+  } else {
+    const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
+    batchGenMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
+  }
+
   // ── Sequential per-shot generation ──
   // Process shots one at a time with immediate DB persistence.
   const total = eligible.length;
@@ -1973,17 +2007,39 @@ async function handleBatchVideoGenerate(
         return { characterName, text: d.text, offscreen: !onScreen, visualHint };
       });
 
-      const videoPrompt = shot.videoPrompt || buildVideoPrompt({
-        videoScript,
-        cameraDirection: shot.cameraDirection || "static",
-        motionScript: shot.motionScript,
-        startFrameDesc: shotLegacy?.startFrameDesc ?? undefined,
-        endFrameDesc: shotLegacy?.endFrameDesc ?? undefined,
-        duration: effectiveDuration,
-        characters: batchCharacters,
-        dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-        slotContents: videoSlots,
-      });
+      const useH3VG = process.env.H3_PROMPT_MODE !== "seedance";
+      let videoPrompt: string;
+      if (shot.videoPrompt) {
+        videoPrompt = shot.videoPrompt;
+      } else if (useH3VG) {
+        const { buildVideoPrompt: buildH3 } = await import("@/lib/ai/prompts/h3");
+        const h3Output = buildH3({
+          videoScript,
+          motionScript: shot.motionScript,
+          duration: effectiveDuration,
+          cameraDirection: shot.cameraDirection || "static",
+          generationMode: batchGenMode as "keyframe" | "reference",
+          characters: batchCharacters.map(c => ({ id: c.id, name: c.name, description: c.description, visualHint: c.visualHint, referenceImage: c.referenceImage, performanceStyle: c.performanceStyle, scope: c.scope, heightCm: c.heightCm, bodyType: c.bodyType })),
+          firstFrame: { fileUrl: shotLegacy?.firstFrame || "", prompt: shotLegacy?.startFrameDesc },
+          lastFrame: { fileUrl: shotLegacy?.lastFrame || "", prompt: shotLegacy?.endFrameDesc },
+          soundDesign: shot.soundDesign || undefined,
+          musicCue: shot.musicCue || undefined,
+          languageMode: "auto",
+        });
+        videoPrompt = h3Output.sections.join("\n\n");
+      } else {
+        videoPrompt = buildVideoPrompt({
+          videoScript,
+          cameraDirection: shot.cameraDirection || "static",
+          motionScript: shot.motionScript,
+          startFrameDesc: shotLegacy?.startFrameDesc ?? undefined,
+          endFrameDesc: shotLegacy?.endFrameDesc ?? undefined,
+          duration: effectiveDuration,
+          characters: batchCharacters,
+          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+          slotContents: videoSlots,
+        });
+      }
 
       const genResult = await videoProvider.generateVideo({
         firstFrame: shotLegacy!.firstFrame!,
