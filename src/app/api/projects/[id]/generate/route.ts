@@ -2981,7 +2981,12 @@ async function handleBatchVideoPrompt(
   console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars, mode=${batchGenMode})`);
   const bvpStartTime = Date.now();
 
-  const results = await Promise.all(
+  // Process in batches of 3 to avoid overwhelming the LLM proxy
+  const CONCURRENCY = 3;
+  const results: Array<{ shotId: string; status: string }> = [];
+  for (let i = 0; i < eligible.length; i += CONCURRENCY) {
+    const batch = eligible.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
     eligible.map(async (shot) => {
       try {
         const shotLegacy = batchShotsLegacy.get(shot.id);
@@ -3081,6 +3086,8 @@ async function handleBatchVideoPrompt(
       }
     })
   );
+    results.push(...batchResults);
+  }
 
   const okCount = results.filter((r) => r.status === "ok").length;
   const errCount = results.filter((r) => r.status === "error").length;
