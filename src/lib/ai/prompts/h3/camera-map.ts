@@ -51,38 +51,8 @@ export function mapCameraDirection(raw: string): string {
   const lower = raw.toLowerCase().trim();
   if (!lower) return "the camera holds a static shot";
 
-  // Parse tokens
+  // Parse tokens — extract speed/amplitude modifiers first
   const tokens = lower.split(/\s+/);
-  let motionType = "";
-  let amplitude: AmpModifier = "";
-  let speed: SpeedModifier = "";
-
-  // Try multi-word motion matches first (2-3 tokens)
-  for (let len = Math.min(3, tokens.length); len >= 1; len--) {
-    const phrase = tokens.slice(0, len).join(" ");
-    if (MOTION[phrase]) {
-      motionType = MOTION[phrase];
-      tokens.splice(0, len);
-      break;
-    }
-  }
-
-  // Single word fallback
-  if (!motionType) {
-    for (const [key, val] of Object.entries(MOTION)) {
-      if (lower.startsWith(key)) {
-        motionType = val;
-        tokens.splice(0, key.split(/\s+/).length);
-        break;
-      }
-    }
-  }
-
-  if (!motionType) {
-    return `the camera: [Raw: ${raw}]`;
-  }
-
-  // Parse remaining tokens for speed/amplitude modifiers
   const SPEED_MAP: Record<string, SpeedModifier> = {
     "slow": "at slow speed", "fast": "at fast speed",
     "慢": "at slow speed", "快": "at fast speed",
@@ -92,12 +62,35 @@ export function mapCameraDirection(raw: string): string {
     "微": "with small amplitude", "大": "with large amplitude",
   };
 
+  // Strip speed/amplitude tokens first (they may precede the motion type)
+  let speed: SpeedModifier = "";
+  let amplitude: AmpModifier = "";
+  const motionTokens: string[] = [];
   for (const t of tokens) {
-    if (SPEED_MAP[t]) speed = SPEED_MAP[t];
-    else if (AMP_MAP[t]) amplitude = AMP_MAP[t];
+    if (!speed && SPEED_MAP[t]) { speed = SPEED_MAP[t]; continue; }
+    if (!amplitude && AMP_MAP[t]) { amplitude = AMP_MAP[t]; continue; }
+    motionTokens.push(t);
   }
 
-  // Apply defaults based on motion type
+  // Match motion type from remaining tokens
+  let motionType = "";
+  if (motionTokens.length > 0) {
+    for (let len = Math.min(3, motionTokens.length); len >= 1; len--) {
+      const phrase = motionTokens.slice(0, len).join(" ");
+      if (MOTION[phrase]) { motionType = MOTION[phrase]; break; }
+    }
+    if (!motionType) {
+      for (const [key, val] of Object.entries(MOTION)) {
+        if (motionTokens.join(" ").startsWith(key)) { motionType = val; break; }
+      }
+    }
+  }
+
+  if (!motionType) {
+    return `the camera: [Raw: ${raw}]`;
+  }
+
+  // Apply default modifiers based on motion type
   const needsAmp = !["holds", "shows", "shakes"].some(k => motionType.includes(k));
   const needsSpeed = !["holds", "shows"].some(k => motionType.includes(k));
 
