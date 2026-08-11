@@ -2971,6 +2971,57 @@ async function handleBatchVideoPrompt(
     return v?.firstFrame || v?.lastFrame || v?.sceneRefFrame;
   });
 
+  // ── H3 mode: build prompt locally from structured data, no LLM needed ──
+  const useH3 = process.env.H3_PROMPT_MODE !== "seedance";
+  if (useH3) {
+    const results = await Promise.all(
+      eligible.map(async (shot) => {
+        try {
+          const { buildVideoPrompt: buildH3 } = await import("@/lib/ai/prompts/h3");
+          const shotLegacy = batchShotsLegacy.get(shot.id);
+          const effectiveDuration = shot.duration ?? 10;
+          // Determine generation mode
+          let genMode: "keyframe" | "reference" = "keyframe";
+          if (episodeId) {
+            const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, episodeId));
+            genMode = (ep?.gm as "keyframe" | "reference") || "keyframe";
+          } else {
+            const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
+            genMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
+          }
+          const h3Output = buildH3({
+            videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
+            motionScript: shot.motionScript,
+            duration: effectiveDuration,
+            cameraDirection: shot.cameraDirection || "static",
+            generationMode: genMode,
+            characters: batchCharacters.map(c => ({
+              id: c.id, name: c.name, description: c.description,
+              visualHint: c.visualHint, referenceImage: c.referenceImage,
+              performanceStyle: c.performanceStyle, scope: c.scope,
+              heightCm: c.heightCm, bodyType: c.bodyType,
+            })),
+            firstFrame: shotLegacy?.firstFrame ? { fileUrl: shotLegacy.firstFrame, prompt: shotLegacy.startFrameDesc } : undefined,
+            lastFrame: shotLegacy?.lastFrame ? { fileUrl: shotLegacy.lastFrame, prompt: shotLegacy.endFrameDesc } : undefined,
+            soundDesign: shot.soundDesign || undefined,
+            musicCue: shot.musicCue || undefined,
+            languageMode: "auto",
+          });
+          const h3Text = h3Output.sections.join("\n\n");
+          await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shot.id));
+          console.log(`[BatchH3VideoPrompt] Shot ${shot.sequence} ok (${h3Output.mode})`);
+          return { shotId: shot.id, status: "ok" };
+        } catch (err: any) {
+          console.error(`[BatchH3VideoPrompt] Shot ${shot.sequence} failed:`, err?.message);
+          return { shotId: shot.id, status: "error" };
+        }
+      })
+    );
+    const ok = results.filter(r => r.status === "ok").length;
+    console.log(`[BatchH3VideoPrompt] Done: ${ok}/${results.length} ok`);
+    return NextResponse.json({ results, status: "ok", mode: "h3" });
+  }
+
   // Determine generation mode for frame selection
   let batchGenMode = "keyframe";
   if (episodeId) {
