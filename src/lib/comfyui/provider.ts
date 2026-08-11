@@ -174,7 +174,13 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     } else {
       // ≥1 ref → edit-plus，带角色参考图合成
       workflowId = 'qwen-2511-edit-plus'
-      inputs.composite_prompt = prompt
+      // Build composite prompt with Picture N references so the
+      // TextEncodeQwenImageEditPlus node maps images to tokens.
+      const picRefs = refImages.map((_, i) => {
+        const label = options?.referenceLabels?.[i] || `角色${i + 1}`;
+        return `Picture ${i + 1}: ${label}`;
+      });
+      inputs.composite_prompt = `${picRefs.join(", ")}. ${prompt}`;
       inputs.scene_prompt = options?.scenePrompt || prompt
       for (let i = 0; i < Math.min(refImages.length, 3); i++) {
         inputs[`character_ref_${i + 1}`] = refImages[i]
@@ -239,7 +245,6 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
 
     const result = await this.executor.execute(workflowId, inputs, {
       outputDir: this.outputDir,
-      timeout: 1_200_000, // 20 min — H3 video generation is slow
     })
 
     if (result.status !== 'success' || result.outputs.length === 0) {

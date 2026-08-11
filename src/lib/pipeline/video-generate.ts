@@ -8,7 +8,7 @@ import { resolveVideoProvider, resolveAIProvider } from "@/lib/ai/provider-facto
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import { checkVideoQuality } from "./video-quality-check";
 import { buildVideoPrompt } from "@/lib/ai/prompts/video-generate";
-import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
+import { resolvePrompt, resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { getModelMaxDuration } from "@/lib/ai/model-limits";
 import { eq, inArray } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
@@ -131,6 +131,7 @@ export async function handleVideoGenerate(task: Task) {
     .where(eq(shots.id, payload.shotId));
 
   const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
+  const textProvider = resolveAIProvider(payload.modelConfig);
   const useH3Prompt = process.env.H3_PROMPT_MODE !== "seedance"; // H3 is default, set seedance to opt out
 
   let prompt: string;
@@ -140,6 +141,13 @@ export async function handleVideoGenerate(task: Task) {
     const { detectLanguage, routeLanguage, translateNarrative } = await import("@/lib/ai/prompts/h3/language-route");
     const generationMode: "keyframe" | "reference" =
       (episode?.generationMode ?? project?.generationMode ?? "keyframe") as "keyframe" | "reference";
+
+    // Resolve H3 guide prompt from registry if userId/projectId available
+    let h3System: string | undefined;
+    if (payload.userId && payload.projectId) {
+      h3System = await resolvePrompt("video_h3_prompt", { userId: payload.userId, projectId: payload.projectId }).catch(() => undefined);
+    }
+    const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
 
     // Auto-translate Chinese script to English (H3 requires English body)
     let translatedVideoScript = videoScript;
@@ -199,9 +207,9 @@ export async function handleVideoGenerate(task: Task) {
       episodeDescription: episodeDesc,
       episodeKeywords,
       projectIdea: project?.idea || undefined,
-      languageMode: "auto",
+      languageMode: h3Lang,
       slotContents: videoSlots,
-    });
+    }, textProvider, h3System);
     prompt = h3Output.sections.join("\n\n");
   } else {
     // Legacy path: Seedance-style prompt (unchanged from v0.1.x)

@@ -1852,12 +1852,15 @@ async function handleSingleVideoGenerate(
         visualHint,
       };
     });
+    const textProvider = resolveAIProvider(modelConfig);
     const useH3VP = process.env.H3_PROMPT_MODE !== "seedance";
     let videoPrompt: string;
     if (shot.videoPrompt) {
       videoPrompt = shot.videoPrompt;
     } else if (useH3VP) {
       const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
+      const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
+      const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
       const h3Output = await buildH3({
         videoScript,
         motionScript: shot.motionScript,
@@ -1871,8 +1874,10 @@ async function handleSingleVideoGenerate(
         lastFrame: { fileUrl: shotView.lastFrame || "", prompt: shotView.endFrameDesc },
         soundDesign: shot.soundDesign || undefined,
         musicCue: shot.musicCue || undefined,
-        languageMode: "auto",
-      });
+        languageMode: h3Lang,
+        dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
+      }, textProvider, h3System);
       videoPrompt = h3Output.sections.join("\n\n");
     } else {
       videoPrompt = buildVideoPrompt({
@@ -1883,7 +1888,8 @@ async function handleSingleVideoGenerate(
         endFrameDesc: shotView.endFrameDesc ?? undefined,
         duration: effectiveDuration,
         characters: shotCharacters,
-        dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+        dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
         slotContents: videoSlots,
       });
     }
@@ -2007,12 +2013,15 @@ async function handleBatchVideoGenerate(
         return { characterName, text: d.text, offscreen: !onScreen, visualHint };
       });
 
+      const textProvider = resolveAIProvider(modelConfig);
       const useH3VG = process.env.H3_PROMPT_MODE !== "seedance";
       let videoPrompt: string;
       if (shot.videoPrompt) {
         videoPrompt = shot.videoPrompt;
       } else if (useH3VG) {
         const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
+        const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
+        const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
         const h3Output = await buildH3({
           videoScript,
           motionScript: shot.motionScript,
@@ -2024,8 +2033,8 @@ async function handleBatchVideoGenerate(
           lastFrame: { fileUrl: shotLegacy?.lastFrame || "", prompt: shotLegacy?.endFrameDesc },
           soundDesign: shot.soundDesign || undefined,
           musicCue: shot.musicCue || undefined,
-          languageMode: "auto",
-        });
+          languageMode: h3Lang,
+        }, textProvider, h3System);
         videoPrompt = h3Output.sections.join("\n\n");
       } else {
         videoPrompt = buildVideoPrompt({
@@ -2036,7 +2045,8 @@ async function handleBatchVideoGenerate(
           endFrameDesc: shotLegacy?.endFrameDesc ?? undefined,
           duration: effectiveDuration,
           characters: batchCharacters,
-          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+          dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
           slotContents: videoSlots,
         });
       }
@@ -2400,7 +2410,8 @@ async function handleSingleReferenceVideo(
           duration: effectiveDuration,
           characters: characterRefInfos,
           sceneFrames: sceneFrameInfos,
-          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+          dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
         });
         console.log(`[SingleReferenceVideo] Shot ${shot.sequence} promptRequest:\n${promptRequest}`);
         const rawPrompt = await textProvider.generateText(promptRequest, {
@@ -2416,7 +2427,8 @@ async function handleSingleReferenceVideo(
           cameraDirection: shot.cameraDirection || "static",
           duration: effectiveDuration,
           characters: projectCharacters,
-          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+          dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
           slotContents: refVideoSlots,
         });
         videoPrompt = `图像映射：${fullMapping}。\n\n${fallback}`;
@@ -2611,7 +2623,8 @@ async function handleBatchReferenceVideo(
               duration: effectiveDuration,
               characters: characterRefInfos,
               sceneFrames: sceneFrameInfos,
-              dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+              dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
             });
             const rawPrompt = await textProvider.generateText(promptRequest, {
               systemPrompt: refVideoSystem,
@@ -2626,7 +2639,8 @@ async function handleBatchReferenceVideo(
               cameraDirection: shot.cameraDirection || "static",
               duration: effectiveDuration,
               characters: projectCharacters,
-              dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+              dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
               slotContents: refVideoSlots,
             });
             videoPrompt = `图像映射：${fullMapping}。\n\n${fallback}`;
@@ -2857,10 +2871,14 @@ async function handleSingleVideoPrompt(
   const shotCharacters = await db.select().from(characters).where(eq(characters.projectId, shot.projectId));
 
   // ── H3 mode: build prompt locally, no LLM call ──
+  const textProvider = resolveAIProvider(modelConfig);
+  
   const useH3 = process.env.H3_PROMPT_MODE !== "seedance";
   if (useH3) {
     try {
       const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
+      const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
+      const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
       let genMode: "keyframe" | "reference" = "keyframe";
       if (shot.episodeId) {
         const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, shot.episodeId));
@@ -2885,8 +2903,8 @@ async function handleSingleVideoPrompt(
         lastFrame: shotView.lastFrame ? { fileUrl: shotView.lastFrame, prompt: shotView.endFrameDesc } : undefined,
         soundDesign: shot.soundDesign || undefined,
         musicCue: shot.musicCue || undefined,
-        languageMode: "auto",
-      });
+        languageMode: h3Lang,
+      }, textProvider, h3System);
       const h3Text = h3Output.sections.join("\n\n");
       await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shotId));
       console.log(`[SingleVideoPrompt] H3 ${h3Output.mode} prompt generated`);
@@ -2961,7 +2979,8 @@ async function handleSingleVideoPrompt(
       duration: effectiveDuration,
       characters: characterRefInfos,
       sceneFrames: sceneFrameInfos,
-      dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+      dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
     });
     // Build text-only variant upfront (IFF has no vision models)
     const promptRequestText = buildRefVideoPromptRequest({
@@ -2970,7 +2989,8 @@ async function handleSingleVideoPrompt(
       duration: effectiveDuration,
       characters: characterRefInfos,
       sceneFrames: sceneFrameInfos,
-      dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+      dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
       textOnly: true,
     });
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequestText}`);
@@ -3071,8 +3091,12 @@ async function handleBatchVideoPrompt(
   });
 
   // ── H3 mode: build prompt locally from structured data, no LLM needed ──
+  const textProvider = resolveAIProvider(modelConfig);
   const useH3 = process.env.H3_PROMPT_MODE !== "seedance";
   if (useH3) {
+    // Resolve H3 guide prompt from registry once (shared across all shots)
+    const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
+    const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
     const results = await Promise.all(
       eligible.map(async (shot) => {
         try {
@@ -3104,8 +3128,10 @@ async function handleBatchVideoPrompt(
             lastFrame: shotLegacy?.lastFrame ? { fileUrl: shotLegacy.lastFrame, prompt: shotLegacy.endFrameDesc } : undefined,
             soundDesign: shot.soundDesign || undefined,
             musicCue: shot.musicCue || undefined,
-            languageMode: "auto",
-          });
+            languageMode: h3Lang,
+            dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
+          }, textProvider, h3System);
           const h3Text = h3Output.sections.join("\n\n");
           await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shot.id));
           console.log(`[BatchH3VideoPrompt] Shot ${shot.sequence} ok (${h3Output.mode})`);
@@ -3130,8 +3156,7 @@ async function handleBatchVideoPrompt(
     const [proj] = await db.select({ generationMode: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
     batchGenMode = proj?.generationMode ?? "keyframe";
   }
-
-  const textProvider = resolveAIProvider(modelConfig);
+  // textProvider defined at line 3084
   const refVideoSystem = await resolvePrompt("ref_video_prompt", { userId, projectId });
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
 
@@ -3224,7 +3249,8 @@ async function handleBatchVideoPrompt(
           duration: effectiveDuration,
           characters: characterRefInfos,
           sceneFrames: sceneFrameInfos,
-          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+          dialogues: undefined,
+            // TODO: load per-shot dialogues for batch H3
           textOnly: true,  // IFF has no vision models, always use text-only
         });
         const rawPrompt = await textProvider.generateText(promptRequest, {

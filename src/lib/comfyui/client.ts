@@ -28,7 +28,7 @@ export interface ClientOptions {
 
 const DEFAULTS = {
   baseUrl: 'http://localhost:8188',
-  defaultTimeout: 300_000, // 5 min
+  defaultTimeout: 900_000, // 15 min per video
   pollInterval: 500,
   maxRetries: 3,
   reconnectTimeout: 60_000, // 60s

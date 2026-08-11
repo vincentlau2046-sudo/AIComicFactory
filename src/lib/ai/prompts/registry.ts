@@ -1729,6 +1729,66 @@ const refVideoPromptDef: PromptDefinition = {
 };
 
 // ─── 14. script_outline ──────────────────────────────────
+// ─── 14. video_h3_prompt ────────────────────────────────
+// H3 3-layer context engineering — guide layer (system prompt).
+// Content + constraint layers are assembled dynamically at runtime.
+// Language: follows script language (zh script → zh output, en → en).
+
+const VIDEO_H3_ROLE_DEFINITION = `## ROLE
+You are an expert prompt engineer for MiniMax H3 (I2VA/FL2VA mode), a video generation model that produces synchronized video+audio from structured text prompts.
+
+## TASK
+Transform the provided video script + context data into a H3-compatible structured prompt. The output will be sent directly to MiniMax H3 for video generation.`;
+
+const VIDEO_H3_PROCESS_STEPS = `## PROCESS
+1. Read the VIDEO SCRIPT — this is the primary narrative source
+2. Read CHARACTERS — understand who appears (characters are already in frames, describe actions only)
+3. Read SCENE context — lighting, location, color palette if provided
+4. Read AUDIO — diegetic sound and music cues if provided
+5. Apply CONSTRAINTS — follow the exact output format and hard rules
+6. Generate the structured H3 prompt in the target language`;
+
+const VIDEO_H3_OUTPUT_RULES = `## OUTPUT
+Only the structured H3 prompt sections. No introduction, no markdown, no commentary.\n\n### Format:\n- First line: frame alignment instruction (if reference images present)\n- integrated_multimodal_description: {visual style}, {scene}, {camera}, {speaker + dialogue}\n- overall_soundscape: {ambient sound description}\n- non_diegetic_music: {BGM description or N/A}`;
+
+const VIDEO_H3_ROLE_ZH = `## 角色
+你是 MiniMax H3 (I2VA/FL2VA 模式) 的专家级提示词工程师，该模型可从结构化文本提示词生成同步的视频+音频。\n\n## 任务
+将提供的视频剧本+上下文数据转换为 H3 兼容的结构化提示词，输出将直接发送给 MiniMax H3 进行视频生成。`;
+
+const VIDEO_H3_PROCESS_ZH = `## 流程
+1. 阅读视频剧本——这是主要叙事来源
+2. 阅读角色列表——理解谁会出现（角色已在帧中，只描述动作）
+3. 阅读场景上下文——光线、地点、色调
+4. 阅读音频——环境音和音乐提示
+5. 应用约束规则——严格遵循输出格式
+6. 生成中文结构化 H3 提示词`;
+
+const VIDEO_H3_OUTPUT_ZH = `## 输出
+仅输出结构化 H3 提示词段落，无前言、无 markdown、无注释。\n\n### 格式：\n- 首行：帧对齐说明（如有参考图）\n- 集成多模态描述（integrated_multimodal_description）：{视觉风格}，{场景}，{运镜}，{说话人+对白}\n- 整体环境音（overall_soundscape）：{环境音描述}\n- 非叙事音乐（non_diegetic_music）：{BGM描述 或 N/A}`;
+
+const videoH3PromptDef: PromptDefinition = {
+  key: "video_h3_prompt",
+  nameKey: "promptTemplates.prompts.videoH3Prompt",
+  descriptionKey: "promptTemplates.prompts.videoH3PromptDesc",
+  category: "video",
+  slots: [
+    slot("role_definition", VIDEO_H3_ROLE_DEFINITION, true),
+    slot("process_steps", VIDEO_H3_PROCESS_STEPS, true),
+    slot("output_rules", VIDEO_H3_OUTPUT_RULES, true),
+    slot("role_zh", VIDEO_H3_ROLE_ZH, true),
+    slot("process_zh", VIDEO_H3_PROCESS_ZH, true),
+    slot("output_zh", VIDEO_H3_OUTPUT_ZH, true),
+  ],
+  buildFullPrompt(sc, params?: { language?: "zh" | "en" }) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    if (params?.language === "zh") {
+      return [r("role_zh"), "", r("process_zh"), "", r("output_zh")].join("\n");
+    }
+    return [r("role_definition"), "", r("process_steps"), "", r("output_rules")].join("\n");
+  },
+};
+
 
 const SCRIPT_OUTLINE_ROLE = `你是一位屡获殊荣的编剧。根据用户的创意构想，生成一份简洁的故事大纲。`;
 
@@ -1945,6 +2005,7 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   videoGenerateDef,
   refVideoGenerateDef,
   refVideoPromptDef,
+    videoH3PromptDef,
 ];
 
 export const PROMPT_REGISTRY_MAP: Record<string, PromptDefinition> =

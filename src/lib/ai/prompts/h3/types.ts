@@ -84,8 +84,8 @@ export interface H3PromptInput {
   firstFrame?: { fileUrl: string; prompt?: string | null };
   lastFrame?: { fileUrl: string; prompt?: string | null };
   dialogues?: {
-    characterName: string; text: string; sequence: number;
-    startRatio: string; endRatio: string;
+    characterName: string; text: string; sequence?: number;
+    startRatio?: string; endRatio?: string;
     audioUrl?: string | null; offscreen: boolean;
   }[];
   sceneDescription?: string;

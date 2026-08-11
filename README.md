@@ -1,8 +1,18 @@
 # AIComicFactory (AICF)
 
-> v0.2.0 — H3 结构化 Prompt 引擎 · 端到端 AI 漫剧生成器
+> v0.2.0 — MiniMax H3 结构化 Prompt 引擎 · 端到端 AI 漫剧生成器
 
 从剧本到动画视频的全自动本地流水线。
+
+## 界面预览
+
+| 项目仪表盘 | 分镜编辑器 |
+|---|---|
+| ![Dashboard](docs/screenshots/01-dashboard.png) | ![Shots](docs/screenshots/02-project-shots.png) |
+
+| 角色管理 | 模型配置 |
+|---|---|
+| ![Characters](docs/screenshots/03-characters.png) | ![Settings](docs/screenshots/04-settings.png) |
 
 ---
 
@@ -18,6 +28,53 @@
 - **H3 结构化 Prompt** — Base Mode (T2VA/I2VA/FL2VA) + Ref2VA Full-Reference Mode，对齐 MiniMax 官方格式
 - **语言路由** — 中文剧本自动翻译为英文 body（IFF deepseek-v4-flash），对话保留 `<d>` 标签
 - **视频合成** — FFmpeg 拼接所有片段为完整动画
+
+## MiniMax H3 结构化 Prompt 引擎 (v0.2.0)
+
+对齐 MiniMax H3 官方 `h3-prompt-writing` Skill 的 3 层上下文工程体系，通过单次 LLM 调用生成结构化视频提示词：
+
+### 3 层架构
+
+```
+┌─────────────────────────────────────────┐
+│  Layer 3: Guide (System Prompt)         │
+│  角色定义 + 流程 + 关键原则              │
+├─────────────────────────────────────────┤
+│  Layer 2: Constraints (Format Rules)    │
+│  时间分段 · 动作节拍 · 对白嵌入 · 运镜绑定│
+├─────────────────────────────────────────┤
+│  Layer 1: Content (Runtime Data)        │
+│  剧本 · 角色 · 对话台本 · 帧锚点 · 场景 · 音频│
+└─────────────────────────────────────────┘
+```
+
+### 核心特性
+
+| 特性 | 说明 |
+|------|------|
+| **FL2VA 时间链** | 自动按持续时间拆分为 3-4 段时间节点，每段独立动作+运镜+对白 |
+| **动作节拍引擎** | 每 2-3s 安排微动作节点，用「先…随即…然后…最终」因果推进链串联 |
+| **对白自动注入** | 从 dialogue pipeline 提取台本，按 S1/S2 说话人 ID 嵌入对应时间段 |
+| **中英双语** | 自动检测剧本语言，中文剧本→中文输出，英文→英文，`H3_LANGUAGE` 可强制 |
+| **注册表管理** | Prompt 模板注册在 `prompt-templates` 系统，支持 UI 自定义覆盖 |
+| **Ref2VA Full Reference** | 对齐 MiniMax 6 部分提示词架构（主体定义+摘要+保留+描述+声场+BGM） |
+
+### 输出格式（Base Mode）
+
+```
+参考图与目标视频的对齐方式——<Picture 1> 对齐 0.00s；<Picture 2> 对齐 12.00s。
+
+集成多模态描述 (integrated_multimodal_description):
+0-4s: 电影级实拍，远景湖面火海初燃...镜头极慢速右摇...
+4-8s: 中景船楼烈焰吞噬...镜头小幅推近...
+8-12s: 全景拉远...焦木断裂...(S1)说：<d>[中文] 原文台词</d>
+
+整体环境音 (overall_soundscape):
+焦木爆裂与湖水沸腾交织...
+
+非叙事音乐 (non_diegetic_music):
+低沉稳重的大提琴以极慢节奏铺底...
+```
 
 ## 架构
 

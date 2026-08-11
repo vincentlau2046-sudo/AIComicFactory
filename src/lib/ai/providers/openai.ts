@@ -51,7 +51,13 @@ export class OpenAIProvider implements AIProvider {
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens,
     });
-    return response.choices[0]?.message?.content || "";
+    const msg = response.choices[0]?.message;
+    // deepseek models may return content=null with everything in reasoning_content
+    const content = (msg as any)?.content as string | null;
+    const reasoning = (msg as any)?.reasoning_content as string | null;
+    if (content) return content;
+    if (reasoning) return reasoning;
+    return "";
   }
 
   async generateImage(prompt: string, options?: ImageOptions): Promise<string> {
