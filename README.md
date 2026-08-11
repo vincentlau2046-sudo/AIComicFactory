@@ -1,6 +1,6 @@
 # AIComicFactory (AICF)
 
-> v0.0.1 — 全功能本地化漫剧生成器
+> v0.2.0 — H3 结构化 Prompt 引擎 · 端到端 AI 漫剧生成器
 
 从剧本到动画视频的全自动本地流水线。
 
@@ -15,6 +15,8 @@
 - **智能分镜** — LLM 将剧本拆解为专业镜头列表（构图、灯光、运镜指令）
 - **首尾帧生成** — ComfyUI Qwen-Edit 工作流生成每镜头的起始帧和结束帧
 - **视频生成** — ComfyUI H3 工作流基于首尾帧插值生成动画视频
+- **H3 结构化 Prompt** — Base Mode (T2VA/I2VA/FL2VA) + Ref2VA Full-Reference Mode，对齐 MiniMax 官方格式
+- **语言路由** — 中文剧本自动翻译为英文 body（IFF deepseek-v4-flash），对话保留 `<d>` 标签
 - **视频合成** — FFmpeg 拼接所有片段为完整动画
 
 ## 架构
