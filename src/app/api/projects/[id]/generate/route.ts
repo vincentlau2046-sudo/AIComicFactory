@@ -2867,10 +2867,10 @@ async function handleSingleVideoPrompt(
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequest}`);
     const rawPrompt = await textProvider.generateText(promptRequest, {
       systemPrompt: refVideoSystem,
-      images: visionFrames.length > 0 ? visionFrames : undefined,
+      images: visionFrames.length > 0 ? visionFrames : undefined, maxTokens: 2000,
     }).catch(async () => {
       // Fallback: text-only if provider rejects multimodal
-      return textProvider.generateText(promptRequest, { systemPrompt: refVideoSystem });
+      return textProvider.generateText(promptRequest, { systemPrompt: refVideoSystem, maxTokens: 2000 });
     });
     const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} videoPrompt:\n${videoPrompt}`);
@@ -3071,10 +3071,10 @@ async function handleBatchVideoPrompt(
         });
         const rawPrompt = await textProvider.generateText(promptRequest, {
           systemPrompt: refVideoSystem,
-          images: visionFrames.length > 0 ? visionFrames : undefined,
+          images: visionFrames.length > 0 ? visionFrames : undefined, maxTokens: 2000,
         }).catch(async () => {
           // Fallback: text-only (no images) if provider rejects multimodal
-          return textProvider.generateText(promptRequest, { systemPrompt: refVideoSystem });
+          return textProvider.generateText(promptRequest, { systemPrompt: refVideoSystem, maxTokens: 2000 });
         });
         const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
         await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));

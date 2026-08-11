@@ -13,6 +13,8 @@ export class OpenAIProvider implements AIProvider {
     this.client = new OpenAI({
       apiKey: params?.apiKey || process.env.OPENAI_API_KEY,
       baseURL: params?.baseURL || process.env.OPENAI_BASE_URL,
+      timeout: 600000,  // 10 min timeout for long video prompt generation
+      maxRetries: 2,
     });
     this.defaultModel = params?.model || process.env.OPENAI_MODEL || "gpt-4o";
     this.uploadDir = params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
