@@ -2796,9 +2796,7 @@ async function handleSingleVideoPrompt(
     if (visionFrames.length === 0 && shotView.sceneRefFrame) visionFrames.push(shotView.sceneRefFrame);
   }
   console.log(`[SingleVideoPrompt] shot.sequence=${shot.sequence}, mode=${genMode}, frames=${visionFrames.length}`);
-  if (visionFrames.length === 0) {
-    return NextResponse.json({ error: "No frame available. Generate frames first." }, { status: 400 });
-  }
+  // Allow text-only prompt when no frames available (non-vision models)
 
   const shotCharacters = await db.select().from(characters).where(eq(characters.projectId, shot.projectId));
   const shotDialogues = await db
@@ -2848,8 +2846,18 @@ async function handleSingleVideoPrompt(
       const name = sceneMetaList[i]?.sceneName || (visionFrames.length > 1 ? `场景-${i + 1}` : `场景`);
       return { label: name, index: charsWithRefsHere.length + i + 1 };
     });
+    // Prepend frame text descriptions for text-only fallback
+    const frameDescs = [];
+    if (shotView.startFrameDesc) frameDescs.push(`[Opening frame] ${shotView.startFrameDesc}`);
+    if (shotView.endFrameDesc) frameDescs.push(`[Closing frame] ${shotView.endFrameDesc}`);
+    for (const sf of sceneMetaList) {
+      if (sf?.sceneName) frameDescs.push(`[Scene] ${sf.sceneName}`);
+    }
+    const augmentedMotionContext = frameDescs.length > 0
+      ? `${frameDescs.join("\n")}\n\n${motionContext}`
+      : motionContext;
     const promptRequest = buildRefVideoPromptRequest({
-      motionScript: motionContext,
+      motionScript: augmentedMotionContext,
       cameraDirection: shot.cameraDirection || "static",
       duration: effectiveDuration,
       characters: characterRefInfos,
@@ -2859,7 +2867,10 @@ async function handleSingleVideoPrompt(
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequest}`);
     const rawPrompt = await textProvider.generateText(promptRequest, {
       systemPrompt: refVideoSystem,
-      images: visionFrames,
+      images: visionFrames.length > 0 ? visionFrames : undefined,
+    }).catch(async () => {
+      // Fallback: text-only if provider rejects multimodal
+      return textProvider.generateText(promptRequest, { systemPrompt: refVideoSystem });
     });
     const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} videoPrompt:\n${videoPrompt}`);
