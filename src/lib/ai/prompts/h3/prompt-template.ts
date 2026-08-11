@@ -21,24 +21,15 @@ function buildContentLayer(input: H3PromptInput): string {
   parts.push("");
 
   // ── Characters (from character_extract) ──
+  // FL2VA mode: characters are already baked into frames.
+  // Only include names+roles for dialogue/action context, NOT visual descriptions.
   if (input.characters?.length) {
     parts.push("## CHARACTERS");
-    let picIdx = 0;
+    parts.push("(These characters are already present in the first/last frames. Describe their ACTIONS and DIALOGUE only, NOT their appearance.)");
     for (const c of input.characters) {
-      const details = [
-        c.name,
-        c.description ? `— ${c.description}` : "",
-        c.visualHint ? `(visual: ${c.visualHint})` : "",
-        c.performanceStyle ? `[performance: ${c.performanceStyle}]` : "",
-        c.scope === "guest" ? "[guest role]" : "",
-      ].filter(Boolean).join(" ");
-      // Track reference image mapping
-      if (c.referenceImage) {
-        picIdx++;
-        parts.push(`- ${details}  → reference image <Picture ${picIdx}>`);
-      } else {
-        parts.push(`- ${details}  → no reference image (describe from text)`);
-      }
+      const role = c.scope === "guest" ? "[guest]" : "";
+      const style = c.performanceStyle ? `— ${c.performanceStyle}` : "";
+      parts.push(`- ${c.name} ${role}${style}`);
     }
     parts.push("");
   }
@@ -133,8 +124,9 @@ function buildConstraintLayer(input: H3PromptInput): string {
     "5. For each speaking character, assign stable (S1), (S2) IDs in first-appearance order",
     "6. Dialogue format: (S1) says: <d>[Chinese] 原文台词</d>",
     "7. Off-screen voices: (S1) says in an off-screen voiceover: <d>...</d> while lips remain completely closed",
-    "8. NO markdown, NO code blocks, NO commentary — pure H3 format output",
-    "9. DO NOT copy the Chinese video script verbatim — translate and enrich into cinematic English prose",
+    "8. Characters are ALREADY in the frames — describe only their ACTIONS and MOVEMENT, never their appearance",
+    "9. NO markdown, NO code blocks, NO commentary — pure H3 format output",
+    "10. DO NOT copy the Chinese video script verbatim — translate and enrich into cinematic English prose",
   );
 
   return rules.join("\n");
