@@ -23,6 +23,7 @@ function buildContentLayer(input: H3PromptInput): string {
   // ── Characters (from character_extract) ──
   if (input.characters?.length) {
     parts.push("## CHARACTERS");
+    let picIdx = 0;
     for (const c of input.characters) {
       const details = [
         c.name,
@@ -31,7 +32,28 @@ function buildContentLayer(input: H3PromptInput): string {
         c.performanceStyle ? `[performance: ${c.performanceStyle}]` : "",
         c.scope === "guest" ? "[guest role]" : "",
       ].filter(Boolean).join(" ");
-      parts.push(`- ${details}`);
+      // Track reference image mapping
+      if (c.referenceImage) {
+        picIdx++;
+        parts.push(`- ${details}  → reference image <Picture ${picIdx}>`);
+      } else {
+        parts.push(`- ${details}  → no reference image (describe from text)`);
+      }
+    }
+    parts.push("");
+  }
+
+  // ── Frame Anchors (startFrameDesc / endFrameDesc from shot_assets) ──
+  const hasFrames = input.firstFrame?.prompt || input.lastFrame?.prompt;
+  if (hasFrames) {
+    parts.push("## FRAME ANCHORS (keyframe images)");
+    parts.push("These are the actual images that will be used as first/last frame anchors.");
+    parts.push("You must describe the visual transition from the first frame to the last frame.");
+    if (input.firstFrame?.prompt) {
+      parts.push(`<Picture 1> (FIRST FRAME — video opens from this image): ${input.firstFrame.prompt}`);
+    }
+    if (input.lastFrame?.prompt) {
+      parts.push(`<Picture 2> (LAST FRAME — video must end at this image): ${input.lastFrame.prompt}`);
     }
     parts.push("");
   }
