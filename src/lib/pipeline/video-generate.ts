@@ -13,15 +13,16 @@ import { getModelMaxDuration } from "@/lib/ai/model-limits";
 import { eq, inArray } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { getActiveAsset, insertAssetVersion } from "@/lib/shot-asset-utils";
+import { getUploadDir } from "@/lib/env";
 
 async function getVersionedUploadDirFromPipeline(versionId: string | null | undefined): Promise<string> {
-  if (!versionId) return process.env.UPLOAD_DIR || "./uploads";
+  if (!versionId) return getUploadDir();
   const [version] = await db
     .select({ label: storyboardVersions.label, projectId: storyboardVersions.projectId })
     .from(storyboardVersions)
     .where(eq(storyboardVersions.id, versionId));
-  if (!version) return process.env.UPLOAD_DIR || "./uploads";
-  return path.join(process.env.UPLOAD_DIR || "./uploads", "projects", version.projectId, version.label);
+  if (!version) return getUploadDir();
+  return path.join(getUploadDir(), "projects", version.projectId, version.label);
 }
 
 export async function handleVideoGenerate(task: Task) {

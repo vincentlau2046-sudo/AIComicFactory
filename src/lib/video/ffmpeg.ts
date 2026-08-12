@@ -2,8 +2,9 @@ import ffmpeg from "fluent-ffmpeg";
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { getUploadDir } from "@/lib/env";
 
-const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+const uploadDir = getUploadDir();
 
 type TransitionType = "cut" | "dissolve" | "fade_in" | "fade_out" | "wipeleft" | "slideright" | "circleopen";
 

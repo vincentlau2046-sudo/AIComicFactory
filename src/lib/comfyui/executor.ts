@@ -61,16 +61,28 @@ export class AtomicWorkflowExecutor {
       })
     } catch (err) {
       if (err instanceof WorkflowTimeoutError) {
-        return {
-          workflowId,
-          promptId,
-          status: 'timeout',
-          duration: Date.now() - startTime,
-          seed: usedSeed,
-          outputs: [],
+        // ComfyUI may have completed despite timeout — do a quick re-check.
+        // If the workflow finished in the background, download outputs normally.
+        try {
+          console.log(`[AtomicExecutor] Timeout on ${promptId}, checking if completed...`);
+          history = await this.client.pollResult(promptId, {
+            timeout: 15_000,
+          });
+          console.log(`[AtomicExecutor] ${promptId} recovered after timeout`);
+          // Falls through to normal output download below
+        } catch (err2) {
+          return {
+            workflowId,
+            promptId,
+            status: 'timeout',
+            duration: Date.now() - startTime,
+            seed: usedSeed,
+            outputs: [],
+          };
         }
+      } else {
+        throw err;
       }
-      throw err
     }
 
     // 4. Parse and download outputs

@@ -6,8 +6,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
 import { assertProjectOwnership } from "@/lib/assert-project-ownership";
+import { getUploadDir } from "@/lib/env";
 
-const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+const uploadDir = getUploadDir();
 
 export async function POST(
   request: Request,

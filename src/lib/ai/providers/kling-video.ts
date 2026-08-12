@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { id as genId } from "@/lib/id";
+import { getUploadDir } from "@/lib/env";
 
 function generateKlingToken(accessKey: string, secretKey: string): string {
   const now = Math.floor(Date.now() / 1000);
@@ -74,7 +75,7 @@ export class KlingVideoProvider implements VideoProvider {
     this.secretKey = (params?.secretKey || process.env.KLING_SECRET_KEY || "").trim();
     this.baseUrl = (params?.baseUrl || "https://api.klingai.com").replace(/\/+$/, "");
     this.model = params?.model || "kling-v1";
-    this.uploadDir = params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
+    this.uploadDir = params?.uploadDir || getUploadDir();
   }
 
   private getAuthHeader(): string {

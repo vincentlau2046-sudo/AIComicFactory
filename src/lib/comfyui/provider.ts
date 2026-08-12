@@ -247,6 +247,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
 
     const result = await this.executor.execute(workflowId, inputs, {
       outputDir: this.outputDir,
+      timeout: 1_800_000, // 30 min for video generation
     })
 
     if (result.status !== 'success' || result.outputs.length === 0) {

@@ -29,14 +29,14 @@ export default function EpisodePreviewPage() {
   const t = useTranslations();
   const { project, fetchProject } = useProjectStore();
   const searchParams = useSearchParams();
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id: string; episodeId: string }>();
   const versionId = searchParams.get("versionId");
 
   useEffect(() => {
     if (versionId && params?.id) {
-      fetchProject(params.id, undefined, versionId);
+      fetchProject(params.id, params.episodeId, versionId);
     }
-  }, [versionId, params?.id, fetchProject]);
+  }, [versionId, params?.id, params?.episodeId, fetchProject]);
 
   const [assembling, setAssembling] = useState(false);
   const [selectedShot, setSelectedShot] = useState(0);

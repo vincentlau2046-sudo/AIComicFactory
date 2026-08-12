@@ -64,6 +64,7 @@ import {
 import { buildRefImagePromptsRequest } from "@/lib/ai/prompts/ref-image-prompts";
 import { buildKeyframePromptsRequest } from "@/lib/ai/prompts/keyframe-prompts";
 import { ratioToSize } from "@/lib/ai/size";
+import { getUploadDir } from "@/lib/env";
 
 export const maxDuration = 300;
 
@@ -121,13 +122,13 @@ function buildCharMappingPrefix(chars: Array<typeof characters.$inferSelect>): s
 }
 
 async function getVersionedUploadDir(versionId: string | null | undefined): Promise<string> {
-  if (!versionId) return process.env.UPLOAD_DIR || "./uploads";
+  if (!versionId) return getUploadDir();
   const [version] = await db
     .select({ label: storyboardVersions.label, projectId: storyboardVersions.projectId })
     .from(storyboardVersions)
     .where(eq(storyboardVersions.id, versionId));
-  if (!version) return process.env.UPLOAD_DIR || "./uploads";
-  return path.join(process.env.UPLOAD_DIR || "./uploads", "projects", version.projectId, version.label);
+  if (!version) return getUploadDir();
+  return path.join(getUploadDir(), "projects", version.projectId, version.label);
 }
 
 function extractErrorMessage(err: unknown): string {
@@ -1504,7 +1505,19 @@ async function handleBatchFrameGenerate(
     );
   }
 
-  const batchVersionId = payload?.versionId as string | undefined;
+  let batchVersionId = payload?.versionId as string | undefined;
+  if (!batchVersionId) {
+    const [latestVer] = await db.select({ id: storyboardVersions.id })
+      .from(storyboardVersions)
+      .where(and(
+        eq(storyboardVersions.projectId, projectId),
+        ...(episodeId ? [eq(storyboardVersions.episodeId, episodeId)] : [])
+      ))
+      .orderBy(desc(storyboardVersions.versionNum))
+      .limit(1);
+    if (!latestVer?.id) return NextResponse.json({ error: "No version found. Run shot split first." }, { status: 400 });
+    batchVersionId = latestVer.id;
+  }
   const imageOpts = { size: ratioToSize(payload?.ratio as string), aspectRatio: (payload?.ratio as string) || "16:9" };
   const shotWhereConditions = [eq(shots.projectId, projectId)];
   if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
@@ -1522,7 +1535,7 @@ async function handleBatchFrameGenerate(
 
   const versionedUploadDir = batchVersionId
     ? await getVersionedUploadDir(batchVersionId)
-    : process.env.UPLOAD_DIR || "./uploads";
+    : getUploadDir();
 
   // Fetch only characters linked to this episode
   let frameCharacters: typeof characters.$inferSelect[];
@@ -1860,7 +1873,7 @@ async function handleSingleVideoGenerate(
     } else if (useH3VP) {
       const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
       const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
-      const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
+      const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "zh";
       const h3Output = await buildH3({
         videoScript,
         motionScript: shot.motionScript,
@@ -1946,7 +1959,7 @@ async function handleBatchVideoGenerate(
 
   const versionedUploadDir = batchVersionId
     ? await getVersionedUploadDir(batchVersionId)
-    : process.env.UPLOAD_DIR || "./uploads";
+    : getUploadDir();
 
   const overwrite = payload?.overwrite === true;
   const allShotsLegacy = await loadShotLegacyViewsBatch(allShots.map((s) => s.id));
@@ -2021,7 +2034,7 @@ async function handleBatchVideoGenerate(
       } else if (useH3VG) {
         const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
         const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
-        const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
+        const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "zh";
         const h3Output = await buildH3({
           videoScript,
           motionScript: shot.motionScript,
@@ -2188,7 +2201,7 @@ async function handleBatchSceneFrame(
 
   const versionedUploadDir = batchVersionId
     ? await getVersionedUploadDir(batchVersionId)
-    : process.env.UPLOAD_DIR || "./uploads";
+    : getUploadDir();
 
   const imageProvider = resolveImageProvider(modelConfig, versionedUploadDir);
   const allShotsLegacy = await loadShotLegacyViewsBatch(allShots.map((s) => s.id));
@@ -2494,7 +2507,7 @@ async function handleBatchReferenceVideo(
 
   const versionedUploadDir = batchVersionId
     ? await getVersionedUploadDir(batchVersionId)
-    : process.env.UPLOAD_DIR || "./uploads";
+    : getUploadDir();
 
   const overwrite = payload?.overwrite === true;
   const allShotsLegacy = await loadShotLegacyViewsBatch(allShots.map((s) => s.id));
@@ -2870,141 +2883,46 @@ async function handleSingleVideoPrompt(
 
   const shotCharacters = await db.select().from(characters).where(eq(characters.projectId, shot.projectId));
 
-  // ── H3 mode: build prompt locally, no LLM call ──
+  // ── H3 prompt: build from structured data ──
   const textProvider = resolveAIProvider(modelConfig);
-  
-  const useH3 = process.env.H3_PROMPT_MODE !== "seedance";
-  if (useH3) {
-    try {
-      const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
-      const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
-      const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
-      let genMode: "keyframe" | "reference" = "keyframe";
-      if (shot.episodeId) {
-        const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, shot.episodeId));
-        genMode = (ep?.gm as "keyframe" | "reference") || "keyframe";
-      } else {
-        const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
-        genMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
-      }
-      const h3Output = await buildH3({
-        videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
-        motionScript: shot.motionScript,
-        duration: shot.duration ?? 10,
-        cameraDirection: shot.cameraDirection || "static",
-        generationMode: genMode,
-        characters: shotCharacters.map(c => ({
-          id: c.id, name: c.name, description: c.description,
-          visualHint: c.visualHint, referenceImage: c.referenceImage,
-          performanceStyle: c.performanceStyle, scope: c.scope,
-          heightCm: c.heightCm, bodyType: c.bodyType,
-        })),
-        firstFrame: shotView.firstFrame ? { fileUrl: shotView.firstFrame, prompt: shotView.startFrameDesc } : undefined,
-        lastFrame: shotView.lastFrame ? { fileUrl: shotView.lastFrame, prompt: shotView.endFrameDesc } : undefined,
-        soundDesign: shot.soundDesign || undefined,
-        musicCue: shot.musicCue || undefined,
-        languageMode: h3Lang,
-      }, textProvider, h3System);
-      const h3Text = h3Output.sections.join("\n\n");
-      await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shotId));
-      console.log(`[SingleVideoPrompt] H3 ${h3Output.mode} prompt generated`);
-      return NextResponse.json({ shotId, videoPrompt: h3Text, status: "ok", mode: "h3" });
-    } catch (err: any) {
-      console.error("[SingleVideoPrompt] H3 failed:", err?.message);
-      return NextResponse.json({ error: `H3 prompt failed: ${err?.message}` }, { status: 500 });
-    }
-  }
-
-  // ── Seedance mode: existing LLM-based path ──
-  const shotDialogues = await db
-    .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
-    .from(dialogues)
-    .where(eq(dialogues.shotId, shotId))
-    .orderBy(asc(dialogues.sequence));
-  const videoContextForDialogue = shot.videoScript || shot.motionScript || shot.prompt || "";
-  const onScreenDialogueChars = shotDialogues
-    .map((d) => shotCharacters.find((c) => c.id === d.characterId)?.name ?? "Unknown")
-    .filter((name) => isCharacterOnScreen(name, videoContextForDialogue, shotView.startFrameDesc));
-
-  const dialogueList = shotDialogues.map((d) => {
-    const char = shotCharacters.find((c) => c.id === d.characterId);
-    const characterName = char?.name ?? "Unknown";
-    const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shotView.startFrameDesc);
-    const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
-    return {
-      characterName,
-      text: d.text,
-      offscreen: !onScreen,
-      visualHint,
-    };
-  });
 
   try {
-    const videoModelId = modelConfig?.video?.modelId;
-    const videoMaxDuration = getModelMaxDuration(videoModelId);
-    const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
-    const textProvider = resolveAIProvider(modelConfig);
-    const refVideoSystem = await resolvePrompt("ref_video_prompt", { userId, projectId });
-    const motionContext = shot.motionScript || shot.videoScript || shot.prompt || "";
-    // Filter to characters declared on this shot's reference assets
-    const shotCharNameSetVP = new Set<string>();
-    for (const r of shotView.referenceImages) {
-      for (const n of r.characters ?? []) shotCharNameSetVP.add(stripCharHint(n));
+    const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
+    const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
+    const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "zh";
+    let genMode: "keyframe" | "reference" = "keyframe";
+    if (shot.episodeId) {
+      const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, shot.episodeId));
+      genMode = (ep?.gm as "keyframe" | "reference") || "keyframe";
+    } else {
+      const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
+      genMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
     }
-    const charsWithRefsHere = shotCharacters.filter(
-      (c) => !!c.referenceImage && (shotCharNameSetVP.size === 0 || shotCharNameSetVP.has(c.name))
-    );
-    const characterRefInfos = charsWithRefsHere.map((c, i) => ({
-      name: c.name,
-      index: i + 1,
-      visualHint: c.visualHint,
-    }));
-    const sceneFrameInfos = visionFrames.map((_, i) => {
-      const name = sceneMetaList[i]?.sceneName || (visionFrames.length > 1 ? `场景-${i + 1}` : `场景`);
-      return { label: name, index: charsWithRefsHere.length + i + 1 };
-    });
-    // Prepend frame text descriptions for text-only fallback
-    const frameDescs = [];
-    if (shotView.startFrameDesc) frameDescs.push(`[Opening frame] ${shotView.startFrameDesc}`);
-    if (shotView.endFrameDesc) frameDescs.push(`[Closing frame] ${shotView.endFrameDesc}`);
-    for (const sf of sceneMetaList) {
-      if (sf?.sceneName) frameDescs.push(`[Scene] ${sf.sceneName}`);
-    }
-    const augmentedMotionContext = frameDescs.length > 0
-      ? `${frameDescs.join("\n")}\n\n${motionContext}`
-      : motionContext;
-    const promptRequest = buildRefVideoPromptRequest({
-      motionScript: augmentedMotionContext,
+    const h3Output = await buildH3({
+      videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
+      motionScript: shot.motionScript,
+      duration: shot.duration ?? 10,
       cameraDirection: shot.cameraDirection || "static",
-      duration: effectiveDuration,
-      characters: characterRefInfos,
-      sceneFrames: sceneFrameInfos,
-      dialogues: undefined,
-            // TODO: load per-shot dialogues for batch H3
-    });
-    // Build text-only variant upfront (IFF has no vision models)
-    const promptRequestText = buildRefVideoPromptRequest({
-      motionScript: augmentedMotionContext,
-      cameraDirection: shot.cameraDirection || "static",
-      duration: effectiveDuration,
-      characters: characterRefInfos,
-      sceneFrames: sceneFrameInfos,
-      dialogues: undefined,
-            // TODO: load per-shot dialogues for batch H3
-      textOnly: true,
-    });
-    console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequestText}`);
-    const rawPrompt = await textProvider.generateText(promptRequestText, {
-      systemPrompt: refVideoSystem,
-      maxTokens: 2000,
-    });
-    const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
-    console.log(`[SingleVideoPrompt] Shot ${shot.sequence} videoPrompt:\n${videoPrompt}`);
-    await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shotId));
-    return NextResponse.json({ shotId, videoPrompt, status: "ok" });
-  } catch (err) {
-    console.error("[SingleVideoPrompt] Error:", err);
-    return NextResponse.json({ status: "error", error: extractErrorMessage(err) }, { status: 500 });
+      generationMode: genMode,
+      characters: shotCharacters.map(c => ({
+        id: c.id, name: c.name, description: c.description,
+        visualHint: c.visualHint, referenceImage: c.referenceImage,
+        performanceStyle: c.performanceStyle, scope: c.scope,
+        heightCm: c.heightCm, bodyType: c.bodyType,
+      })),
+      firstFrame: shotView.firstFrame ? { fileUrl: shotView.firstFrame, prompt: shotView.startFrameDesc } : undefined,
+      lastFrame: shotView.lastFrame ? { fileUrl: shotView.lastFrame, prompt: shotView.endFrameDesc } : undefined,
+      soundDesign: shot.soundDesign || undefined,
+      musicCue: shot.musicCue || undefined,
+      languageMode: h3Lang,
+    }, textProvider, h3System);
+    const h3Text = h3Output.sections.join("\n\n");
+    await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shotId));
+    console.log(`[SingleVideoPrompt] H3 ${h3Output.mode} prompt generated`);
+    return NextResponse.json({ shotId, videoPrompt: h3Text, status: "ok", mode: "h3" });
+  } catch (err: any) {
+    console.error("[SingleVideoPrompt] H3 failed:", err?.message);
+    return NextResponse.json({ error: `H3 prompt failed: ${err?.message}` }, { status: 500 });
   }
 }
 
@@ -3074,7 +2992,19 @@ async function handleBatchVideoPrompt(
   }
   // === 智能体路由结束 ===
 
-  const batchVersionId = payload?.versionId as string | undefined;
+  let batchVersionId = payload?.versionId as string | undefined;
+  if (!batchVersionId) {
+    const [latestVer] = await db.select({ id: storyboardVersions.id })
+      .from(storyboardVersions)
+      .where(and(
+        eq(storyboardVersions.projectId, projectId),
+        ...(episodeId ? [eq(storyboardVersions.episodeId, episodeId)] : [])
+      ))
+      .orderBy(desc(storyboardVersions.versionNum))
+      .limit(1);
+    if (!latestVer?.id) return NextResponse.json({ error: "No version found. Run shot split first." }, { status: 400 });
+    batchVersionId = latestVer.id;
+  }
 
   const shotWhereConditions = [eq(shots.projectId, projectId)];
   if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
@@ -3084,196 +3014,89 @@ async function handleBatchVideoPrompt(
 
   const batchCharacters = await getEpisodeCharacters(projectId, episodeId);
 
-  // Only process shots that have frames
+  // Only process shots that have frames and no completed video yet
   const eligible = batchShots.filter((s) => {
     const v = batchShotsLegacy.get(s.id);
     return v?.firstFrame || v?.lastFrame || v?.sceneRefFrame;
   });
 
-  // ── H3 mode: build prompt locally from structured data, no LLM needed ──
+  // Skip shots that already have a completed keyframe_video —
+  // user must use single_video_prompt to explicitly regenerate.
+  const { shotAssets: saForGuard } = await import("@/lib/db/schema");
+  const completedVideoShotIds = new Set((await db
+    .select({ shotId: saForGuard.shotId })
+    .from(saForGuard)
+    .where(and(
+      eq(saForGuard.type, "keyframe_video"),
+      eq(saForGuard.status, "completed"),
+      eq(saForGuard.isActive, 1)
+    )))
+    .map(r => r.shotId));
+  const skipped = eligible.filter(s => completedVideoShotIds.has(s.id));
+  if (skipped.length > 0) {
+    console.log(`[BatchH3VideoPrompt] Skipping ${skipped.length} shot(s) with completed video (seq: ${skipped.map(s => s.sequence).join(", ")})`);
+  }
+  const eligibleFinal = eligible.filter(s => !completedVideoShotIds.has(s.id));
+  if (eligibleFinal.length === 0) {
+    return NextResponse.json({
+      results: eligible.map(s => ({ shotId: s.id, sequence: s.sequence, status: "skipped", reason: "video_exists" })),
+      status: "ok", mode: "h3",
+    });
+  }
+
+  // ── H3 prompt: build from structured data (shared system prompt) ──
   const textProvider = resolveAIProvider(modelConfig);
-  const useH3 = process.env.H3_PROMPT_MODE !== "seedance";
-  if (useH3) {
-    // Resolve H3 guide prompt from registry once (shared across all shots)
-    const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
-    const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
-    const results = await Promise.all(
-      eligible.map(async (shot) => {
-        try {
-          const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
-          const shotLegacy = batchShotsLegacy.get(shot.id);
-          const effectiveDuration = shot.duration ?? 10;
-          // Determine generation mode
-          let genMode: "keyframe" | "reference" = "keyframe";
-          if (episodeId) {
-            const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, episodeId));
-            genMode = (ep?.gm as "keyframe" | "reference") || "keyframe";
-          } else {
-            const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
-            genMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
-          }
-          const h3Output = await buildH3({
-            videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
-            motionScript: shot.motionScript,
-            duration: effectiveDuration,
-            cameraDirection: shot.cameraDirection || "static",
-            generationMode: genMode,
-            characters: batchCharacters.map(c => ({
-              id: c.id, name: c.name, description: c.description,
-              visualHint: c.visualHint, referenceImage: c.referenceImage,
-              performanceStyle: c.performanceStyle, scope: c.scope,
-              heightCm: c.heightCm, bodyType: c.bodyType,
-            })),
-            firstFrame: shotLegacy?.firstFrame ? { fileUrl: shotLegacy.firstFrame, prompt: shotLegacy.startFrameDesc } : undefined,
-            lastFrame: shotLegacy?.lastFrame ? { fileUrl: shotLegacy.lastFrame, prompt: shotLegacy.endFrameDesc } : undefined,
-            soundDesign: shot.soundDesign || undefined,
-            musicCue: shot.musicCue || undefined,
-            languageMode: h3Lang,
-            dialogues: undefined,
-            // TODO: load per-shot dialogues for batch H3
-          }, textProvider, h3System);
-          const h3Text = h3Output.sections.join("\n\n");
-          await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shot.id));
-          console.log(`[BatchH3VideoPrompt] Shot ${shot.sequence} ok (${h3Output.mode})`);
-          return { shotId: shot.id, status: "ok" };
-        } catch (err: any) {
-          console.error(`[BatchH3VideoPrompt] Shot ${shot.sequence} failed:`, err?.message);
-          return { shotId: shot.id, status: "error" };
-        }
-      })
-    );
-    const ok = results.filter(r => r.status === "ok").length;
-    console.log(`[BatchH3VideoPrompt] Done: ${ok}/${results.length} ok`);
-    return NextResponse.json({ results, status: "ok", mode: "h3" });
-  }
-
-  // Determine generation mode for frame selection
-  let batchGenMode = "keyframe";
-  if (episodeId) {
-    const [ep] = await db.select({ generationMode: episodes.generationMode }).from(episodes).where(eq(episodes.id, episodeId));
-    batchGenMode = ep?.generationMode ?? "keyframe";
-  } else {
-    const [proj] = await db.select({ generationMode: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
-    batchGenMode = proj?.generationMode ?? "keyframe";
-  }
-  // textProvider defined at line 3084
-  const refVideoSystem = await resolvePrompt("ref_video_prompt", { userId, projectId });
-  const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
-
-  console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars, mode=${batchGenMode})`);
-  const bvpStartTime = Date.now();
-
-  // Process in batches of 3 to avoid overwhelming the LLM proxy
-  const CONCURRENCY = 3;
-  const results: Array<{ shotId: string; status: string }> = [];
-  for (let i = 0; i < eligible.length; i += CONCURRENCY) {
-    const batch = eligible.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.all(
-    eligible.map(async (shot) => {
+  const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
+  const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "zh";
+  const results = await Promise.all(
+    eligibleFinal.map(async (shot) => {
       try {
+        const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
         const shotLegacy = batchShotsLegacy.get(shot.id);
-        const shotStart = Date.now();
-        const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
-        // Keyframe: first + last frames. Reference: ALL scene reference frames (ordered).
-        const visionFrames: string[] = [];
-        let sceneMetaList: Array<{ sceneName?: string } | null> = [];
-        if (batchGenMode === "reference") {
-          const sceneAssets = (shotLegacy?.referenceImages ?? [])
-            .filter((r) => r.fileUrl)
-            .sort((a, b) => a.sequenceInType - b.sequenceInType);
-          for (const r of sceneAssets) {
-            visionFrames.push(r.fileUrl as string);
-            sceneMetaList.push((r.meta as { sceneName?: string } | null) ?? null);
-          }
-          if (visionFrames.length === 0 && shotLegacy?.sceneRefFrame) {
-            visionFrames.push(shotLegacy.sceneRefFrame);
-            sceneMetaList.push(null);
-          }
+        const effectiveDuration = shot.duration ?? 10;
+        // Determine generation mode
+        let genMode: "keyframe" | "reference" = "keyframe";
+        if (episodeId) {
+          const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, episodeId));
+          genMode = (ep?.gm as "keyframe" | "reference") || "keyframe";
         } else {
-          if (shotLegacy?.firstFrame) visionFrames.push(shotLegacy.firstFrame);
-          if (shotLegacy?.lastFrame) visionFrames.push(shotLegacy.lastFrame);
-          if (visionFrames.length === 0 && shotLegacy?.sceneRefFrame) visionFrames.push(shotLegacy.sceneRefFrame);
-          sceneMetaList = visionFrames.map(() => null);
+          const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
+          genMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
         }
-        const shotDialogues = await db
-          .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
-          .from(dialogues)
-          .where(eq(dialogues.shotId, shot.id))
-          .orderBy(asc(dialogues.sequence));
-        const videoContextForDialogue = shot.videoScript || shot.motionScript || shot.prompt || "";
-
-        const dialogueList = shotDialogues.map((d) => {
-          const char = batchCharacters.find((c) => c.id === d.characterId);
-          const characterName = char?.name ?? "Unknown";
-          const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null);
-          const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
-          return {
-            characterName,
-            text: d.text,
-            offscreen: !onScreen,
-            visualHint,
-          };
-        });
-
-        const motionContext = shot.videoScript || shot.motionScript || shot.prompt || "";
-        // Filter characters to those declared on this shot's reference assets
-        const shotCharNameSetBVP = new Set<string>();
-        for (const r of shotLegacy?.referenceImages ?? []) {
-          for (const n of r.characters ?? []) shotCharNameSetBVP.add(n);
-        }
-        const batchCharsWithRefs = batchCharacters.filter(
-          (c) => !!c.referenceImage && (shotCharNameSetBVP.size === 0 || shotCharNameSetBVP.has(c.name))
-        );
-        const characterRefInfos = batchCharsWithRefs.map((c, i) => ({
-          name: c.name,
-          index: i + 1,
-          visualHint: c.visualHint,
-        }));
-        const sceneFrameInfos = visionFrames.map((_, i) => {
-          const name = sceneMetaList[i]?.sceneName || (visionFrames.length > 1 ? `场景-${i + 1}` : `场景`);
-          return { label: name, index: batchCharsWithRefs.length + i + 1 };
-        });
-        // Prepend frame text descriptions for text-only fallback
-        const frameDescs = [];
-        if (shotLegacy?.startFrameDesc) frameDescs.push(`[Opening frame] ${shotLegacy.startFrameDesc}`);
-        if (shotLegacy?.endFrameDesc) frameDescs.push(`[Closing frame] ${shotLegacy.endFrameDesc}`);
-        for (const sf of sceneMetaList) {
-          if (sf?.sceneName) frameDescs.push(`[Scene] ${sf.sceneName}`);
-        }
-        const augmentedMotionContext = frameDescs.length > 0
-          ? `${frameDescs.join("\n")}\n\n${motionContext}`
-          : motionContext;
-        const promptRequest = buildRefVideoPromptRequest({
-          motionScript: augmentedMotionContext,
-          cameraDirection: shot.cameraDirection || "static",
+        const h3Output = await buildH3({
+          videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
+          motionScript: shot.motionScript,
           duration: effectiveDuration,
-          characters: characterRefInfos,
-          sceneFrames: sceneFrameInfos,
+          cameraDirection: shot.cameraDirection || "static",
+          generationMode: genMode,
+          characters: batchCharacters.map(c => ({
+            id: c.id, name: c.name, description: c.description,
+            visualHint: c.visualHint, referenceImage: c.referenceImage,
+            performanceStyle: c.performanceStyle, scope: c.scope,
+            heightCm: c.heightCm, bodyType: c.bodyType,
+          })),
+          firstFrame: shotLegacy?.firstFrame ? { fileUrl: shotLegacy.firstFrame, prompt: shotLegacy.startFrameDesc } : undefined,
+          lastFrame: shotLegacy?.lastFrame ? { fileUrl: shotLegacy.lastFrame, prompt: shotLegacy.endFrameDesc } : undefined,
+          soundDesign: shot.soundDesign || undefined,
+          musicCue: shot.musicCue || undefined,
+          languageMode: h3Lang,
           dialogues: undefined,
-            // TODO: load per-shot dialogues for batch H3
-          textOnly: true,  // IFF has no vision models, always use text-only
-        });
-        const rawPrompt = await textProvider.generateText(promptRequest, {
-          systemPrompt: refVideoSystem,
-          maxTokens: 2000,
-        });
-        const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
-        await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
-        console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${visionFrames.length} frames)`);
+          // TODO: load per-shot dialogues for batch H3
+        }, textProvider, h3System);
+        const h3Text = h3Output.sections.join("\n\n");
+        await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shot.id));
+        console.log(`[BatchH3VideoPrompt] Shot ${shot.sequence} ok (${h3Output.mode})`);
         return { shotId: shot.id, status: "ok" };
-      } catch (err) {
-        console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed:`, err);
+      } catch (err: any) {
+        console.error(`[BatchH3VideoPrompt] Shot ${shot.sequence} failed:`, err?.message);
         return { shotId: shot.id, status: "error" };
       }
     })
   );
-    results.push(...batchResults);
-  }
-
-  const okCount = results.filter((r) => r.status === "ok").length;
-  const errCount = results.filter((r) => r.status === "error").length;
-  console.log(`[BatchVideoPrompt] Done: ${okCount} ok, ${errCount} errors, total ${((Date.now() - bvpStartTime) / 1000).toFixed(1)}s`);
-  return NextResponse.json({ results, status: "ok" });
+  const ok = results.filter(r => r.status === "ok").length;
+  console.log(`[BatchH3VideoPrompt] Done: ${ok}/${eligibleFinal.length} ok${skipped.length > 0 ? ` (${skipped.length} skipped)` : ""}`);
+  const skippedResults = skipped.map(s => ({ shotId: s.id, sequence: s.sequence, status: "skipped", reason: "video_exists" }));
+  return NextResponse.json({ results: [...results, ...skippedResults], ok, skipped: skipped.length, status: "ok", mode: "h3" });
 }
 
 // --- ai_optimize_text: use AI to optimize a text field ---
@@ -3365,7 +3188,7 @@ async function handleBatchRefImageGenerate(
 
   const versionedUploadDir = batchVersionId
     ? await getVersionedUploadDir(batchVersionId)
-    : process.env.UPLOAD_DIR || "./uploads";
+    : getUploadDir();
 
   const imageProvider = resolveImageProvider(modelConfig, versionedUploadDir);
 
@@ -3561,7 +3384,19 @@ async function handleGenerateRefPrompts(
     return NextResponse.json({ error: "No text model configured" }, { status: 400 });
   }
 
-  const batchVersionId = payload?.versionId as string | undefined;
+  let batchVersionId = payload?.versionId as string | undefined;
+  if (!batchVersionId) {
+    const [latestVer] = await db.select({ id: storyboardVersions.id })
+      .from(storyboardVersions)
+      .where(and(
+        eq(storyboardVersions.projectId, projectId),
+        ...(episodeId ? [eq(storyboardVersions.episodeId, episodeId)] : [])
+      ))
+      .orderBy(desc(storyboardVersions.versionNum))
+      .limit(1);
+    if (!latestVer?.id) return NextResponse.json({ error: "No version found. Run shot split first." }, { status: 400 });
+    batchVersionId = latestVer.id;
+  }
   const buildWhere = (includeVersion: boolean) => {
     const conds = [eq(shots.projectId, projectId)];
     if (includeVersion && batchVersionId) conds.push(eq(shots.versionId, batchVersionId));
@@ -3923,7 +3758,19 @@ async function handleGenerateKeyframePrompts(
     return NextResponse.json({ error: "No text model configured" }, { status: 400 });
   }
 
-  const batchVersionId = payload?.versionId as string | undefined;
+  let batchVersionId = payload?.versionId as string | undefined;
+  if (!batchVersionId) {
+    const [latestVer] = await db.select({ id: storyboardVersions.id })
+      .from(storyboardVersions)
+      .where(and(
+        eq(storyboardVersions.projectId, projectId),
+        ...(episodeId ? [eq(storyboardVersions.episodeId, episodeId)] : [])
+      ))
+      .orderBy(desc(storyboardVersions.versionNum))
+      .limit(1);
+    if (!latestVer?.id) return NextResponse.json({ error: "No version found. Run shot split first." }, { status: 400 });
+    batchVersionId = latestVer.id;
+  }
   const buildWhere = (includeVersion: boolean) => {
     const conds = [eq(shots.projectId, projectId)];
     if (includeVersion && batchVersionId) conds.push(eq(shots.versionId, batchVersionId));
@@ -4033,6 +3880,8 @@ async function handleGenerateKeyframePrompts(
         systemPrompt: keyframeSystemPrompt,
         temperature: 0.5,
       });
+
+      console.log(`[GenerateKeyframePrompts] Shot ${shot.sequence} raw response (first 800): ${result.slice(0, 800)}`);
 
       const jsonMatch = result.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {

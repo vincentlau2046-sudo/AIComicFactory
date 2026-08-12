@@ -2,6 +2,7 @@ import type { AIProvider, TextOptions, ImageOptions } from "../types";
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { getUploadDir } from "@/lib/env";
 
 // ── Model family detection ──────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ export class DashScopeImageProvider implements AIProvider {
     this.model =
       params?.model || process.env.DASHSCOPE_IMAGE_MODEL || "qwen-image-2.0-pro";
     this.uploadDir =
-      params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
+      params?.uploadDir || getUploadDir();
   }
 
   async generateText(

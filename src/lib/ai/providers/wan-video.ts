@@ -2,6 +2,7 @@ import type { VideoProvider, VideoGenerateParams, VideoGenerateResult } from "..
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { getUploadDir } from "@/lib/env";
 
 // Convert a local file path to a data: URL; http(s) URLs are returned as-is
 function toImageUrl(imagePathOrUrl: string): string {
@@ -58,7 +59,7 @@ export class WanVideoProvider implements VideoProvider {
       "https://dashscope.aliyuncs.com/api/v1"
     ).replace(/\/+$/, "");
     this.model = params?.model || process.env.WAN_MODEL || "wan2.1-i2v-plus";
-    this.uploadDir = params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
+    this.uploadDir = params?.uploadDir || getUploadDir();
   }
 
   // Detect whether this instance is running a wan2.7 model

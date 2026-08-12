@@ -3,6 +3,7 @@ import type { AIProvider, TextOptions, ImageOptions } from "../types";
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { getUploadDir } from "@/lib/env";
 
 export class GeminiProvider implements AIProvider {
   private client: GoogleGenAI;
@@ -20,7 +21,7 @@ export class GeminiProvider implements AIProvider {
     }
     this.client = new GoogleGenAI(options);
     this.defaultModel = params?.model || "gemini-2.0-flash";
-    this.uploadDir = params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
+    this.uploadDir = params?.uploadDir || getUploadDir();
   }
 
   async generateText(prompt: string, options?: TextOptions): Promise<string> {

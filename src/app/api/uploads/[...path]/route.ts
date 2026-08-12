@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
+import { getUploadDir } from "@/lib/env";
 
-const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+const uploadDir = getUploadDir();
 
 const MIME_TYPES: Record<string, string> = {
   ".png": "image/png",

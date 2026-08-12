@@ -2,6 +2,7 @@ import type { VideoProvider, VideoGenerateParams, VideoGenerateResult } from "..
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { getUploadDir } from "@/lib/env";
 
 function toDataUrl(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase().replace(".", "");
@@ -51,7 +52,7 @@ export class UCloudSeedanceProvider implements VideoProvider {
       params?.baseUrl || "https://api.modelverse.cn"
     ).replace(/\/+$/, "");
     this.model = params?.model || "doubao-seedance-1-5-pro-251215";
-    this.uploadDir = params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
+    this.uploadDir = params?.uploadDir || getUploadDir();
   }
 
   async generateVideo(params: VideoGenerateParams): Promise<VideoGenerateResult> {

@@ -3,6 +3,7 @@ import type { AIProvider, TextOptions, ImageOptions } from "../types";
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { getUploadDir } from "@/lib/env";
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -17,7 +18,7 @@ export class OpenAIProvider implements AIProvider {
       maxRetries: 2,
     });
     this.defaultModel = params?.model || process.env.OPENAI_MODEL || "gpt-4o";
-    this.uploadDir = params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
+    this.uploadDir = params?.uploadDir || getUploadDir();
   }
 
   async generateText(prompt: string, options?: TextOptions): Promise<string> {

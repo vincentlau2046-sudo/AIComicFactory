@@ -4,6 +4,7 @@ import type { VideoProvider, VideoGenerateParams, VideoGenerateResult } from "..
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { getUploadDir } from "@/lib/env";
 
 const VALID_DURATIONS = [4, 6, 8] as const;
 
@@ -43,7 +44,7 @@ export class VeoProvider implements VideoProvider {
     }
     this.client = new GoogleGenAI(options);
     this.model = params?.model || "veo-2.0-generate-001";
-    this.uploadDir = params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
+    this.uploadDir = params?.uploadDir || getUploadDir();
   }
 
   private isVeo31(): boolean {
