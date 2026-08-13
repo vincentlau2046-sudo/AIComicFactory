@@ -1537,8 +1537,18 @@ async function handleShotSplitStream(
 
   // Auto-create missing guest characters from shot scene descriptions
   if (episodeId) {
+    // Blacklist: generic crowd/scene terms that are not real characters
+    const CROWD_BLACKLIST = new Set([
+      "士兵", "路人", "百姓", "尸体", "群演", "太监", "宫女", "侍女",
+      "小贩", "商贩", "乞丐", "僧侣", "道士", "骑士", "守卫", "门卫",
+      "仆从", "丫鬟", "家丁", "侍卫", "随从", "使者", "信使", "难民",
+    ]);
+    // Hint quality check: must contain at least one concrete visual descriptor
+    // (body part, color, texture, clothing), not just transient states
+    const VISUAL_HINT_PATTERN = /[体型体态态面相面容脸眼眉鼻嘴唇发须胡服饰衣袍甲冠色肤]/;
+
     const charPattern = /([\u4e00-\u9fa5a-zA-Z]{1,6})[（(]([^）)]{1,10})[）)]/g;
-    const foundChars = new Map<string, { hint: string; contexts: string[] }>();
+    const foundChars = new Map<string, { hint: string; contexts: string[]; shotCount: number }>();
     for (const shot of allShots) {
       const desc = shot.sceneDescription || "";
       const sentences = desc.split(/[。！？；]+/).filter((s) => s.trim());
@@ -1546,18 +1556,29 @@ async function handleShotSplitStream(
       while ((match = charPattern.exec(desc)) !== null) {
         const base = match[1];
         const hint = match[2];
-        if (!foundChars.has(base)) foundChars.set(base, { hint, contexts: [] });
+        // Filter 1: skip blacklisted crowd terms
+        if (CROWD_BLACKLIST.has(base)) continue;
+        // Filter 2: skip hints that are only transient states, not visual descriptors
+        if (!VISUAL_HINT_PATTERN.test(hint)) continue;
+
+        if (!foundChars.has(base)) foundChars.set(base, { hint, contexts: [], shotCount: 0 });
+        const entry = foundChars.get(base)!;
+        entry.shotCount++;
         // Collect unique sentences containing this character
         for (const s of sentences) {
-          if (s.includes(match[0]) && !foundChars.get(base)!.contexts.includes(s.trim())) {
-            foundChars.get(base)!.contexts.push(s.trim());
+          if (s.includes(match[0]) && !entry.contexts.includes(s.trim())) {
+            entry.contexts.push(s.trim());
           }
         }
       }
     }
+
+    // Filter 3: must appear in at least 2 shots to be a real character
+    const qualifyingChars = [...foundChars.entries()].filter(([, v]) => v.shotCount >= 2);
+
     const existingNames = new Set(shotCharacters.map((c) => c.name));
     const existingBaseNames = new Set(shotCharacters.map((c) => stripCharHint(c.name)));
-    const missingEntries = [...foundChars.entries()].filter(([base]) =>
+    const missingEntries = qualifyingChars.filter(([base]) =>
       !existingNames.has(base) && !existingBaseNames.has(base)
     );
     if (missingEntries.length > 0) {
