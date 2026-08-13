@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InlineModelPicker } from "@/components/editor/model-selector";
 import { apiFetch } from "@/lib/api-fetch";
 import { useModelStore } from "@/stores/model-store";
 import { useModelGuard } from "@/hooks/use-model-guard";
@@ -468,6 +469,11 @@ export default function ImportPage({
               </button>
             );
           })}
+        </div>
+
+        {/* Model selector for Steps 2/3/5 (all use text LLM) */}
+        <div className="mt-4 border-t border-[--border-subtle] pt-3">
+          <InlineModelPicker capability="text" />
         </div>
       </div>
 
