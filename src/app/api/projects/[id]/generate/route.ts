@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { streamText, generateText } from "ai";
 import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
+import { parseLLMJSON } from "@/lib/ai/json-repair";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
 import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters, characterRelations, agentBindings, agents } from "@/lib/db/schema";
@@ -1026,7 +1027,7 @@ async function handleShotSplitStream(
       if (agentResult instanceof NextResponse) return agentResult;
 
       // Parse agent output and save to DB (same logic as built-in pipeline)
-      const agentParsed = JSON.parse(extractJSON(agentResult.text));
+      const agentParsed = parseLLMJSON(agentResult.text);
       let agentShots: ParsedShot[];
       if (Array.isArray(agentParsed) && agentParsed.length > 0 && agentParsed[0].shots) {
         agentShots = agentParsed.flatMap((scene: { sceneDescription?: string; shots?: ParsedShot[] }) =>
@@ -1229,7 +1230,7 @@ async function handleShotSplitStream(
           prompt,
           providerOptions: jsonMode,
         });
-        const parsed = JSON.parse(extractJSON(result.text));
+        const parsed = parseLLMJSON(result.text);
         // Handle multiple formats:
         // 1. Scene-grouped: [{ sceneTitle, shots: [...] }]
         // 2. Flat with wrapper: { shots: [...] }
@@ -1252,6 +1253,33 @@ async function handleShotSplitStream(
         return shotList as ParsedShot[];
       } catch (err) {
         console.error(`[ShotSplit] Chunk ${idx + 1} failed:`, err);
+        // Retry once on parse failure with error feedback
+        if (err instanceof SyntaxError) {
+          console.log(`[ShotSplit] Chunk ${idx + 1} retrying with error context...`);
+          try {
+            const retryResult = await generateText({
+              model,
+              system: systemPrompt + `\n\n【重要】上一次输出的JSON解析失败：${String(err).slice(0, 300)}\n请确保输出严格合法的JSON，特别注意字符串内的引号必须转义，不要出现裸换行。`,
+              prompt,
+              providerOptions: jsonMode,
+            });
+            const retryParsed = parseLLMJSON(retryResult.text);
+            let retryList: ParsedShot[];
+            if (Array.isArray(retryParsed) && retryParsed.length > 0 && retryParsed[0].shots) {
+              retryList = retryParsed.flatMap((scene: { sceneDescription?: string; shots?: ParsedShot[] }) =>
+                (scene.shots || []).map((s) => ({ ...s, sceneDescription: s.sceneDescription || scene.sceneDescription || "" }))
+              );
+            } else if (Array.isArray(retryParsed)) {
+              retryList = retryParsed;
+            } else {
+              retryList = retryParsed.shots || [];
+            }
+            console.log(`[ShotSplit] Chunk ${idx + 1} retry OK: ${retryList.length} shots`);
+            return retryList as ParsedShot[];
+          } catch (retryErr) {
+            console.error(`[ShotSplit] Chunk ${idx + 1} retry also failed:`, retryErr);
+          }
+        }
         return [] as ParsedShot[];
       }
     })
@@ -2982,7 +3010,7 @@ async function handleBatchVideoPrompt(
 
     // Parse agent output and save videoPrompt to each shot
     try {
-      const vpParsed = JSON.parse(extractJSON(agentResult.text)) as Array<Record<string, unknown>>;
+      const vpParsed = parseLLMJSON(agentResult.text) as Array<Record<string, unknown>>;
 
       let updatedCount = 0;
       for (const entry of vpParsed) {
@@ -3349,7 +3377,7 @@ async function handleGenerateRefPrompts(
     if (agentResult instanceof NextResponse) return agentResult;
 
     try {
-      const refParsed = JSON.parse(extractJSON(agentResult.text)) as Array<Record<string, unknown>>;
+      const refParsed = parseLLMJSON(agentResult.text) as Array<Record<string, unknown>>;
       if (!Array.isArray(refParsed)) {
         return NextResponse.json({ error: "智能体必须返回 JSON 数组格式的参考图提示词" }, { status: 422 });
       }
@@ -3733,7 +3761,7 @@ async function handleGenerateKeyframePrompts(
 
     // Parse agent output — must be JSON array
     try {
-      const kpParsed = JSON.parse(extractJSON(agentResult.text)) as Array<Record<string, unknown>>;
+      const kpParsed = parseLLMJSON(agentResult.text) as Array<Record<string, unknown>>;
       if (!Array.isArray(kpParsed)) {
         return NextResponse.json({ error: "智能体必须返回 JSON 数组格式的首尾帧提示词" }, { status: 422 });
       }
