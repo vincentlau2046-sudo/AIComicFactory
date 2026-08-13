@@ -2,29 +2,8 @@ import { db } from "@/lib/db";
 import { characters } from "@/lib/db/schema";
 import { resolveImageProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
-import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
-
-function buildFrontViewPrompt(
-  styleMatching: string, faceDetail: string, frontLayout: string,
-  description: string
-): string {
-  return [
-    `角色正面参考图——四视图流程第一步。`,
-    ``,
-    `=== 角色描述 ===`,
-    `${description}`,
-    ``,
-    faceDetail,
-    ``,
-    styleMatching,
-    ``,
-    frontLayout,
-    ``,
-    `光线：与角色描述中声明的一致（如 自然光粗粝质感、柔和布光），纯白背景。`,
-  ].join("\n");
-}
 
 export async function handleCharacterImage(task: Task) {
   const payload = task.payload as { characterId: string; modelConfig?: ModelConfigPayload };
@@ -38,20 +17,18 @@ export async function handleCharacterImage(task: Task) {
     throw new Error("Character not found");
   }
 
-  // Build front-view prompt from template system (NOT buildCharacterTurnaroundPrompt)
-  const frontPrompt = await (async () => {
-    const slotContents = await resolveSlotContents("character_image", { userId: "", projectId: character.projectId });
-    const styleMatching = (slotContents as any)["style_matching"] || "";
-    const faceDetail = (slotContents as any)["face_detail"] || "";
-    const frontLayout = (slotContents as any)["front_view_layout"] || "";
-    return buildFrontViewPrompt(
-      styleMatching, faceDetail, frontLayout,
-      character.description || character.name
-    );
-  })();
+  // T2I prompt: character description IS the prompt
+  // (template sections like FACE_DETAIL/STYLE_MATCHING are for LLM, not direct injection)
+  const prompt = [
+    `角色正面参考图。全身站立正面视图，纯白背景。`,
+    ``,
+    `${character.description || character.name}`,
+    ``,
+    `全身比例正确，从头顶到脚底完整展示，禁止半身图。`,
+  ].join("\n");
 
   const ai = resolveImageProvider(payload.modelConfig);
-  const imagePath = await ai.generateImage(frontPrompt, {
+  const imagePath = await ai.generateImage(prompt, {
     size: "2560x1440",
     aspectRatio: "16:9",
     quality: "hd",
@@ -59,7 +36,7 @@ export async function handleCharacterImage(task: Task) {
     pipelineParams: {
       character_name: character.name,
       character_desc: character.description || character.name,
-      character_prompt: frontPrompt,
+      character_prompt: prompt,
     },
   });
 

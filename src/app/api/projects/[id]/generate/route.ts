@@ -1017,26 +1017,14 @@ async function handleSingleCharacterImage(
   const ai = resolveImageProvider(modelConfig);
 
   // Build front-view prompt from template system (matching pipeline/character-image.ts)
-  const slotContents = await resolveSlotContents("character_image", { userId: "", projectId: character.projectId });
-  const styleMatching = (slotContents as any)["style_matching"] || "";
-  const faceDetail = (slotContents as any)["face_detail"] || "";
-  const frontLayout = (slotContents as any)["front_view_layout"] || "";
-  const charPrompt = [
-    `角色正面参考图——四视图流程第一步。`,
+  // T2I prompt: character description IS the prompt (templates are for LLM, not direct injection)
+  const prompt = [
+    `角色正面参考图。全身站立正面视图，纯白背景。`,
     ``,
-    `=== 角色描述 ===`,
     `${character.description || character.name}`,
     ``,
-    faceDetail,
-    ``,
-    styleMatching,
-    ``,
-    frontLayout,
-    ``,
-    `光线：与角色描述中声明的一致（如 自然光粗粝质感、柔和布光），纯白背景。`,
+    `全身比例正确，从头顶到脚底完整展示，禁止半身图。`,
   ].join("\n");
-
-  const prompt = charPrompt;
 
   try {
     const rawImagePath = await ai.generateImage(prompt, {
@@ -1047,7 +1035,7 @@ async function handleSingleCharacterImage(
       pipelineParams: {
         character_name: character.name,
         character_desc: character.description || character.name,
-        character_prompt: charPrompt,
+        character_prompt: prompt,
       },
     });
 
