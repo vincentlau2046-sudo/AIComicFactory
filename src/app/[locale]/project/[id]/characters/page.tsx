@@ -6,6 +6,7 @@ import { Users, ArrowLeft, Loader2, Trash2, Sparkles } from "lucide-react";
 import { apiFetch } from "@/lib/api-fetch";
 import { CharacterCard } from "@/components/editor/character-card";
 import { CharacterRelations } from "@/components/editor/character-relations";
+import { InlineModelPicker } from "@/components/editor/model-selector";
 import { useModelStore } from "@/stores/model-store";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import Link from "next/link";
@@ -161,18 +162,21 @@ export default function CharactersPage({
             </p>
           </div>
         </div>
-        <button
-          onClick={handleExtract}
-          disabled={extracting}
-          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
-        >
-          {extracting ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Sparkles className="h-3.5 w-3.5" />
-          )}
-          {extracting ? "提取中..." : "提取全部角色"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExtract}
+            disabled={extracting}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {extracting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            {extracting ? "提取中..." : "提取全部角色"}
+          </button>
+          <InlineModelPicker capability="text" />
+        </div>
       </div>
 
       {/* Main Characters Section */}
