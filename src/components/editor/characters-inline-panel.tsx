@@ -15,6 +15,7 @@ interface Character {
   id: string;
   name: string;
   referenceImage: string | null;
+  visualHint?: string;
 }
 
 interface CharactersInlinePanelProps {
@@ -169,7 +170,7 @@ export function CharactersInlinePanel({
                     }`} />
                   </div>
                   {/* Name */}
-                  <span className="max-w-[80px] truncate text-[11px] text-[--text-muted]">{char.name}</span>
+                  <span className="max-w-[80px] truncate text-[11px] text-[--text-muted]">{char.visualHint ? `${char.name}（${char.visualHint}）` : char.name}</span>
                   {/* Generate button (only when no image) */}
                   {!char.referenceImage && (
                     <button
