@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { createLanguageModel } from '@/lib/ai/ai-sdk'
-import { parseLLMJSON } from '@/lib/ai/json-repair'
 import type { ProviderConfig } from '@/lib/ai/ai-sdk'
 import { RetryStrategy } from '@/lib/retry'
 import { db } from '@/lib/db'
@@ -26,6 +25,61 @@ interface CharacterSummary {
   name: string;
   scope: string;
 }
+
+// --- Deterministic text parser (prompt asks for structured text, not JSON) ---
+
+const EPISODE_SEP = /^=== (?:分集|Episode|episode|EPISODE) \d+ ===\r?$/m;
+const FIELD_TITLE = /^\u6807\u9898[\uFF1A:] (.+)/m;
+const FIELD_DESC = /^\u63cf\u8ff0[\uFF1A:] (.+)/m;
+const FIELD_KW = /^\u5173\u952e\u8bcd[\uFF1A:] (.+)/m;
+const FIELD_CHARS = /^\u89d2\u8272[\uFF1A:] (.+)/m;
+const FIELD_IDEA_LABEL = /^\u5267\u60c5\u6784\u601d[\uFF1A:]/m;
+
+function parseSplitText(text: string): SplitEpisode[] {
+  const episodes: SplitEpisode[] = [];
+
+  // Normalize: replace CRLF with LF, full-width colon with half-width
+  let normalized = text.replace(/\r\n/g, "\n").replace(/\uff1a/g, ":");
+
+  // Split by episode markers
+  const blocks = normalized.split(EPISODE_SEP);
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+
+    // Find the header portion: everything before 剧情构思: label
+    // This prevents idea content from polluting field regex matches.
+    const ideaMatch = trimmed.match(FIELD_IDEA_LABEL);
+    const header = ideaMatch ? trimmed.slice(0, ideaMatch.index!).trim() : trimmed;
+    const idea = ideaMatch
+      ? trimmed.slice(ideaMatch.index! + ideaMatch[0].length).trim()
+      : "";
+
+    // Only extract single-line fields from the header (not from idea content)
+    const title = header.match(FIELD_TITLE)?.[1]?.trim();
+    if (!title) continue;  // Skip blocks that don't look like episode data
+
+    const description = header.match(FIELD_DESC)?.[1]?.trim() ?? "";
+    const keywords = header.match(FIELD_KW)?.[1]?.trim() ?? "";
+
+    // characters is comma-separated on one line
+    const charsLine = header.match(FIELD_CHARS)?.[1];
+    const characters = charsLine
+      ? charsLine.split(/[,，]\s*/).filter(Boolean)
+      : undefined;
+
+    episodes.push({ title, description, keywords, idea, characters });
+  }
+
+  if (episodes.length === 0) {
+    console.error(`[ImportSplit] parseSplitText produced 0 episodes. Raw:\n${text.slice(0, 500)}...`);
+  }
+
+  return episodes;
+}
+
+// --- Handler ---
 
 export async function POST(
   request: Request,
@@ -84,37 +138,31 @@ export async function POST(
           { chunkIndex: idx, totalChunks: chunks.length, episodeOffset: 0 },
         )
 
-        const jsonMode = {
-          openai: { response_format: { type: 'json_object' } },
-        }
-
         const result = await retryStrategy.execute(async () => {
           return generateText({
             model,
             system: scriptSplitSystem,
             prompt,
-            providerOptions: jsonMode,
           })
         })
 
-        try {
-          return parseLLMJSON(result.text) as SplitEpisode[]
-        } catch {
-          console.error(`[ImportSplit] Chunk ${idx + 1} JSON parse failed. Raw output:\n${result.text.slice(0, 500)}...`)
-          await addImportLog(
-            projectId, 3, 'running',
-            `第 ${idx + 1} 块 JSON 解析失败，正在重试...`,
-          )
-          const retryResult = await retryStrategy.execute(async () => {
-            return generateText({
-              model,
-              system: scriptSplitSystem,
-              prompt: prompt + '\n\nIMPORTANT: Return COMPLETE, VALID JSON. Fewer episodes is better than broken JSON.',
-              providerOptions: jsonMode,
-            })
+        const episodes = parseSplitText(result.text)
+        if (episodes.length > 0) return episodes
+
+        // Retry on parse failure with emphasis on structured text format
+        console.error(`[ImportSplit] Chunk ${idx + 1} parse produced 0 episodes. Raw:\n${result.text.slice(0, 500)}...`)
+        await addImportLog(
+          projectId, 3, 'running',
+          `第 ${idx + 1} 块解析失败，正在重试...`,
+        )
+        const retryResult = await retryStrategy.execute(async () => {
+          return generateText({
+            model,
+            system: scriptSplitSystem,
+            prompt: prompt + '\n\nIMPORTANT: Use EXACTLY the === 分集 N === format with field labels as specified.',
           })
-          return parseLLMJSON(retryResult.text) as SplitEpisode[]
-        }
+        })
+        return parseSplitText(retryResult.text)
       }),
     )
     allEpisodes = chunkResults.flat();
