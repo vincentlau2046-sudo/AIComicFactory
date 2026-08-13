@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useMemo, useCallback, use } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Users, ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { Users, ArrowLeft, Loader2, Trash2, Sparkles } from "lucide-react";
 import { apiFetch } from "@/lib/api-fetch";
 import { CharacterCard } from "@/components/editor/character-card";
 import { CharacterRelations } from "@/components/editor/character-relations";
+import { useModelStore } from "@/stores/model-store";
+import { useModelGuard } from "@/hooks/use-model-guard";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -41,6 +43,10 @@ export default function CharactersPage({
   const [characters, setCharacters] = useState<Character[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [extracting, setExtracting] = useState(false);
+
+  const getModelConfig = useModelStore((s) => s.getModelConfig);
+  const textGuard = useModelGuard("text");
 
   const fetchData = useCallback(async () => {
     const [chars, eps] = await Promise.all([
@@ -85,6 +91,26 @@ export default function CharactersPage({
     () => characters.filter((c) => c.scope === "guest").length,
     [characters]
   );
+
+  async function handleExtract() {
+    if (!textGuard()) return;
+    setExtracting(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "character_extract",
+          modelConfig: getModelConfig(),
+        }),
+      });
+      toast.success("角色提取完成");
+    } catch (err) {
+      toast.error(tc("generationFailed"));
+    }
+    setExtracting(false);
+    fetchData();
+  }
 
   async function handlePromote(characterId: string) {
     await apiFetch(`/api/projects/${projectId}/characters/${characterId}`, {
@@ -135,6 +161,18 @@ export default function CharactersPage({
             </p>
           </div>
         </div>
+        <button
+          onClick={handleExtract}
+          disabled={extracting}
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+        >
+          {extracting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" />
+          )}
+          {extracting ? "提取中..." : "提取全部角色"}
+        </button>
       </div>
 
       {/* Main Characters Section */}

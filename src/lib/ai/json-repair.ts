@@ -93,7 +93,7 @@ export function repairJSON(raw: string): string {
  * Extract + repair + parse JSON from LLM output.
  * Returns parsed result or throws with the original error.
  */
-export function parseLLMJSON(text: string): unknown {
+export function parseLLMJSON(text: string): any {
   const cleaned = extractJSON(text);
   const repaired = repairJSON(cleaned);
   return JSON.parse(repaired);
