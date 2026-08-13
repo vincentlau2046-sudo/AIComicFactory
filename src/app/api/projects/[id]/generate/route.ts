@@ -1803,7 +1803,7 @@ async function handleBatchFrameGenerate(
         ...(lfAssetExisting?.characters ?? []).map(stripCharHint),
       ]);
       const filteredChars = shotCharNameSet.size > 0
-        ? charsWithImages.filter((c) => shotCharNameSet.has(c.name))
+        ? charsWithImages.filter((c) => shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || ""))
         : [];
       const shotCharRefImages = filteredChars.map((c) => c.referenceImage!);
       const shotCharRefLabels = filteredChars.map((c) => c.name);
@@ -1925,7 +1925,7 @@ async function handleSingleFrameGenerate(
     ...(lfAsset?.characters ?? []).map(stripCharHint),
   ]);
   const filteredChars = shotCharNameSet.size > 0
-    ? projectCharacters.filter((c) => c.referenceImage && shotCharNameSet.has(c.name))
+    ? projectCharacters.filter((c) => c.referenceImage && (shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || "")))
     : [];
   const shotCharRefImages = filteredChars.map((c) => c.referenceImage as string);
 
@@ -2528,7 +2528,7 @@ async function handleSingleReferenceVideo(
   }
 
   const charRefs = projectCharacters
-    .filter((c) => !!c.referenceImage && shotCharNameSet.has(c.name))
+    .filter((c) => !!c.referenceImage && (shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || "")))
     .map((c) => ({ name: c.name, imagePath: c.referenceImage as string }));
 
   // charRefs may be empty — that's legal for shots with no characters
@@ -2808,7 +2808,7 @@ async function handleBatchReferenceVideo(
           for (const n of r.characters ?? []) shotCharNameSet.add(stripCharHint(n));
         }
         const charRefs = charsWithRefsAll
-          .filter((c) => shotCharNameSet.size === 0 || shotCharNameSet.has(c.name))
+          .filter((c) => shotCharNameSet.size === 0 || shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || ""))
           .map((c) => ({ name: c.name, imagePath: c.referenceImage as string }));
 
         // Step 2: Build ordered Seedance 2 reference image list (chars first, scenes second)
