@@ -1024,14 +1024,16 @@ async function handleSingleCharacterImage(
   const charPrompt = [
     `角色正面参考图——四视图流程第一步。`,
     ``,
-    styleMatching,
-    ``,
     `=== 角色描述 ===`,
     `${character.description || character.name}`,
     ``,
     faceDetail,
     ``,
+    styleMatching,
+    ``,
     frontLayout,
+    ``,
+    `光线：与角色描述中声明的一致（如 自然光粗粝质感、柔和布光），纯白背景。`,
   ].join("\n");
 
   const prompt = charPrompt;
