@@ -1488,7 +1488,7 @@ const sceneFrameGenerateDef: PromptDefinition = {
 
 const VIDEO_INTERPOLATION_HEADER = `用自然中文散文描述从首帧到尾帧之间发生的动态过程。不要使用结构化标签（"Scene:"、"Action:"），不要权重语法（"（xx：1.5）"）。把镜头当一段电影画面来写，语言要让模型"看见"。
 
-写作要点（Seedance 2.0 风格）：
+写作要点（MiniMax H3风格）：
 - 主体动作：具体的肢体运动——握紧、倾身、回头、抬手、脚步变缓、呼吸停顿；写速度与力度。
 - 环境反应：世界对主体的回应——衣摆翻飞、落叶扬起、光斑掠过墙面、水面扩散的涟漪。
 - 镜头运动：使用具体词——"镜头缓慢推近"/"低角度广角缓缓上摇"/"环绕摇镜快切"/"固定机位"/"希区柯克变焦"；不要"优雅地""柔和地"这种空词。
@@ -1588,10 +1588,7 @@ const refVideoGenerateDef: PromptDefinition = {
 };
 
 // ─── 12. ref_video_prompt ───────────────────────────────
-// Seedance 2.0 reference-mode video prompt writer. Receives an ordered
-// list of reference images (character refs + scene refs). Outputs a prompt
-// that uses Seedance `@图片N` reference syntax with character names in
-// parentheses on every reference.
+// MiniMax H3 reference-mode video prompt writer.
 
 const REF_VIDEO_PROMPT_ROLE_DEFINITION = `你是一位视频提示词撰写专家，兼容 H3 / Seedance 等视频生成模型。你会收到一组**有序**的参考图并据此撰写提示词：
   - 前 N 张是角色参考图（每张绑定一个角色名）
@@ -1604,7 +1601,7 @@ const REF_VIDEO_PROMPT_ROLE_DEFINITION = `你是一位视频提示词撰写专�
   Handheld = 手持跟拍 | Crane = 升降 | Slither = 滑轨横移
   Static = 固定机位 | Dolly Zoom = 希区柯克变焦`;
 
-const REF_VIDEO_PROMPT_MOTION_RULES = `## 核心语法（Seedance @ 引用——官方即梦格式）
+const REF_VIDEO_PROMPT_MOTION_RULES = `## 核心语法（MiniMax H3 @ 引用格式）
 
 1. **所有角色和场景必须用 \`@图片N\` 形式引用**。顺序严格对应收到的参考图顺序——前 N 张是角色，后 M 张是场景。
 
@@ -1631,7 +1628,17 @@ const REF_VIDEO_PROMPT_MOTION_RULES = `## 核心语法（Seedance @ 引用——
 | 4-5s | 2 个 | 40-70 字 | |
 | 6-8s | 3 个 | 60-100 字 |
 | 9-12s | 4-5 个 | 100-160 字 |
-| 13-15s | 5-6 个 | 150-220 字 |
+| 13-15s | 5-6 个 | 150-220 字 | 完整小叙事弧，含情绪起伏 |
+
+**示例对比**：
+
+❌ 慢节奏（8s 只有 1 个动作）：
+"固定特写，她修长的手指敲击金属桌面，发出清脆声响。"
+→ 问题：8 秒只看手指敲桌子，画面呆滞
+
+✅ 正确节奏（8s，3 个节拍）：
+"固定特写下，她涂着黑色指甲油的手指先缓慢抚过冰冷桌面划痕，随即食指与中指交替敲击金属面，震起微尘——第三下敲击后手指骤然停住，五指收拢握拳，指节泛白。"
+→ 抚摸 → 敲击 → 握拳，三个阶段填满 8 秒
 
 **时间线保留规则（新增）**：
 - 如果输入的「剧本动作」包含"0-3秒/4-6秒/7-9秒"等时间标记，**必须**在输出的散文中保留这些秒段信息
