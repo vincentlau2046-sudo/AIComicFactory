@@ -72,8 +72,26 @@ CRITICAL LANGUAGE RULE: ALL fields MUST be written in the SAME LANGUAGE as the s
 
 Respond ONLY with the JSON array. No markdown. No commentary.`;
 
-export function buildCharacterExtractPrompt(screenplay: string): string {
-  return `Extract and create detailed visual character specifications for EVERY named character in this screenplay. Each description must be specific enough to serve as a binding art reference for consistent AI image generation.
+export function buildCharacterExtractPrompt(
+  screenplay: string,
+  existingRegistry?: Array<{ baseName: string; episodes: Array<{ epIndex: number; visualHint: string }> }>
+): string {
+  let registryBlock = "";
+  if (existingRegistry && existingRegistry.length > 0) {
+    const lines = existingRegistry.map((c) => {
+      const epHints = c.episodes.map((e) => `EP${String(e.epIndex).padStart(2, "0")}=${e.visualHint}`).join(", ");
+      return `- ${c.baseName}: ${epHints}`;
+    });
+    registryBlock = `
+
+=== 现有角色注册表（请复用以下 baseName，不要创建同名新角色）===
+这些角色已在之前的剧集中出现。如果他们在当前剧本中有出场，请使用相同的 baseName，并在 episodes 中给出该EP的 visualHint（考虑年龄推移/剧情状态变化）。
+
+${lines.join("\n")}
+`;
+  }
+
+  return `Extract and create detailed visual character specifications for EVERY named character in this screenplay. Each description must be specific enough to serve as a binding art reference for consistent AI image generation.${registryBlock}
 
 --- SCREENPLAY ---
 ${screenplay}

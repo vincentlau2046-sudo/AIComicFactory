@@ -74,6 +74,7 @@ export const maxDuration = 300;
 /** Fetch characters linked to an episode via episode_characters, or all project characters if no episode. */
 async function getEpisodeCharacters(projectId: string, epId?: string | null) {
   if (epId) {
+    // Priority 1: linked via episode_characters join table (instance rows, Type B)
     const linkedIds = await db
       .select({ characterId: episodeCharacters.characterId })
       .from(episodeCharacters)
@@ -81,7 +82,16 @@ async function getEpisodeCharacters(projectId: string, epId?: string | null) {
     if (linkedIds.length > 0) {
       return db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)));
     }
-    return [] as typeof characters.$inferSelect[];
+    // Priority 2: direct lookup by episode_id on characters table (instance rows without join)
+    const directInstances = await db.select().from(characters).where(eq(characters.episodeId, epId));
+    if (directInstances.length > 0) {
+      return directInstances;
+    }
+    // Priority 3: fallback to project-level template rows (Type A, episode_id=null)
+    return db.select().from(characters).where(and(
+      eq(characters.projectId, projectId),
+      isNull(characters.episodeId)
+    ));
   }
   return db.select().from(characters).where(eq(characters.projectId, projectId));
 }
@@ -655,9 +665,21 @@ async function handleCharacterExtract(
     .select()
     .from(characters)
     .where(eq(characters.projectId, projectId));
+  // Build existing character registry for incremental extraction (S5)
   const existingByName = new Map(
-    existingChars.map((c) => [c.name.toLowerCase().trim(), c])
+    existingChars.filter((c) => !c.episodeId).map((c) => [c.name.toLowerCase().trim(), c])
   );
+  const existingRegistry = existingChars
+    .filter((c) => c.episodeId && c.baseName)
+    .reduce((acc, c) => {
+      const existing = acc.find((r) => r.baseName === c.baseName);
+      if (existing) {
+        existing.episodes.push({ epIndex: existing.episodes.length + 1, visualHint: c.visualHint || "" });
+      } else if (c.baseName) {
+        acc.push({ baseName: c.baseName, episodes: [{ epIndex: 1, visualHint: c.visualHint || "" }] });
+      }
+      return acc;
+    }, [] as Array<{ baseName: string; episodes: Array<{ epIndex: number; visualHint: string }> }>);
 
   // If extracting for an episode, capture the old episode-linked character ids
   // BEFORE deleting the links, so we can scope relation cleanup to this episode only.
@@ -674,7 +696,7 @@ async function handleCharacterExtract(
   let aiText: string;
   const boundAgent = await findBoundAgent(projectId, "character_extract");
   if (boundAgent) {
-    const agentResult = await callAndValidateAgent(boundAgent, "character_extract", buildCharacterExtractPrompt(script));
+    const agentResult = await callAndValidateAgent(boundAgent, "character_extract", buildCharacterExtractPrompt(script, existingRegistry.length > 0 ? existingRegistry : undefined));
     if (agentResult instanceof NextResponse) return agentResult;
     aiText = agentResult.text;
   } else {
@@ -687,7 +709,7 @@ async function handleCharacterExtract(
     const { text } = await generateText({
       model,
       system: charExtractSystem,
-      prompt: buildCharacterExtractPrompt(script),
+      prompt: buildCharacterExtractPrompt(script, existingRegistry.length > 0 ? existingRegistry : undefined),
     });
     aiText = text;
   }
@@ -1200,7 +1222,7 @@ async function handleShotSplitStream(
   }
 
   const characterDescriptions = shotCharacters
-    .map((c) => `${c.name}: ${c.description}`)
+    .map((c) => `${c.name}${c.visualHint ? `（${c.visualHint}）` : ""}: ${c.description}`)
     .join("\n");
 
   const characterVisualHints = shotCharacters
@@ -1935,7 +1957,7 @@ async function handleSingleVideoGenerate(
     .from(characters)
     .where(eq(characters.projectId, shot.projectId));
   const characterDescriptions = shotCharacters
-    .map((c) => `${c.name}: ${c.description}`)
+    .map((c) => `${c.name}${c.visualHint ? `（${c.visualHint}）` : ""}: ${c.description}`)
     .join("\n");
 
   const shotDialogues = await db
