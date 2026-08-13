@@ -1015,7 +1015,36 @@ async function handleSingleCharacterImage(
   }
 
   const ai = resolveImageProvider(modelConfig);
-  const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
+
+  // Build front-view prompt from template system (matching pipeline/character-image.ts)
+  const slotContents = await resolveSlotContents("character_image", { userId: "", projectId: character.projectId });
+  const styleMatching = (slotContents as any)["style_matching"] || "";
+  const faceDetail = (slotContents as any)["face_detail"] || "";
+  const frontLayout = (slotContents as any)["front_view_layout"] || "";
+  const lighting = (slotContents as any)["lighting_rendering"] || "";
+  const consistency = (slotContents as any)["consistency_rules"] || "";
+  const charPrompt = [
+    `角色正面参考图——四视图流程第一步（专业角色设计文档）。`,
+    `**必须生成全身站立正面单视角角色图**，纯白背景，头顶到脚底完整展示。`,
+    ``,
+    styleMatching,
+    ``,
+    `=== 角色描述 ===`,
+    `名字: ${character.name}\n${character.description || character.name}`,
+    ``,
+    faceDetail,
+    ``,
+    `=== 武器与装备（如有）===`,
+    `- 以与角色相同的画风渲染所有武器、铠甲和装备`,
+    ``,
+    frontLayout,
+    ``,
+    lighting,
+    ``,
+    consistency,
+  ].join("\n");
+
+  const prompt = charPrompt;
 
   try {
     const rawImagePath = await ai.generateImage(prompt, {
@@ -1026,6 +1055,7 @@ async function handleSingleCharacterImage(
       pipelineParams: {
         character_name: character.name,
         character_desc: character.description || character.name,
+        character_prompt: charPrompt,
       },
     });
 
