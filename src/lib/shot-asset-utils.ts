@@ -19,6 +19,14 @@ import { getUploadDir } from "@/lib/env";
 
 /**
  * Strip visual hint annotations from character names stored in shot_assets.
+ *
+ * @deprecated With per-EP character model (S0-S5), characters now have per-episode
+ * instance rows with typed visualHint. Use getEpisodeCharacters() instead of
+ * extracting hints from name strings.
+ *
+ * Kept for backward compatibility during migration. Remove after all call sites
+ * migrate to getEpisodeCharacters().
+ *
  * Characters are stored as "朱元璋（明黄衮服锐眼）" by the LLM,
  * but the characters table stores clean names "朱元璋".
  * This strips the （hint） suffix so downstream matching works.
