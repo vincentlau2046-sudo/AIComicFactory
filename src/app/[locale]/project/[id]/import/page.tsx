@@ -89,6 +89,10 @@ export default function ImportPage({
   // Step 3 result
   const [episodes, setEpisodes] = useState<SplitEpisode[]>([]);
 
+  // Stage 5 result: per-EP characters with visual hints
+  const [perEpCharacters, setPerEpCharacters] = useState<Array<{ id: string; name: string; visualHint: string; episodeId: string; baseName: string }>>([]);
+  const [perEpEpisodes, setPerEpEpisodes] = useState<Array<{ id: string; title: string; sequence: number }>>([]);
+
   // History mode
   const [historyMode, setHistoryMode] = useState(false);
   const [selectedStep, setSelectedStep] = useState<Step | null>(null);
@@ -344,12 +348,18 @@ export default function ImportPage({
         const err = await res.json();
         throw new Error(err.error || `HTTP ${res.status}`);
       }
-      addLog(5, "done", "每集角色视觉标识提取完成");
+      // Fetch per-EP characters & episodes from DB for review
+      const [charsRes, epsRes] = await Promise.all([
+        apiFetch(`/api/projects/${projectId}/characters`),
+        apiFetch(`/api/projects/${projectId}/episodes`),
+      ]);
+      const charsData = await charsRes.json();
+      const epsData = await epsRes.json();
+      const epChars = charsData.filter((c: any) => c.episodeId); // instance rows only
+      setPerEpCharacters(epChars);
+      setPerEpEpisodes(epsData);
+      addLog(5, "done", `每集角色视觉标识提取完成，共 ${epChars.length} 个EP角色实例`);
       setStepStatus((prev) => ({ ...prev, 5: "done" }));
-      toast.success(t("complete"));
-      setTimeout(() => {
-        router.push(`/${locale}/project/${projectId}/episodes`);
-      }, 1500);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Per-EP character extract failed";
       addLog(5, "error", `提取失败: ${msg}`);
@@ -424,6 +434,8 @@ export default function ImportPage({
   const showCharReview = stepStatus[2] === "done" && stepStatus[3] === "idle";
   // Show episodes review after step 3 done + step 4 idle
   const showEpReview = stepStatus[3] === "done" && stepStatus[4] === "idle";
+  // Stage 5 review: shown after per-EP character extraction completes
+  const showPerEpReview = stepStatus[5] === "done" && perEpCharacters.length > 0;
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
@@ -668,8 +680,57 @@ export default function ImportPage({
           </div>
         )}
 
+        {/* Stage 5 review: per-EP character visual hints */}
+        {showPerEpReview && (() => {
+          // Build episode name map from fetched episodes
+          const epNameMap = new Map(perEpEpisodes.map((ep) => [ep.id, `EP${String(ep.sequence).padStart(2, "0")} ${ep.title}`]));
+          // Group per-ep characters by episodeId
+          const byEp = new Map<string, typeof perEpCharacters>();
+          for (const c of perEpCharacters) {
+            const list = byEp.get(c.episodeId) || [];
+            list.push(c);
+            byEp.set(c.episodeId, list);
+          }
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-lg font-bold text-[--text-primary]">
+                  确认 per-EP 角色视觉标识 ({byEp.size} 集)
+                </h3>
+                <Button
+                  onClick={() => router.push(`/${locale}/project/${projectId}/episodes`)}
+                  className="rounded-xl"
+                >
+                  确认并进入项目
+                </Button>
+              </div>
+              <p className="text-sm text-[--text-muted]">每集角色的视觉标识（visualHint）已根据该集剧情自动生成。检查各 EP 角色外观是否一致。</p>
+              <div className="space-y-3">
+                {Array.from(byEp.entries()).map(([epId, chars]) => (
+                  <div key={epId} className="rounded-xl border border-[--border-subtle] bg-white p-4">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
+                        {epNameMap.get(epId) || epId}
+                      </span>
+                      <span className="text-xs text-[--text-muted]">{chars.length} 个角色</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {chars.map((c) => (
+                        <div key={c.id} className="flex items-center gap-1.5 rounded-lg bg-[--surface] px-2.5 py-1.5">
+                          <span className="text-xs font-medium text-[--text-primary]">{c.baseName}</span>
+                          <span className="text-[11px] text-[--text-muted]">（{c.visualHint}）</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Logs panel */}
-        {(currentStep > 0 || historyMode) && !showCharReview && !showEpReview && (() => {
+        {(currentStep > 0 || historyMode) && !showCharReview && !showEpReview && !showPerEpReview && (() => {
           const filteredLogs = selectedStep
             ? logs.filter((l) => l.step === selectedStep)
             : logs;
