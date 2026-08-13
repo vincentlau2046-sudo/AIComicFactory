@@ -62,11 +62,12 @@ export async function POST(
     await db.insert(characters).values({
       id: charId,
       projectId,
+      baseName: char.name,
       name: char.name,
       description: char.description,
       visualHint: char.visualHint ?? "",
       scope: char.scope,
-      episodeId: null, // all characters are project-level now
+      episodeId: null,
     });
     charIdByName.set(char.name.toLowerCase().trim(), charId);
   }

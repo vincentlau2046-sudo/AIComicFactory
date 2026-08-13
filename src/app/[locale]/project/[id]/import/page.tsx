@@ -42,13 +42,14 @@ interface LogEntry {
   createdAt: string | number;
 }
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 const STEPS = [
   { num: 1 as Step, icon: FileText, label: "importStep.parse" },
   { num: 2 as Step, icon: Users, label: "importStep.characters" },
   { num: 3 as Step, icon: Layers, label: "importStep.split" },
   { num: 4 as Step, icon: Sparkles, label: "importStep.generate" },
+  { num: 5 as Step, icon: Users, label: "importStep.perEpCharacter" },
 ] as const;
 
 export default function ImportPage({
@@ -67,7 +68,7 @@ export default function ImportPage({
   // Pipeline state
   const [currentStep, setCurrentStep] = useState<Step | 0>(0);
   const [stepStatus, setStepStatus] = useState<Record<Step, "idle" | "running" | "done" | "error">>({
-    1: "idle", 2: "idle", 3: "idle", 4: "idle",
+    1: "idle", 2: "idle", 3: "idle", 4: "idle", 5: "idle",
   });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -315,10 +316,8 @@ export default function ImportPage({
       const data = await res.json();
       addLog(4, "done", `导入完成！创建了 ${data.characterCount} 个角色和 ${data.episodes.length} 集`);
       setStepStatus((prev) => ({ ...prev, 4: "done" }));
-      toast.success(t("complete"));
-      setTimeout(() => {
-        router.push(`/${locale}/project/${projectId}/episodes`);
-      }, 1500);
+      // Automatically trigger Stage 5: per-EP character extraction
+      setTimeout(() => runPerEpCharacter(), 500);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Generate failed";
       addLog(4, "error", `创建失败: ${msg}`);
@@ -326,9 +325,40 @@ export default function ImportPage({
     }
   }
 
+  async function runPerEpCharacter() {
+    setCurrentStep(5);
+    setStepStatus((prev) => ({ ...prev, 5: "running" }));
+    addLog(5, "running", "正在提取每集角色视觉变体...");
+
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "character_extract",
+          modelConfig: getModelConfig(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      addLog(5, "done", "每集角色视觉标识提取完成");
+      setStepStatus((prev) => ({ ...prev, 5: "done" }));
+      toast.success(t("complete"));
+      setTimeout(() => {
+        router.push(`/${locale}/project/${projectId}/episodes`);
+      }, 1500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Per-EP character extract failed";
+      addLog(5, "error", `提取失败: ${msg}`);
+      setStepStatus((prev) => ({ ...prev, 5: "error" }));
+    }
+  }
+
   // Retry handler for any failed step
   function retryStep() {
-    const failedStep = ([1, 2, 3, 4] as Step[]).find((s) => stepStatus[s] === "error");
+    const failedStep = ([1, 2, 3, 4, 5] as Step[]).find((s) => stepStatus[s] === "error");
     if (!failedStep) return;
     switch (failedStep) {
       case 1: // Re-run full pipeline (need file again)
@@ -342,6 +372,9 @@ export default function ImportPage({
         break;
       case 4:
         runGenerate();
+        break;
+      case 5:
+        runPerEpCharacter();
         break;
     }
   }
@@ -804,7 +837,7 @@ export default function ImportPage({
                       setHistoryMode(false);
                       setSelectedStep(null);
                       setCurrentStep(0);
-                      setStepStatus({ 1: "idle", 2: "idle", 3: "idle", 4: "idle" });
+                      setStepStatus({ 1: "idle", 2: "idle", 3: "idle", 4: "idle", 5: "idle" });
                     }}
                   >
                     {t("newImport")}

@@ -168,9 +168,8 @@
     "refImagePrompt": "参考图提示词...",
     "noRefImages": "暂无参考图提示词",
     "noKeyframes": "暂无首尾帧提示词",
-    "refChars": "镜头角色",
-    "generateRefImages": "生成参考图",
     "refChars": "角色",
+    "generateRefImages": "生成参考图",
     "regenerateRefImages": "重新生成参考图",
     "maxRefImages": "最多9张参考图",
     "transition": "转场",
@@ -259,7 +258,8 @@
       "parse": "文本解析",
       "characters": "角色提取",
       "split": "自动分集",
-      "generate": "创建分集"
+      "generate": "创建分集",
+      "perEpCharacter": "per-EP角色提取"
     }
   },
   "uploadScript": {

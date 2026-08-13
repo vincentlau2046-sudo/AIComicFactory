@@ -257,7 +257,8 @@
       "parse": "Parse Text",
       "characters": "Extract Characters",
       "split": "Auto Split",
-      "generate": "Create Episodes"
+      "generate": "Create Episodes",
+      "perEpCharacter": "Per-EP Characters"
     }
   },
   "uploadScript": {
