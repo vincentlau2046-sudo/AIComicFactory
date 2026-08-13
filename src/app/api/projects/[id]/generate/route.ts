@@ -1538,13 +1538,23 @@ async function handleShotSplitStream(
   // Auto-create missing guest characters from shot scene descriptions
   if (episodeId) {
     const charPattern = /([\u4e00-\u9fa5a-zA-Z]{1,6})[（(]([^）)]{1,10})[）)]/g;
-    const foundChars = new Map<string, string>(); // baseName → hint
+    const foundChars = new Map<string, { hint: string; context: string }>();
     for (const shot of allShots) {
+      const desc = shot.sceneDescription || "";
+      // Split into sentences for context extraction
+      const sentences = desc.split(/[。！？；\n]+/).filter((s) => s.trim());
       let match;
-      while ((match = charPattern.exec(shot.sceneDescription)) !== null) {
+      while ((match = charPattern.exec(desc)) !== null) {
         const base = match[1];
         const hint = match[2];
-        if (!foundChars.has(base)) foundChars.set(base, hint);
+        // Find the sentence containing this character reference
+        let context = "";
+        for (const s of sentences) {
+          if (s.includes(match[0])) { context = s.trim(); break; }
+        }
+        if (!foundChars.has(base) || (context && !foundChars.get(base)!.context)) {
+          foundChars.set(base, { hint, context });
+        }
       }
     }
     const existingNames = new Set(shotCharacters.map((c) => c.name));
@@ -1554,14 +1564,17 @@ async function handleShotSplitStream(
     );
     if (missingChars.length > 0) {
       console.log(`[ShotSplit] Auto-creating ${missingChars.length} guest characters: ${missingChars.map(([n]) => n).join(", ")}`);
-      for (const [base, hint] of missingChars) {
+      for (const [base, { hint, context }] of missingChars) {
         const charId = genId();
+        const desc = context
+          ? `${hint}。${context.slice(0, 200)}`
+          : `EP ${episodeId.slice(0, 8)} 客串角色`;
         await db.insert(characters).values({
           id: charId,
           projectId,
           baseName: base,
           name: hint ? `${base}（${hint}）` : base,
-          description: `EP ${episodeId.slice(0, 8)} 客串角色`,
+          description: desc,
           visualHint: hint,
           scope: "guest",
           episodeId,
