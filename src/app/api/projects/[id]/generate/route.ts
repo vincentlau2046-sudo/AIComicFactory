@@ -1538,42 +1538,76 @@ async function handleShotSplitStream(
   // Auto-create missing guest characters from shot scene descriptions
   if (episodeId) {
     const charPattern = /([\u4e00-\u9fa5a-zA-Z]{1,6})[（(]([^）)]{1,10})[）)]/g;
-    const foundChars = new Map<string, string>(); // baseName → hint
+    const foundChars = new Map<string, { hint: string; contexts: string[] }>();
     for (const shot of allShots) {
+      const desc = shot.sceneDescription || "";
+      const sentences = desc.split(/[。！？；]+/).filter((s) => s.trim());
       let match;
-      while ((match = charPattern.exec(shot.sceneDescription || "")) !== null) {
+      while ((match = charPattern.exec(desc)) !== null) {
         const base = match[1];
         const hint = match[2];
-        if (!foundChars.has(base)) foundChars.set(base, hint);
+        if (!foundChars.has(base)) foundChars.set(base, { hint, contexts: [] });
+        // Collect unique sentences containing this character
+        for (const s of sentences) {
+          if (s.includes(match[0]) && !foundChars.get(base)!.contexts.includes(s.trim())) {
+            foundChars.get(base)!.contexts.push(s.trim());
+          }
+        }
       }
     }
     const existingNames = new Set(shotCharacters.map((c) => c.name));
     const existingBaseNames = new Set(shotCharacters.map((c) => stripCharHint(c.name)));
-    const missingChars = [...foundChars.entries()].filter(([base]) =>
+    const missingEntries = [...foundChars.entries()].filter(([base]) =>
       !existingNames.has(base) && !existingBaseNames.has(base)
     );
-    if (missingChars.length > 0) {
-      console.log(`[ShotSplit] Auto-creating ${missingChars.length} guest characters: ${missingChars.map(([n]) => n).join(", ")}`);
-      for (const [base, hint] of missingChars) {
-        const charId = genId();
-        // Use hint as description core — scene context contains camera directions,
-        // posture, and positioning that would pollute character ref image generation
-        const desc = hint ? `${hint}。${episodeId.slice(0, 8)} 客串角色。` : `${episodeId.slice(0, 8)} 客串角色。`;
-        await db.insert(characters).values({
-          id: charId,
-          projectId,
-          baseName: base,
-          name: hint ? `${base}（${hint}）` : base,
-          description: desc,
-          visualHint: hint,
-          scope: "guest",
-          episodeId,
-        });
-        await db.insert(episodeCharacters).values({
-          id: genId(),
-          episodeId,
-          characterId: charId,
-        });
+    if (missingEntries.length > 0) {
+      console.log(`[ShotSplit] Generating ${missingEntries.length} guest characters via LLM: ${missingEntries.map(([n]) => n).join(", ")}`);
+
+      // Fetch EP context for the prompt
+      const [ep] = await db.select({
+        title: episodes.title, description: episodes.description, idea: episodes.idea
+      }).from(episodes).where(eq(episodes.id, episodeId));
+
+      // Build bulk prompt for all missing characters
+      let bulkPrompt = `${ep?.title || ""}\n构思: ${ep?.idea || "（无）"}\n描述: ${ep?.description || "（无）"}\n\n=== 需要补充外观描述的角色（均为本集客串角色，scope="guest"）===\n`;
+      for (const [base, { hint, contexts }] of missingEntries) {
+        bulkPrompt += `\n角色名: ${base}\n已有外观线索: ${hint}\n出场场景:\n`;
+        for (const ctx of contexts.slice(0, 3)) {
+          bulkPrompt += `  - ${ctx}\n`;
+        }
+      }
+      bulkPrompt += "\n请为以上每个角色生成完整的 visualHint（2-4字）和 description（单段密集角色外观描写，含体态/面部/发型/服装/标志特征）。返回 JSON 数组。";
+
+      try {
+        if (!modelConfig?.text) {
+          console.warn("[ShotSplit] No text model — skipping guest character generation");
+        } else {
+          const model = createLanguageModel(modelConfig.text);
+          const charSystem = await resolvePrompt("character_extract", { userId, projectId }).catch(() => undefined);
+          const { text } = await generateText({
+            model,
+            system: charSystem || "你是角色设计师，生成角色视觉描述。仅返回JSON。",
+            prompt: bulkPrompt,
+          });
+          const parsed = parseLLMJSON(text);
+          const chars: Array<{ name: string; visualHint?: string; description: string }> = Array.isArray(parsed) ? parsed : (parsed.characters || []);
+          for (const c of chars) {
+            const charId = genId();
+            await db.insert(characters).values({
+              id: charId, projectId,
+              baseName: c.name, name: c.name,
+              description: c.description || "",
+              visualHint: c.visualHint || "",
+              scope: "guest", episodeId,
+            });
+            await db.insert(episodeCharacters).values({
+              id: genId(), episodeId, characterId: charId,
+            });
+            console.log(`[ShotSplit] Created guest character: ${c.name}`);
+          }
+        }
+      } catch (err) {
+        console.error("[ShotSplit] Guest character generation failed:", err);
       }
     }
   }
