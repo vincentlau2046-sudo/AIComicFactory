@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateText } from "ai";
 import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
+import { parseLLMJSON } from "@/lib/ai/json-repair";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
 import { projects } from "@/lib/db/schema";
@@ -81,7 +82,7 @@ export async function POST(
         });
 
         try {
-          const parsed = JSON.parse(extractJSON(result.text));
+          const parsed = parseLLMJSON(result.text);
           // Support both { characters, relationships } and legacy array format
           if (Array.isArray(parsed)) return { chars: parsed as ExtractedChar[], rels: [] as ExtractedRelation[] };
           return { chars: (parsed.characters || []) as ExtractedChar[], rels: (parsed.relationships || []) as ExtractedRelation[] };
@@ -97,7 +98,7 @@ export async function POST(
             prompt: buildImportCharacterExtractPrompt(chunk) + "\n\nIMPORTANT: Return COMPLETE, VALID JSON.",
             providerOptions: jsonMode,
           });
-          const parsed = JSON.parse(extractJSON(retry.text));
+          const parsed = parseLLMJSON(retry.text);
           if (Array.isArray(parsed)) return { chars: parsed as ExtractedChar[], rels: [] as ExtractedRelation[] };
           return { chars: (parsed.characters || []) as ExtractedChar[], rels: (parsed.relationships || []) as ExtractedRelation[] };
         }
