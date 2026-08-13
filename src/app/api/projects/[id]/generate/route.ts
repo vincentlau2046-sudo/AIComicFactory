@@ -1947,7 +1947,19 @@ async function handleBatchVideoGenerate(
     return NextResponse.json({ error: "No video model configured" }, { status: 400 });
   }
 
-  const batchVersionId = payload?.versionId as string | undefined;
+  let batchVersionId = payload?.versionId as string | undefined;
+  if (!batchVersionId) {
+    const [latestVer] = await db.select({ id: storyboardVersions.id })
+      .from(storyboardVersions)
+      .where(and(
+        eq(storyboardVersions.projectId, projectId),
+        ...(episodeId ? [eq(storyboardVersions.episodeId, episodeId)] : [])
+      ))
+      .orderBy(desc(storyboardVersions.versionNum))
+      .limit(1);
+    if (!latestVer?.id) return NextResponse.json({ error: "No version found. Run shot split first." }, { status: 400 });
+    batchVersionId = latestVer.id;
+  }
   const shotWhereConditions = [eq(shots.projectId, projectId)];
   if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
   if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
