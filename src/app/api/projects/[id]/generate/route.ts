@@ -1538,23 +1538,13 @@ async function handleShotSplitStream(
   // Auto-create missing guest characters from shot scene descriptions
   if (episodeId) {
     const charPattern = /([\u4e00-\u9fa5a-zA-Z]{1,6})[（(]([^）)]{1,10})[）)]/g;
-    const foundChars = new Map<string, { hint: string; context: string }>();
+    const foundChars = new Map<string, string>(); // baseName → hint
     for (const shot of allShots) {
-      const desc = shot.sceneDescription || "";
-      // Split into sentences for context extraction
-      const sentences = desc.split(/[。！？；\n]+/).filter((s) => s.trim());
       let match;
-      while ((match = charPattern.exec(desc)) !== null) {
+      while ((match = charPattern.exec(shot.sceneDescription || "")) !== null) {
         const base = match[1];
         const hint = match[2];
-        // Find the sentence containing this character reference
-        let context = "";
-        for (const s of sentences) {
-          if (s.includes(match[0])) { context = s.trim(); break; }
-        }
-        if (!foundChars.has(base) || (context && !foundChars.get(base)!.context)) {
-          foundChars.set(base, { hint, context });
-        }
+        if (!foundChars.has(base)) foundChars.set(base, hint);
       }
     }
     const existingNames = new Set(shotCharacters.map((c) => c.name));
@@ -1564,11 +1554,11 @@ async function handleShotSplitStream(
     );
     if (missingChars.length > 0) {
       console.log(`[ShotSplit] Auto-creating ${missingChars.length} guest characters: ${missingChars.map(([n]) => n).join(", ")}`);
-      for (const [base, { hint, context }] of missingChars) {
+      for (const [base, hint] of missingChars) {
         const charId = genId();
-        const desc = context
-          ? `${hint}。${context.slice(0, 200)}`
-          : `EP ${episodeId.slice(0, 8)} 客串角色`;
+        // Use hint as description core — scene context contains camera directions,
+        // posture, and positioning that would pollute character ref image generation
+        const desc = hint ? `${hint}。${episodeId.slice(0, 8)} 客串角色。` : `${episodeId.slice(0, 8)} 客串角色。`;
         await db.insert(characters).values({
           id: charId,
           projectId,
