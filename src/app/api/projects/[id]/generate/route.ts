@@ -1018,22 +1018,15 @@ async function handleSingleCharacterImage(
 
   // Build front-view prompt from template system (matching pipeline/character-image.ts)
   const slotContents = await resolveSlotContents("character_image", { userId: "", projectId: character.projectId });
-  const styleMatching = (slotContents as any)["style_matching"] || "";
-  const faceDetail = (slotContents as any)["face_detail"] || "";
   const frontLayout = (slotContents as any)["front_view_layout"] || "";
   const charPrompt = [
-    `角色正面参考图——四视图流程第一步。`,
+    `角色正面参考图。全身站立，纯白背景。`,
     ``,
-    `=== 角色描述 ===`,
     `${character.description || character.name}`,
     ``,
-    faceDetail,
-    ``,
-    styleMatching,
+    `注意：严格遵从上述角色描述中关于头发/光头的具体状态（如上文写了"光头"就绝对不能画头发）。`,
     ``,
     frontLayout,
-    ``,
-    `光线：与角色描述中声明的一致（如 自然光粗粝质感、柔和布光），纯白背景。`,
   ].join("\n");
 
   const prompt = charPrompt;
