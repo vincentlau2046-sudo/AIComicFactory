@@ -649,17 +649,43 @@ async function handleCharacterExtract(
     const [episode] = await db.select().from(episodes).where(eq(episodes.id, episodeId));
     script = episode?.script ?? null;
   } else {
-    // Full project extraction: concatenate all episode scripts (capped at 2 for latency)
-    const allEps = await db.select({ script: episodes.script, title: episodes.title })
+    // Full project extraction: build prompt from EP split fields + character registry
+    // (avoids context explosion from concatenating full screenplays)
+    const allEps = await db.select({
+      id: episodes.id,
+      title: episodes.title,
+      description: episodes.description,
+      idea: episodes.idea,
+      sequence: episodes.sequence,
+    })
       .from(episodes)
       .where(eq(episodes.projectId, projectId))
-      .orderBy(episodes.sequence)
-      .limit(2);
-    const epScripts = allEps.filter((e) => e.script && e.script.trim());
-    if (epScripts.length > 0) {
-      script = epScripts.map((e) => `### ${e.title}\n${e.script}`).join("\n\n");
-    } else {
-      // Fallback to project-level script
+      .orderBy(episodes.sequence);
+
+    // For each EP, fetch linked character names
+    const epCharNames = new Map<string, string[]>();
+    for (const ep of allEps) {
+      const links = await db
+        .select({ name: characters.name })
+        .from(episodeCharacters)
+        .leftJoin(characters, eq(episodeCharacters.characterId, characters.id))
+        .where(eq(episodeCharacters.episodeId, ep.id));
+      epCharNames.set(ep.id, links.map((l) => l.name).filter((n): n is string => n !== null));
+    }
+
+    // Build per-EP input (base registry appended later after existingChars loaded)
+    script = allEps.map((ep, i) => {
+      const chars = epCharNames.get(ep.id) || [];
+      return [
+        `### EP${String(i + 1).padStart(2, "0")} ${ep.title}`,
+        `构思: ${ep.idea || "（无）"}`,
+        `描述: ${ep.description || "（无）"}`,
+        `出场角色: ${chars.length > 0 ? chars.join("、") : "（待补充）"}`,
+      ].join("\n");
+    }).join("\n\n");
+
+    if (!script.trim()) {
+      // Fallback to project-level script if no EP data
       const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
       script = project?.script ?? null;
     }
@@ -677,6 +703,19 @@ async function handleCharacterExtract(
     .select()
     .from(characters)
     .where(eq(characters.projectId, projectId));
+
+  // Build base character registry from template rows (for LLM prompt)
+  if (!episodeId && script) {
+    const templateChars = existingChars.filter((c) => !c.episodeId);
+    if (templateChars.length > 0) {
+      const baseRegistry = "\n\n=== 基础角色注册表（请复用 baseName，不要创建同名新角色）===\n" +
+        templateChars.map((c) =>
+          `- ${c.baseName || c.name}: ${c.scope === "main" ? "主角" : "配角"}。${c.description?.slice(0, 100) || ""}`
+        ).join("\n");
+      script = script + baseRegistry;
+    }
+  }
+
   // Build existing character registry for incremental extraction (S5)
   const existingByName = new Map(
     existingChars.filter((c) => !c.episodeId).map((c) => [c.name.toLowerCase().trim(), c])
