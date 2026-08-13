@@ -791,6 +791,18 @@ const CHAR_IMAGE_FACE_DETAIL = `=== 面部——高精度 ===
 - 皮肤：符合画风的渲染——动漫用平滑赛璐珞着色，写实用毛孔级细节
 - 整体：面部应具有辨识度和记忆点，有强烈的视觉特征`;
 
+const CHAR_IMAGE_FRONT_VIEW_LAYOUT = `=== 正面视图布局（角色设定集第一步——正面参考图）===
+必须生成全身站立正面视图：
+- 从头顶到脚底完整展示，包含鞋/靴底部细节
+- 双臂自然放松垂于身侧，双脚与肩同宽自然站立
+- 纯白背景无纹理
+- 这是四视图流程的基础参考——后续侧面/背面将基于此图通过图像编辑生成，因此必须包含完整的全身服装与姿态
+
+技术约束：
+- 画面比例必须为竖幅全身（建议 9:16 或更窄），确保从发顶到鞋底的完整展示
+- 脚底与画面底部之间至少保留 5% 的白色边距，防止裁剪
+- 禁止半身图、腰部截图、膝盖截图——必须是头顶到脚底的完整站立全身`;
+
 const CHAR_IMAGE_FOUR_VIEW_LAYOUT = `=== 四视图布局（必须严格遵守——这是角色设定集的核心输出形式）===
 **强制输出四视图**：最终画面必须包含四个独立视角，从左到右水平排列在一张纯白画布上。**不要输出单视角肖像、不要只画两三个视角、不要把角色放在场景里**——这是一张专业的角色设定参考图（character turnaround sheet / 三视图 / 四视图）。
 
@@ -835,6 +847,7 @@ const characterImageDef: PromptDefinition = {
   slots: [
     slot("style_matching", CHAR_IMAGE_STYLE_MATCHING, true),
     slot("face_detail", CHAR_IMAGE_FACE_DETAIL, true),
+    slot("front_view_layout", CHAR_IMAGE_FRONT_VIEW_LAYOUT, true),
     slot("four_view_layout", CHAR_IMAGE_FOUR_VIEW_LAYOUT, true),
     slot("lighting_rendering", CHAR_IMAGE_LIGHTING_RENDERING, true),
     slot("consistency_rules", CHAR_IMAGE_CONSISTENCY_RULES, true),

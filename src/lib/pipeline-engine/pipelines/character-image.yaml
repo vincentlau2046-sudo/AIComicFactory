@@ -9,7 +9,7 @@ steps:
     workflow_id: qwen-2512-t2i
     description: "根据角色描述生成正面形象"
     inputs:
-      prompt: "Front view full-body portrait. ${params.character_desc} Single figure, centered on pure white background. From head to toe. Flat lighting, soft three-point light."
+      prompt: ${params.character_prompt}
       seed: ${params.seed}
       width: 640
       height: 1440
@@ -28,7 +28,7 @@ steps:
     depends_on: [gen_front]
     inputs:
       source_image: ${steps.gen_front.outputs[0]}
-      prompt: "<sks> left view, body turn 45 degrees left. Flat lighting, soft three-point light, pure gray background."
+      prompt: "<sks> left view, body turn 45 degrees left."
       seed: ${params.seed + 1}
       steps: 4
       angle_strength: 1.0
@@ -46,7 +46,7 @@ steps:
     depends_on: [gen_front]
     inputs:
       source_image: ${steps.gen_front.outputs[0]}
-      prompt: "<sks> right side view, side profile. Flat lighting, soft three-point light, pure gray background."
+      prompt: "<sks> right side view, side profile."
       seed: ${params.seed + 2}
       steps: 4
       angle_strength: 1.0
@@ -64,7 +64,7 @@ steps:
     depends_on: [gen_front]
     inputs:
       source_image: ${steps.gen_front.outputs[0]}
-      prompt: "<sks> back view, from behind. Flat lighting, soft three-point light, pure gray background."
+      prompt: "<sks> back view, from behind."
       seed: ${params.seed + 3}
       steps: 4
       angle_strength: 1.0
