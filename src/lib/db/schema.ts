@@ -65,6 +65,7 @@ export const characters = sqliteTable("characters", {
   projectId: text("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
+  baseName: text("base_name").notNull().default(""),
   name: text("name").notNull(),
   description: text("description").default(""),
   visualHint: text("visual_hint").default(""),

@@ -692,18 +692,11 @@ async function handleCharacterExtract(
     aiText = text;
   }
 
-  const parsed = JSON.parse(extractJSON(aiText));
+  const parsed = parseLLMJSON(aiText);
 
-  // Support both formats: new { characters, relationships } and legacy array
-  const extracted: Array<{
-    name: string;
-    description: string;
-    visualHint?: string;
-    scope?: string;
-    heightCm?: number;
-    bodyType?: string;
-    performanceStyle?: string;
-  }> = Array.isArray(parsed) ? parsed : (parsed.characters || []);
+  // Support new per-EP format: characters with episodes array
+  // Also support legacy { characters, relationships } and flat array
+  const rawChars: any[] = Array.isArray(parsed) ? parsed : (parsed.characters || []);
   const extractedRelations: Array<{
     characterA: string;
     characterB: string;
@@ -713,54 +706,129 @@ async function handleCharacterExtract(
 
   let reusedCount = 0;
   let createdCount = 0;
-  const linkedCharIds: string[] = [];
+  const linkedCharIds = new Set<string>();
 
-  for (const char of extracted) {
-    const key = char.name.toLowerCase().trim();
-    const existing = existingByName.get(key);
+  // Resolve EP IDs: script may use episodeIndex → need to map to actual episode IDs
+  const allEps = episodeId
+    ? [await db.select().from(episodes).where(eq(episodes.id, episodeId)).then((r) => r[0])]
+    : await db.select().from(episodes).where(eq(episodes.projectId, projectId)).orderBy(episodes.createdAt);
+  const epByIndex = new Map<number, typeof allEps[0]>();
+  allEps.forEach((ep, i) => { if (ep) epByIndex.set(i + 1, ep); });
+  // Fallback: if no episodes table entries, use the single episodeId parameter
+  if (epByIndex.size === 0 && episodeId) {
+    const ep = await db.select().from(episodes).where(eq(episodes.id, episodeId)).then((r) => r[0]);
+    if (ep) epByIndex.set(1, ep);
+  }
 
-    if (existing) {
-      // Reuse existing character — always update description from new extraction
-      await db.update(characters)
-        .set({
-          description: char.description,
-          visualHint: char.visualHint ?? existing.visualHint ?? "",
-          scope: (char.scope === "guest" ? "guest" : "main") as "main" | "guest",
-        })
-        .where(eq(characters.id, existing.id));
-      console.log(`[CharacterExtract] Updated existing character "${char.name}" (${existing.id}), desc length: ${char.description.length}`);
-      linkedCharIds.push(existing.id);
-      reusedCount++;
-    } else {
-      // Create new character
-      const charId = genId();
-      const scope = char.scope === "guest" ? "guest" : "main";
+  for (const raw of rawChars) {
+    const baseName = raw.baseName || raw.name || "";
+    const episodes: Array<{ episodeIndex: number; visualHint?: string; description?: string }> =
+      raw.episodes || [{ episodeIndex: 1, visualHint: raw.visualHint, description: raw.description }];
+
+    // S2: Create/update template row (Type A: episode_id=null)
+    const templateKey = baseName.toLowerCase().trim();
+    let templateId = existingByName.get(templateKey)?.id;
+    if (!templateId) {
+      templateId = genId();
       await db.insert(characters).values({
-        id: charId,
+        id: templateId,
         projectId,
-        name: char.name,
-        description: char.description,
-        visualHint: char.visualHint ?? "",
-        heightCm: char.heightCm || 0,
-        bodyType: char.bodyType || "average",
-        performanceStyle: char.performanceStyle || "",
-        scope,
+        baseName,
+        name: baseName,
+        description: episodes[0]?.description || raw.description || "",
+        visualHint: episodes[0]?.visualHint || raw.visualHint || "",
+        heightCm: raw.heightCm || 0,
+        bodyType: raw.bodyType || "average",
+        performanceStyle: raw.performanceStyle || "",
+        scope: (raw.scope === "guest" ? "guest" : "main") as "main" | "guest",
         episodeId: null,
       });
-      existingByName.set(key, { id: charId, name: char.name } as typeof existingChars[0]);
-      linkedCharIds.push(charId);
+      existingByName.set(templateKey, { id: templateId, name: baseName } as any);
+      console.log(`[CharacterExtract] Created template row "${baseName}" (${templateId})`);
       createdCount++;
+    } else {
+      // Update template description from first EP's data
+      await db.update(characters)
+        .set({
+          description: episodes[0]?.description || raw.description || "",
+          scope: (raw.scope === "guest" ? "guest" : "main") as "main" | "guest",
+        })
+        .where(eq(characters.id, templateId));
+      console.log(`[CharacterExtract] Reused template "${baseName}" (${templateId})`);
+      reusedCount++;
+    }
+
+    // S2: Create/update episode instance rows (Type B: episode_id set)
+    for (const epVar of episodes) {
+      const ep = epByIndex.get(epVar.episodeIndex);
+      if (!ep) {
+        console.warn(`[CharacterExtract] No episode found for index ${epVar.episodeIndex}, skipping "${baseName}"`);
+        continue;
+      }
+
+      // Check if instance row already exists for this baseName + episode
+      const [existingInstance] = await db.select()
+        .from(characters)
+        .where(and(
+          eq(characters.baseName, baseName),
+          eq(characters.episodeId, ep.id)
+        ));
+
+      if (existingInstance) {
+        await db.update(characters)
+          .set({
+            visualHint: epVar.visualHint || "",
+            description: epVar.description || "",
+          })
+          .where(eq(characters.id, existingInstance.id));
+        linkedCharIds.add(existingInstance.id);
+      } else {
+        const instId = genId();
+        await db.insert(characters).values({
+          id: instId,
+          projectId,
+          baseName,
+          name: `${baseName}（${epVar.visualHint || ""}）`,
+          description: epVar.description || "",
+          visualHint: epVar.visualHint || "",
+          heightCm: raw.heightCm || 0,
+          bodyType: raw.bodyType || "average",
+          performanceStyle: raw.performanceStyle || "",
+          scope: (raw.scope === "guest" ? "guest" : "main") as "main" | "guest",
+          episodeId: ep.id,
+        });
+        linkedCharIds.add(instId);
+      }
     }
   }
 
-  // Create episode_characters links
-  if (episodeId) {
-    for (const charId of linkedCharIds) {
-      await db.insert(episodeCharacters).values({
-        id: genId(),
-        episodeId,
-        characterId: charId,
-      });
+  // Create episode_characters links for ALL instance rows created/updated
+  // (not just the requested episodeId — per-EP variants span multiple episodes)
+  // We already collected linkedCharIds (instance row IDs) in the loop above.
+  if (linkedCharIds.size > 0) {
+    // Wipe existing episode_characters links for this character set
+    // then re-insert. We scope by all episode IDs that had variants processed.
+    const processedEpIds = allEps.filter((ep) => ep).map((ep) => ep!.id);
+    if (processedEpIds.length > 0) {
+      // Remove old links for episodes we processed
+      for (const charId of linkedCharIds) {
+        const [charRow] = await db.select().from(characters).where(eq(characters.id, charId));
+        if (charRow?.episodeId && processedEpIds.includes(charRow.episodeId)) {
+          const [existingLink] = await db.select()
+            .from(episodeCharacters)
+            .where(and(
+              eq(episodeCharacters.episodeId, charRow.episodeId),
+              eq(episodeCharacters.characterId, charId)
+            ));
+          if (!existingLink) {
+            await db.insert(episodeCharacters).values({
+              id: genId(),
+              episodeId: charRow.episodeId,
+              characterId: charId,
+            });
+          }
+        }
+      }
     }
   }
 
@@ -787,11 +855,24 @@ async function handleCharacterExtract(
     }
 
     const allChars = await db.select().from(characters).where(eq(characters.projectId, projectId));
+    // Match relations by baseName (from new prompt format) or fall back to name
+    const baseNameToIds = new Map<string, string[]>();
+    for (const c of allChars) {
+      const bn = (c.baseName || c.name).toLowerCase().trim();
+      if (!baseNameToIds.has(bn)) baseNameToIds.set(bn, []);
+      baseNameToIds.get(bn)!.push(c.id);
+    }
     const nameToId = new Map(allChars.map((c) => [c.name, c.id]));
 
     for (const rel of extractedRelations) {
-      const aId = nameToId.get(rel.characterA);
-      const bId = nameToId.get(rel.characterB);
+      // Try baseName match first (new format), then name match (legacy)
+      const aBN = rel.characterA.toLowerCase().trim();
+      const bBN = rel.characterB.toLowerCase().trim();
+      const aIds = baseNameToIds.get(aBN) || (nameToId.has(rel.characterA) ? [nameToId.get(rel.characterA)!] : []);
+      const bIds = baseNameToIds.get(bBN) || (nameToId.has(rel.characterB) ? [nameToId.get(rel.characterB)!] : []);
+      // Use the first matching ID for each side (relations are between identities, not episode instances)
+      const aId = aIds.length > 0 ? aIds[0] : undefined;
+      const bId = bIds.length > 0 ? bIds[0] : undefined;
       if (aId && bId && aId !== bId) {
         try {
           await db.insert(characterRelations).values({
@@ -810,10 +891,10 @@ async function handleCharacterExtract(
   }
 
   console.log(
-    `[CharacterExtract] ${extracted.length} characters: ${reusedCount} reused, ${createdCount} new, ${linkedCharIds.length} linked to episode, ${extractedRelations.length} relations`
+    `[CharacterExtract] ${rawChars.length} chars: ${reusedCount} reused, ${createdCount} new, ${linkedCharIds.size} linked to episodes, ${extractedRelations.length} relations`
   );
 
-  return NextResponse.json({ characters: extracted });
+  return NextResponse.json({ characters: rawChars });
 }
 
 // --- single_character_image: generate turnaround image for one character ---

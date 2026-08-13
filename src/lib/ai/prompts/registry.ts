@@ -535,31 +535,34 @@ const CHAR_EXTRACT_OUTPUT_FORMAT = `═══ 输出格式 ═══
   "characters": [
     {
       "name": "角色名，与剧本中完全一致",
+      "baseName": "跨EP身份锚点名——同一角色在不同EP中完全一致的标识名（去掉该EP特定的修饰词后的纯粹姓名），如 马氏、朱元璋",
       "scope": "main" 或 "guest",
-      "description": "完整视觉规格——单段落，包含以下所有要求",
-      "visualHint": "2-4个字的视觉标识符，用于对白标签（如 银发金瞳、红衣长发）。必须一眼可识别——聚焦最显著的外貌特征。",
       "personality": "2-3个塑造姿态、表情和动作的核心性格特质",
-      "heightCm": "估算身高（厘米），如175。根据剧本中的线索推断。",
-      "bodyType": "slim | average | athletic | heavy | petite | tall",
-      "performanceStyle": "表演风格描述——动作幅度（夸张/细腻）、标志性手势、情绪表达模式"
+      "episodes": [
+        {
+          "episodeIndex": 1,
+          "visualHint": "该集2-4字视觉标识符（如 青衣杏眼、古铜方脸明黄衮服）",
+          "description": "该集的完整视觉规格（含年龄/服饰/状态变化）——单段落"
+        }
+      ]
     }
   ],
   "relationships": [
     {
-      "characterA": "角色A的名字，与characters中的name完全一致",
-      "characterB": "角色B的名字，与characters中的name完全一致",
+      "characterA": "角色A的baseName",
+      "characterB": "角色B的baseName",
       "relationType": "ally | enemy | lover | family | mentor | rival | stranger | neutral",
-      "description": "简短描述关系的具体性质，如'师徒关系，亦师亦友'、'暗恋对方但从未表白'"
+      "description": "简短描述关系的具体性质"
     }
   ]
 }
 
-═══ 关系提取规则 ═══
-- 只提取剧本中有明确互动或暗示关系的角色对
-- relationType 必须从给定选项中选择最接近的一个
-- 每对角色只需出现一次（A→B，不需要再写B→A）
-- 如果角色之间没有明显关系，不需要强行添加
-- description 用简洁的一句话描述关系核心`;
+═══ per-EP 角色变体规则 ═══
+- 每个角色必须列出所有有该角色出场的EP的变体
+- 同一角色在不同EP可能有不同的 visualHint（因年龄/服饰/状态变化）
+- description 也按EP独立：EP01写的是35岁的状态，EP05写的是71岁的状态
+- 如果角色在某个EP中视觉无变化，visualHint 和 description 可以与前一个EP相同
+- episodes 数组按 episodeIndex 升序排列`;
 
 const CHAR_EXTRACT_SCOPE_RULES = `═══ 角色分类规则 ═══
 - "main"：驱动故事的核心角色，出现在多个场景中，或对剧情至关重要——主角、重要配角、关键反派、以照片/回忆出现但视觉上需要呈现的关键人物
