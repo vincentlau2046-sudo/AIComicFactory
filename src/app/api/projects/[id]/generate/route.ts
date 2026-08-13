@@ -692,8 +692,7 @@ async function handleCharacterExtract(
       return acc;
     }, [] as Array<{ baseName: string; episodes: Array<{ epIndex: number; visualHint: string }> }>);
 
-  // If extracting for an episode, capture the old episode-linked character ids
-  // BEFORE deleting the links, so we can scope relation cleanup to this episode only.
+  // Clear old episode_characters links before re-creating
   let oldEpisodeCharIds: string[] = [];
   if (episodeId) {
     const oldLinks = await db
@@ -702,6 +701,21 @@ async function handleCharacterExtract(
       .where(eq(episodeCharacters.episodeId, episodeId));
     oldEpisodeCharIds = oldLinks.map((l) => l.characterId);
     await db.delete(episodeCharacters).where(eq(episodeCharacters.episodeId, episodeId));
+  } else {
+    // Project-level: capture all episode-linked char IDs for relation scoping,
+    // then delete all episode_characters for this project
+    const allLinks = await db
+      .select({ id: episodeCharacters.id, characterId: episodeCharacters.characterId })
+      .from(episodeCharacters)
+      .leftJoin(characters, eq(episodeCharacters.characterId, characters.id))
+      .where(eq(characters.projectId, projectId));
+    oldEpisodeCharIds = allLinks.map((l) => l.characterId);
+    if (allLinks.length > 0) {
+      const linkIds = allLinks.map((l) => l.id);
+      for (const lid of linkIds) {
+        await db.delete(episodeCharacters).where(eq(episodeCharacters.id, lid));
+      }
+    }
   }
 
   let aiText: string;
@@ -727,9 +741,15 @@ async function handleCharacterExtract(
 
   const parsed = parseLLMJSON(aiText);
 
+  // Debug: log raw format to verify per-EP output
+  const rawChars: any[] = Array.isArray(parsed) ? parsed : (parsed.characters || []);
+  if (rawChars.length > 0) {
+    const first = rawChars[0];
+    console.log(`[CharacterExtract] LLM returned ${rawChars.length} chars, format: ${first.episodes ? 'per-EP' : 'flat'}, first char: ${JSON.stringify(first).slice(0, 300)}`);
+  }
+
   // Support new per-EP format: characters with episodes array
   // Also support legacy { characters, relationships } and flat array
-  const rawChars: any[] = Array.isArray(parsed) ? parsed : (parsed.characters || []);
   const extractedRelations: Array<{
     characterA: string;
     characterB: string;
@@ -744,7 +764,7 @@ async function handleCharacterExtract(
   // Resolve EP IDs: script may use episodeIndex → need to map to actual episode IDs
   const allEps = episodeId
     ? [await db.select().from(episodes).where(eq(episodes.id, episodeId)).then((r) => r[0])]
-    : await db.select().from(episodes).where(eq(episodes.projectId, projectId)).orderBy(episodes.createdAt);
+    : await db.select().from(episodes).where(eq(episodes.projectId, projectId)).orderBy(episodes.sequence);
   const epByIndex = new Map<number, typeof allEps[0]>();
   allEps.forEach((ep, i) => { if (ep) epByIndex.set(i + 1, ep); });
   // Fallback: if no episodes table entries, use the single episodeId parameter
