@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { generateText } from 'ai'
-import { createLanguageModel, extractJSON } from '@/lib/ai/ai-sdk'
+import { createLanguageModel } from '@/lib/ai/ai-sdk'
+import { parseLLMJSON } from '@/lib/ai/json-repair'
 import type { ProviderConfig } from '@/lib/ai/ai-sdk'
 import { RetryStrategy } from '@/lib/retry'
 import { db } from '@/lib/db'
@@ -97,7 +98,7 @@ export async function POST(
         })
 
         try {
-          return JSON.parse(extractJSON(result.text)) as SplitEpisode[]
+          return parseLLMJSON(result.text) as SplitEpisode[]
         } catch {
           console.error(`[ImportSplit] Chunk ${idx + 1} JSON parse failed. Raw output:\n${result.text.slice(0, 500)}...`)
           await addImportLog(
@@ -112,7 +113,7 @@ export async function POST(
               providerOptions: jsonMode,
             })
           })
-          return JSON.parse(extractJSON(retryResult.text)) as SplitEpisode[]
+          return parseLLMJSON(retryResult.text) as SplitEpisode[]
         }
       }),
     )
