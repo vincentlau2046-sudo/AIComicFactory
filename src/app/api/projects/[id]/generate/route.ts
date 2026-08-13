@@ -649,8 +649,19 @@ async function handleCharacterExtract(
     const [episode] = await db.select().from(episodes).where(eq(episodes.id, episodeId));
     script = episode?.script ?? null;
   } else {
-    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    script = project?.script ?? null;
+    // Full project extraction: concatenate all episode scripts
+    const allEps = await db.select({ script: episodes.script, title: episodes.title })
+      .from(episodes)
+      .where(eq(episodes.projectId, projectId))
+      .orderBy(episodes.sequence);
+    const epScripts = allEps.filter((e) => e.script && e.script.trim());
+    if (epScripts.length > 0) {
+      script = epScripts.map((e) => `### ${e.title}\n${e.script}`).join("\n\n");
+    } else {
+      // Fallback to project-level script
+      const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+      script = project?.script ?? null;
+    }
   }
 
   if (!script) {
