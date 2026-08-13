@@ -8,28 +8,19 @@ import type { Task } from "@/lib/task-queue";
 
 function buildFrontViewPrompt(
   styleMatching: string, faceDetail: string, frontLayout: string,
-  lighting: string, consistency: string,
-  description: string, characterName?: string
+  description: string
 ): string {
   return [
-    `角色正面参考图——四视图流程第一步（专业角色设计文档）。`,
-    `**必须生成全身站立正面单视角角色图**，纯白背景，头顶到脚底完整展示。`,
+    `角色正面参考图——四视图流程第一步。`,
     ``,
     styleMatching,
     ``,
     `=== 角色描述 ===`,
-    `${characterName ? `名字: ${characterName}\n` : ""}${description}`,
+    `${description}`,
     ``,
     faceDetail,
     ``,
-    `=== 武器与装备（如有）===`,
-    `- 以与角色相同的画风渲染所有武器、铠甲和装备`,
-    ``,
     frontLayout,
-    ``,
-    lighting,
-    ``,
-    consistency,
   ].join("\n");
 }
 
@@ -51,11 +42,9 @@ export async function handleCharacterImage(task: Task) {
     const styleMatching = (slotContents as any)["style_matching"] || "";
     const faceDetail = (slotContents as any)["face_detail"] || "";
     const frontLayout = (slotContents as any)["front_view_layout"] || "";
-    const lighting = (slotContents as any)["lighting_rendering"] || "";
-    const consistency = (slotContents as any)["consistency_rules"] || "";
     return buildFrontViewPrompt(
-      styleMatching, faceDetail, frontLayout, lighting, consistency,
-      character.description || character.name, character.name
+      styleMatching, faceDetail, frontLayout,
+      character.description || character.name
     );
   })();
 
