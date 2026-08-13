@@ -649,11 +649,12 @@ async function handleCharacterExtract(
     const [episode] = await db.select().from(episodes).where(eq(episodes.id, episodeId));
     script = episode?.script ?? null;
   } else {
-    // Full project extraction: concatenate all episode scripts
+    // Full project extraction: concatenate all episode scripts (capped at 2 for latency)
     const allEps = await db.select({ script: episodes.script, title: episodes.title })
       .from(episodes)
       .where(eq(episodes.projectId, projectId))
-      .orderBy(episodes.sequence);
+      .orderBy(episodes.sequence)
+      .limit(2);
     const epScripts = allEps.filter((e) => e.script && e.script.trim());
     if (epScripts.length > 0) {
       script = epScripts.map((e) => `### ${e.title}\n${e.script}`).join("\n\n");
