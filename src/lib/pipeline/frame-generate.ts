@@ -143,7 +143,14 @@ export async function handleFrameGenerate(task: Task) {
   // Pick character refs to attach as visual anchors. Per-frame: each frame
   // has its own cast — don't merge. Preserve frame character order (not DB order).
   const charsWithRefs = projectCharacters.filter((c) => !!c.referenceImage);
-  const charMap = new Map(charsWithRefs.map(c => [c.name, c]));
+  // Build dual-key map: match by name AND baseName (per-EP instance rows have
+  // names like "朱元璋（皮包骨头放牛娃）" but shot_assets store stripped names)
+  const charMap = new Map<string, typeof charsWithRefs[0]>();
+  for (const c of charsWithRefs) {
+    charMap.set(c.name, c);
+    const base = (c as any).baseName || stripCharHint(c.name);
+    if (base !== c.name) charMap.set(base, c);
+  }
 
   function resolveFrameChars(asset: { characters?: string[] | null } | null): typeof charsWithRefs {
     if (!asset?.characters?.length) return [];
