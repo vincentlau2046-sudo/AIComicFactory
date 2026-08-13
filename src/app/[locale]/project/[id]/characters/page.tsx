@@ -70,13 +70,19 @@ export default function CharactersPage({
 
   const guestByEpisode = useMemo(() => {
     const map = new Map<string, Character[]>();
+    const orphans: Character[] = [];
     for (const c of characters) {
-      if (c.scope === "guest" && c.episodeId) {
-        const list = map.get(c.episodeId) || [];
-        list.push(c);
-        map.set(c.episodeId, list);
+      if (c.scope === "guest") {
+        if (c.episodeId) {
+          const list = map.get(c.episodeId) || [];
+          list.push(c);
+          map.set(c.episodeId, list);
+        } else {
+          orphans.push(c);
+        }
       }
     }
+    if (orphans.length > 0) map.set("__orphans__", orphans);
     return map;
   }, [characters]);
 
@@ -240,6 +246,30 @@ export default function CharactersPage({
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Orphan guest characters (no episode assignment) */}
+            {guestByEpisode.has("__orphans__") && (
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-[--text-secondary]">{t("common.unassigned")}</h4>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 xl:grid-cols-4">
+                  {guestByEpisode.get("__orphans__")!.map((char) => (
+                    <CharacterCard
+                      key={char.id}
+                      id={char.id}
+                      projectId={projectId}
+                      name={char.name}
+                      description={char.description}
+                      visualHint={char.visualHint}
+                      referenceImage={char.referenceImage}
+                      referenceImageHistory={char.referenceImageHistory}
+                      scope={char.scope}
+                      onUpdate={fetchData}
+                      onPromote={() => handlePromote(char.id)}
+                      onDelete={() => handleDelete(char.id, char.name)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             {episodes
               .filter((ep) => guestByEpisode.has(ep.id))
               .map((ep) => (
