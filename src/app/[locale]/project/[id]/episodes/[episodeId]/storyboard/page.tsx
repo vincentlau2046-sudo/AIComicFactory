@@ -145,6 +145,20 @@ export default function EpisodeStoryboardPage() {
   ).length;
   const shotsWithVideoPrompts = project.shots.filter((s) => s.videoPrompt).length;
   const shotsWithSceneFrames = project.shots.filter((s) => getSceneRefFrameUrl(s)).length;
+
+  // Version-level completion stats (pure frontend, shots already contain all versions' data)
+  const versionStats = useMemo(() => {
+    const stats = new Map<string, { totalShots: number; completedFrames: number; completedVideos: number }>();
+    for (const v of versions) stats.set(v.id, { totalShots: 0, completedFrames: 0, completedVideos: 0 });
+    for (const shot of project.shots) {
+      const s = stats.get(shot.versionId);
+      if (!s) continue;
+      s.totalShots++;
+      if (hasKeyframePair(shot)) s.completedFrames++;
+      if (generationMode === "reference" ? getReferenceVideoUrl(shot) : getKeyframeVideoUrl(shot)) s.completedVideos++;
+    }
+    return stats;
+  }, [project.shots, versions, generationMode]);
   const shotsWithFrameAny = project.shots.filter(
     (s) => getSceneRefFrameUrl(s) || getFirstFrameUrl(s) || getLastFrameUrl(s)
   ).length;
@@ -750,7 +764,10 @@ export default function EpisodeStoryboardPage() {
           {versions.length > 0 && (
             <div className="flex items-center gap-1">
               {/* Show 2 newest versions */}
-              {versions.slice(0, 2).map((v) => (
+              {versions.slice(0, 2).map((v) => {
+                const vs = versionStats.get(v.id);
+                const hasCompleted = vs && (vs.completedFrames > 0 || vs.completedVideos > 0);
+                return (
                 <button
                   key={v.id}
                   onClick={() => {
@@ -762,10 +779,18 @@ export default function EpisodeStoryboardPage() {
                       ? "bg-primary/10 text-primary"
                       : "text-[--text-muted] hover:bg-[--surface] hover:text-[--text-secondary]"
                   }`}
+                  title={vs ? `${vs.completedFrames}/${vs.totalShots} frames · ${vs.completedVideos} videos` : ""}
                 >
-                  {v.label}
+                  <span className="flex items-center gap-1.5">
+                    {v.label}
+                    {vs && vs.totalShots > 0 && (
+                      <span className={`text-[11px] font-normal ${hasCompleted ? "text-emerald-600" : "text-[--text-muted]"}`}>
+                        {vs.completedFrames}/{vs.totalShots}
+                      </span>
+                    )}
+                  </span>
                 </button>
-              ))}
+              );})}
               {/* Older versions dropdown */}
               {versions.length > 2 && (
                 <div className="relative" ref={versionDropdownRef}>
@@ -787,7 +812,10 @@ export default function EpisodeStoryboardPage() {
                       className="absolute right-0 top-full z-20 mt-1 min-w-[140px] overflow-hidden rounded-xl border border-[--border-subtle] bg-white shadow-lg"
                       onMouseLeave={() => setVersionDropdownOpen(false)}
                     >
-                      {versions.slice(2).map((v) => (
+                      {versions.slice(2).map((v) => {
+                        const vs = versionStats.get(v.id);
+                        const hasCompleted = vs && (vs.completedFrames > 0 || vs.completedVideos > 0);
+                        return (
                         <button
                           key={v.id}
                           onClick={() => {
@@ -799,9 +827,16 @@ export default function EpisodeStoryboardPage() {
                             selectedVersionId === v.id ? "text-primary" : "text-[--text-secondary]"
                           }`}
                         >
-                          {v.label}
+                          <span className="flex items-center gap-1.5">
+                            {v.label}
+                            {vs && vs.totalShots > 0 && (
+                              <span className={`text-[11px] font-normal ${hasCompleted ? "text-emerald-600" : "text-[--text-muted]"}`}>
+                                {vs.completedFrames}/{vs.totalShots}
+                              </span>
+                            )}
+                          </span>
                         </button>
-                      ))}
+                      );})}
                     </div>
                   )}
                 </div>
@@ -835,7 +870,10 @@ export default function EpisodeStoryboardPage() {
             <AgentPicker projectId={project.id} category="shot_split" />
             <InlineModelPicker capability="text" />
             <Button
-              onClick={handleGenerateShots}
+              onClick={() => {
+                if (project.shots.length > 0 && !confirm("将重新分镜并生成新版本，当前版本的帧和视频不会迁移。继续？")) return;
+                handleGenerateShots();
+              }}
               disabled={anyGenerating}
               variant="default"
               size="sm"
