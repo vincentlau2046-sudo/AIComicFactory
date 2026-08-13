@@ -4,7 +4,7 @@ import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
 import { parseLLMJSON } from "@/lib/ai/json-repair";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
-import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters, characterRelations, agentBindings, agents, shotAssets } from "@/lib/db/schema";
+import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters, characterRelations, agentBindings, agents } from "@/lib/db/schema";
 import { callAgent, callAgentStream, validateAgentOutput, type AgentCategory } from "@/lib/ai/agent-caller";
 
 /** Wrap agent call + validation, returning user-friendly error response on failure */
@@ -1535,6 +1535,46 @@ async function handleShotSplitStream(
     }
   }
 
+  // Auto-create missing guest characters from shot scene descriptions
+  if (episodeId) {
+    const charPattern = /([\u4e00-\u9fa5a-zA-Z]{1,6})[（(]([^）)]{1,10})[）)]/g;
+    const foundChars = new Map<string, string>(); // baseName → hint
+    for (const shot of allShots) {
+      let match;
+      while ((match = charPattern.exec(shot.sceneDescription)) !== null) {
+        const base = match[1];
+        const hint = match[2];
+        if (!foundChars.has(base)) foundChars.set(base, hint);
+      }
+    }
+    const existingNames = new Set(shotCharacters.map((c) => c.name));
+    const existingBaseNames = new Set(shotCharacters.map((c) => stripCharHint(c.name)));
+    const missingChars = [...foundChars.entries()].filter(([base]) =>
+      !existingNames.has(base) && !existingBaseNames.has(base)
+    );
+    if (missingChars.length > 0) {
+      console.log(`[ShotSplit] Auto-creating ${missingChars.length} guest characters: ${missingChars.map(([n]) => n).join(", ")}`);
+      for (const [base, hint] of missingChars) {
+        const charId = genId();
+        await db.insert(characters).values({
+          id: charId,
+          projectId,
+          baseName: base,
+          name: hint ? `${base}（${hint}）` : base,
+          description: `EP ${episodeId.slice(0, 8)} 客串角色`,
+          visualHint: hint,
+          scope: "guest",
+          episodeId,
+        });
+        await db.insert(episodeCharacters).values({
+          id: genId(),
+          episodeId,
+          characterId: charId,
+        });
+      }
+    }
+  }
+
   console.log(`[ShotSplit] Created ${allShots.length} shots from ${sceneChunks.length} chunks`);
   return NextResponse.json({ shots: allShots.length });
 }
@@ -1756,59 +1796,6 @@ async function handleBatchFrameGenerate(
   const characterDescriptions = frameCharacters
     .map((c) => `${c.name}: ${c.description}`)
     .join("\n");
-
-  // Auto-create missing guest characters found in shot_assets but not in DB
-  if (episodeId) {
-    const allShotIds = allShots.map((s) => s.id);
-    const [ffAssets, lfAssets] = await Promise.all([
-      db.select({ characters: shotAssets.characters }).from(shotAssets)
-        .where(and(inArray(shotAssets.shotId, allShotIds), eq(shotAssets.type, "first_frame"), eq(shotAssets.isActive, 1))),
-      db.select({ characters: shotAssets.characters }).from(shotAssets)
-        .where(and(inArray(shotAssets.shotId, allShotIds), eq(shotAssets.type, "last_frame"), eq(shotAssets.isActive, 1))),
-    ]);
-    const allShotChars = new Set<string>();
-    for (const a of [...ffAssets, ...lfAssets]) {
-      const names: string[] = typeof a.characters === "string" ? JSON.parse(a.characters) : (a.characters || []);
-      for (const n of names) allShotChars.add(n);
-    }
-    const existingNames = new Set(frameCharacters.map((c) => c.name));
-    const existingBaseNames = new Set(frameCharacters.map((c) => stripCharHint(c.name)));
-    const missingNames = [...allShotChars].filter((n) => {
-      const stripped = stripCharHint(n);
-      return !existingNames.has(n) && !existingBaseNames.has(stripped);
-    });
-    if (missingNames.length > 0) {
-      console.log(`[BatchFrameGenerate] Auto-creating ${missingNames.length} guest characters: ${missingNames.join(", ")}`);
-      for (const name of missingNames) {
-        const charId = genId();
-        const stripped = stripCharHint(name);
-        const hintMatch = name.match(/[（(]([^）)]+)[）)]/);
-        await db.insert(characters).values({
-          id: charId,
-          projectId,
-          baseName: stripped,
-          name: name,
-          description: `EP ${episodeId.slice(0, 8) || "?"} 客串角色`,
-          visualHint: hintMatch ? hintMatch[1] : "",
-          scope: "guest",
-          episodeId,
-        });
-        await db.insert(episodeCharacters).values({
-          id: genId(),
-          episodeId,
-          characterId: charId,
-        });
-      }
-      // Reload frameCharacters to include new guest chars
-      const linkedIds = await db
-        .select({ characterId: episodeCharacters.characterId })
-        .from(episodeCharacters)
-        .where(eq(episodeCharacters.episodeId, episodeId));
-      frameCharacters = linkedIds.length > 0
-        ? await db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)))
-        : [];
-    }
-  }
 
   const charsWithImages = frameCharacters.filter((c) => c.referenceImage);
 
