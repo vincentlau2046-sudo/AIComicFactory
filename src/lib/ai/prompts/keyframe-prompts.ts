@@ -22,7 +22,7 @@ export function buildKeyframePromptsRequest(
   const charDescriptions = characters
     .map(
       (c) =>
-        `${c.name}（${c.visualHint || "无视觉标识"}）: ${c.description || ""}`
+        `${c.name}: ${c.description || ""}`
     )
     .join("\n");
 

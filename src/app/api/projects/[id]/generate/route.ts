@@ -3937,7 +3937,7 @@ async function handleGenerateKeyframePrompts(
         cameraDirection: s.cameraDirection,
         duration: s.duration,
       })),
-      characters: kpAgentChars.map((c) => ({ name: c.name, description: c.description, visualHint: c.visualHint })),
+      characters: kpAgentChars.map((c) => ({ name: c.baseName || stripCharHint(c.name), description: c.description, visualHint: c.visualHint })),
     }, null, 2);
 
     const agentResult = await callAndValidateAgent(kpBoundAgent, "keyframe_prompts", kpPrompt);
@@ -4090,7 +4090,7 @@ async function handleGenerateKeyframePrompts(
           cameraDirection: shot.cameraDirection,
         }],
         projectCharacters.map((c) => ({
-          name: c.name,
+          name: c.baseName || stripCharHint(c.name),
           description: c.description,
           visualHint: c.visualHint,
         })),
