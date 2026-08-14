@@ -357,6 +357,8 @@
       "refVideoGenerateDesc": "Template sent directly to the video model in reference mode (not the video itself)",
       "refVideoPrompt": "Video Prompt AI Writer",
       "refVideoPromptDesc": "System prompt that drives the AI to write the reference-mode video prompt",
+      "videoH3Prompt": "H3 Video Prompt",
+      "videoH3PromptDesc": "Structured prompt template for MiniMax H3 video generation",
       "shotSplitKeyframeAssets": "Shot · Keyframe Asset Prompts",
       "shotSplitKeyframeAssetsDesc": "Generate first/last frame image prompts from existing shot metadata",
       "shotSplitReferenceAssets": "Shot · Reference Image Prompts",

@@ -356,6 +356,8 @@
       "refVideoGenerateDesc": "참조 이미지 모드에서 영상 모델에 직접 전달되는 템플릿 (영상 자체가 아님)",
       "refVideoPrompt": "영상 프롬프트 AI 작성기",
       "refVideoPromptDesc": "AI가 참조 모드 영상 프롬프트를 작성하도록 유도하는 시스템 프롬프트",
+      "videoH3Prompt": "H3 영상 프롬프트",
+      "videoH3PromptDesc": "MiniMax H3 영상 생성을 위한 구조화된 프롬프트 템플릿",
       "shotSplitKeyframeAssets": "샷·키프레임 프롬프트",
       "shotSplitKeyframeAssetsDesc": "기존 샷 메타데이터에서 첫/마지막 프레임 이미지 프롬프트 생성",
       "shotSplitReferenceAssets": "샷·참고 이미지 프롬프트",

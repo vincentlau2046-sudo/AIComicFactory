@@ -4,7 +4,7 @@
  */
 const FRONT_VIEW_TEMPLATE = {
   subject_tag:     `[character design sheet] [front view] [full body] [standing pose]`,
-  composition:     `[composition: vertical portrait, head near top edge, feet near bottom, 5% white margin, 90% frame fill]`,
+  composition:     `[composition: vertical portrait, full body from crown to soles, head near top, feet near bottom]`,
   pose_constraint: `[pose: neutral standing, arms at sides, feet shoulder-width apart, neutral expression]`,
   environment:     `[environment: pure white background, no shadow]`,
   quality_tag:     `[quality: sharp focus, high detail, character reference sheet]`,
@@ -28,6 +28,10 @@ export function buildCharacterFrontViewPrompt(
         FRONT_VIEW_TEMPLATE.subject_tag,
         "",
         FRONT_VIEW_TEMPLATE.composition,
+        "",
+        FRONT_VIEW_TEMPLATE.pose_constraint,
+        "",
+        FRONT_VIEW_TEMPLATE.environment,
         "",
         s.age ? `[age] ${s.age}` : "",
         s.subject ? `[subject] ${s.subject}` : "",

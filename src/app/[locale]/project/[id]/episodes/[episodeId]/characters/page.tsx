@@ -30,6 +30,13 @@ export default function EpisodeCharactersPage() {
     (c) => !c.referenceImage
   );
 
+  async function handleDelete(characterId: string, name: string) {
+    if (!confirm(t("character.deleteConfirm", { name }))) return;
+    await apiFetch(`/api/projects/${project!.id}/characters/${characterId}`, { method: "DELETE" });
+    toast.success(`${name} 已删除`);
+    fetchProject(project!.id, useProjectStore.getState().currentEpisodeId!);
+  }
+
   async function handleExtractCharacters() {
     if (!project) return;
     if (!textGuard()) return;
@@ -180,6 +187,7 @@ export default function EpisodeCharactersPage() {
               referenceImage={char.referenceImage}
               referenceImageHistory={char.referenceImageHistory}
               onUpdate={() => fetchProject(project.id, useProjectStore.getState().currentEpisodeId!)}
+              onDelete={() => handleDelete(char.id, char.name)}
               batchGenerating={generatingImages}
               scope={char.scope}
               onPromote={

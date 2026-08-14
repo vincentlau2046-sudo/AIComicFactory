@@ -356,6 +356,8 @@
       "refVideoGenerateDesc": "参照画像モードで動画モデルに直接送信するテンプレート（動画本体ではない）",
       "refVideoPrompt": "動画プロンプト AI ライター",
       "refVideoPromptDesc": "AI が参照モード動画プロンプトを書くためのシステムプロンプト",
+      "videoH3Prompt": "H3動画プロンプト",
+      "videoH3PromptDesc": "MiniMax H3動画生成用構造化プロンプトテンプレート",
       "shotSplitKeyframeAssets": "ショット·キーフレーム提示語",
       "shotSplitKeyframeAssetsDesc": "既存のショットメタデータから先頭/末尾フレームの画像生成プロンプトを生成",
       "shotSplitReferenceAssets": "ショット·参照画像提示語",

@@ -51,4 +51,4 @@ next-env.d.ts
 run_kling.sh
 
 # scratchpad clones (not part of project)
-/tmp/
+/tmp/outputs/

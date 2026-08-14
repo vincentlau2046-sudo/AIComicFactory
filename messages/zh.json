@@ -358,6 +358,8 @@
       "refVideoGenerateDesc": "参考图模式下，直接发给视频模型的提示词模板（不是生成视频本身）",
       "refVideoPrompt": "视频提示词 AI 生成器",
       "refVideoPromptDesc": "由 AI 根据分镜+参考图撰写视频提示词的 system prompt",
+      "videoH3Prompt": "H3 视频提示词",
+      "videoH3PromptDesc": "MiniMax H3 视频生成的结构化提示词模板",
       "shotSplitKeyframeAssets": "分镜·首尾帧提示词",
       "shotSplitKeyframeAssetsDesc": "基于已有镜头元数据生成首帧/尾帧的图像提示词",
       "shotSplitReferenceAssets": "分镜·参考图提示词",
