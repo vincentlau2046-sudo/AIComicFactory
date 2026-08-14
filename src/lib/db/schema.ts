@@ -76,6 +76,7 @@ export const characters = sqliteTable("characters", {
   heightCm: integer("height_cm").default(0),
   bodyType: text("body_type").default("average"),
   isStale: integer("is_stale").notNull().default(0),
+  t2iStructure: text("t2i_structure"),
   episodeId: text("episode_id").references(() => episodes.id, {
     onDelete: "cascade",
   }),

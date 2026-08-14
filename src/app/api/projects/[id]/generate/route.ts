@@ -49,7 +49,7 @@ import { buildSceneFramePrompt } from "@/lib/ai/prompts/scene-frame-generate";
 import { resolveImageProvider, resolveVideoProvider, resolveAIProvider } from "@/lib/ai/provider-factory";
 import { buildVideoPrompt, buildReferenceVideoPrompt } from "@/lib/ai/prompts/video-generate";
 import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-generate";
-import { buildCharacterTurnaroundPrompt } from "@/lib/ai/prompts/character-image";
+import { buildCharacterTurnaroundPrompt, buildCharacterFrontViewPrompt } from "@/lib/ai/prompts/character-image";
 import { assembleVideo } from "@/lib/video/ffmpeg";
 import { parseRefImages, serializeRefImages, appendToHistory, type RefImage } from "@/lib/ref-image-utils";
 import {
@@ -815,7 +815,7 @@ async function handleCharacterExtract(
 
   for (const raw of rawChars) {
     const baseName = raw.baseName || raw.name || "";
-    const episodes: Array<{ episodeIndex: number; visualHint?: string; description?: string }> =
+    const episodes: Array<{ episodeIndex: number; visualHint?: string; description?: string; t2iStructure?: Record<string, string> }> =
       raw.episodes || [{ episodeIndex: 1, visualHint: raw.visualHint, description: raw.description }];
 
     // S2: Create/update template row (Type A: episode_id=null)
@@ -859,6 +859,9 @@ async function handleCharacterExtract(
         continue;
       }
 
+      // Serialize t2iStructure to JSON string for storage
+      const t2iStructure = epVar.t2iStructure ? JSON.stringify(epVar.t2iStructure) : null;
+
       // Check if instance row already exists for this baseName + episode
       const [existingInstance] = await db.select()
         .from(characters)
@@ -872,6 +875,7 @@ async function handleCharacterExtract(
           .set({
             visualHint: epVar.visualHint || "",
             description: epVar.description || "",
+            t2iStructure,
           })
           .where(eq(characters.id, existingInstance.id));
         linkedCharIds.add(existingInstance.id);
@@ -883,6 +887,7 @@ async function handleCharacterExtract(
           baseName,
           name: `${baseName}（${epVar.visualHint || ""}）`,
           description: epVar.description || "",
+          t2iStructure,
           visualHint: epVar.visualHint || "",
           heightCm: raw.heightCm || 0,
           bodyType: raw.bodyType || "average",
@@ -1016,15 +1021,7 @@ async function handleSingleCharacterImage(
 
   const ai = resolveImageProvider(modelConfig);
 
-  // Build front-view prompt from template system (matching pipeline/character-image.ts)
-  // T2I prompt: character description IS the prompt (templates are for LLM, not direct injection)
-  const prompt = [
-    `角色正面参考图。全身站立正面视图，纯白背景。`,
-    ``,
-    `${character.description || character.name}`,
-    ``,
-    `全身比例正确，从头顶到脚底完整展示，禁止半身图。`,
-  ].join("\n");
+  const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name);
 
   try {
     const rawImagePath = await ai.generateImage(prompt, {
@@ -1036,6 +1033,7 @@ async function handleSingleCharacterImage(
         character_name: character.name,
         character_desc: character.description || character.name,
         character_prompt: prompt,
+        seed: Math.floor(Math.random() * 1000000),
       },
     });
 
@@ -1126,7 +1124,7 @@ async function handleBatchCharacterImage(
   const results = await Promise.all(
     needImages.map(async (character) => {
       try {
-        const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
+        const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name);
         const rawImagePath = await ai.generateImage(prompt, {
           size: "2560x1440",
           aspectRatio: "16:9",
@@ -1135,6 +1133,8 @@ async function handleBatchCharacterImage(
           pipelineParams: {
             character_name: character.name,
             character_desc: character.description || character.name,
+            character_prompt: prompt,
+            seed: Math.floor(Math.random() * 1000000),
           },
         });
 
@@ -1541,104 +1541,6 @@ async function handleShotSplitStream(
           text: dialogue.text,
           sequence: i,
         });
-      }
-    }
-  }
-
-  // Auto-create missing guest characters from shot scene descriptions
-  if (episodeId) {
-    // Blacklist: generic crowd/scene terms that are not real characters
-    const CROWD_BLACKLIST = new Set([
-      "士兵", "路人", "百姓", "尸体", "群演", "太监", "宫女", "侍女",
-      "小贩", "商贩", "乞丐", "僧侣", "道士", "骑士", "守卫", "门卫",
-      "仆从", "丫鬟", "家丁", "侍卫", "随从", "使者", "信使", "难民",
-    ]);
-    // Hint quality check: must contain at least one concrete visual descriptor
-    // (body part, color, texture, clothing), not just transient states
-    const VISUAL_HINT_PATTERN = /[体型体态态面相面容脸眼眉鼻嘴唇发须胡服饰衣袍甲冠色肤]/;
-
-    const charPattern = /([\u4e00-\u9fa5a-zA-Z]{1,6})[（(]([^）)]{1,10})[）)]/g;
-    const foundChars = new Map<string, { hint: string; contexts: string[]; shotCount: number }>();
-    for (const shot of allShots) {
-      const desc = shot.sceneDescription || "";
-      const sentences = desc.split(/[。！？；]+/).filter((s) => s.trim());
-      let match;
-      while ((match = charPattern.exec(desc)) !== null) {
-        const base = match[1];
-        const hint = match[2];
-        // Filter 1: skip blacklisted crowd terms
-        if (CROWD_BLACKLIST.has(base)) continue;
-        // Filter 2: skip hints that are only transient states, not visual descriptors
-        if (!VISUAL_HINT_PATTERN.test(hint)) continue;
-
-        if (!foundChars.has(base)) foundChars.set(base, { hint, contexts: [], shotCount: 0 });
-        const entry = foundChars.get(base)!;
-        entry.shotCount++;
-        // Collect unique sentences containing this character
-        for (const s of sentences) {
-          if (s.includes(match[0]) && !entry.contexts.includes(s.trim())) {
-            entry.contexts.push(s.trim());
-          }
-        }
-      }
-    }
-
-    // Filter 3: must appear in at least 2 shots to be a real character
-    const qualifyingChars = [...foundChars.entries()].filter(([, v]) => v.shotCount >= 2);
-
-    const existingNames = new Set(shotCharacters.map((c) => c.name));
-    const existingBaseNames = new Set(shotCharacters.map((c) => stripCharHint(c.name)));
-    const missingEntries = qualifyingChars.filter(([base]) =>
-      !existingNames.has(base) && !existingBaseNames.has(base)
-    );
-    if (missingEntries.length > 0) {
-      console.log(`[ShotSplit] Generating ${missingEntries.length} guest characters via LLM: ${missingEntries.map(([n]) => n).join(", ")}`);
-
-      // Fetch EP context for the prompt
-      const [ep] = await db.select({
-        title: episodes.title, description: episodes.description, idea: episodes.idea
-      }).from(episodes).where(eq(episodes.id, episodeId));
-
-      // Build bulk prompt for all missing characters
-      let bulkPrompt = `${ep?.title || ""}\n构思: ${ep?.idea || "（无）"}\n描述: ${ep?.description || "（无）"}\n\n=== 需要补充外观描述的角色（均为本集客串角色，scope="guest"）===\n`;
-      for (const [base, { hint, contexts }] of missingEntries) {
-        bulkPrompt += `\n角色名: ${base}\n已有外观线索: ${hint}\n出场场景:\n`;
-        for (const ctx of contexts.slice(0, 3)) {
-          bulkPrompt += `  - ${ctx}\n`;
-        }
-      }
-      bulkPrompt += "\n请为以上每个角色生成完整的 visualHint（2-4字）和 description（单段密集角色外观描写，含体态/面部/发型/服装/标志特征）。返回 JSON 数组。";
-
-      try {
-        if (!modelConfig?.text) {
-          console.warn("[ShotSplit] No text model — skipping guest character generation");
-        } else {
-          const model = createLanguageModel(modelConfig.text);
-          const charSystem = await resolvePrompt("character_extract", { userId, projectId }).catch(() => undefined);
-          const { text } = await generateText({
-            model,
-            system: charSystem || "你是角色设计师，生成角色视觉描述。仅返回JSON。",
-            prompt: bulkPrompt,
-          });
-          const parsed = parseLLMJSON(text);
-          const chars: Array<{ name: string; visualHint?: string; description: string }> = Array.isArray(parsed) ? parsed : (parsed.characters || []);
-          for (const c of chars) {
-            const charId = genId();
-            await db.insert(characters).values({
-              id: charId, projectId,
-              baseName: c.name, name: c.name,
-              description: c.description || "",
-              visualHint: c.visualHint || "",
-              scope: "guest", episodeId,
-            });
-            await db.insert(episodeCharacters).values({
-              id: genId(), episodeId, characterId: charId,
-            });
-            console.log(`[ShotSplit] Created guest character: ${c.name}`);
-          }
-        }
-      } catch (err) {
-        console.error("[ShotSplit] Guest character generation failed:", err);
       }
     }
   }

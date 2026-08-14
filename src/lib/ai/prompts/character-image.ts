@@ -1,3 +1,73 @@
+/**
+ * 正面视图 prompt 模板 — 命名字段，集中定义。
+ * 调整任一字段自动影响所有调用方（pipeline / single / batch）。
+ */
+const FRONT_VIEW_TEMPLATE = {
+  subject_tag:     `[character design sheet] [front view] [full body] [standing pose]`,
+  composition:     `[composition: vertical portrait, head near top edge, feet near bottom, 5% white margin, 90% frame fill]`,
+  pose_constraint: `[pose: neutral standing, arms at sides, feet shoulder-width apart, neutral expression]`,
+  environment:     `[environment: pure white background, no shadow]`,
+  quality_tag:     `[quality: sharp focus, high detail, character reference sheet]`,
+} as const;
+
+/**
+ * 构建 ComfyUI gen_front 步骤用的正面图 T2I prompt。
+ * t2iStructure 优先（结构化标签 → Qwen 2512 精度 +30%），
+ * description 作为 fallback + 细节补充。
+ */
+export function buildCharacterFrontViewPrompt(
+  t2iStructure: string | null,
+  description: string
+): string {
+  if (t2iStructure) {
+    // 主路径：结构化标签前置，散文兜底
+    try {
+      const s = JSON.parse(t2iStructure) as Record<string, string>;
+      const colorTag = description.match(/色彩调色板[：:]\s*(.+?)(?:[。\n]|$)/);
+      return [
+        FRONT_VIEW_TEMPLATE.subject_tag,
+        "",
+        FRONT_VIEW_TEMPLATE.composition,
+        "",
+        s.age ? `[age] ${s.age}` : "",
+        s.subject ? `[subject] ${s.subject}` : "",
+        s.body ? `[body] ${s.body}` : "",
+        s.face ? `[face] ${s.face}` : "",
+        s.hair ? `[hair] ${s.hair}` : "",
+        s.clothing ? `[clothing] ${s.clothing}` : "",
+        s.lighting ? `[lighting] ${s.lighting}` : "",
+        "",
+        description,
+        "",
+        colorTag ? `[color palette: ${colorTag[1]}]` : "",
+        "",
+        FRONT_VIEW_TEMPLATE.quality_tag,
+      ].filter(Boolean).join("\n");
+    } catch {
+      // JSON parse failed — fall through to prose path
+      console.warn("[buildCharacterFrontViewPrompt] t2iStructure parse failed, using prose fallback");
+    }
+  }
+  // Fallback: 散文路径（已有角色或 t2iStructure 解析失败）
+  return [
+    FRONT_VIEW_TEMPLATE.subject_tag,
+    "",
+    FRONT_VIEW_TEMPLATE.composition,
+    "",
+    FRONT_VIEW_TEMPLATE.pose_constraint,
+    "",
+    FRONT_VIEW_TEMPLATE.environment,
+    "",
+    description,
+    "",
+    FRONT_VIEW_TEMPLATE.quality_tag,
+  ].join("\n");
+}
+
+/**
+ * API 路径四视图 prompt（英文模板，供 Gemini 等多模态模型一次性生成四视图）。
+ * ComfyUI 路径不使用此函数（四视图由 pipeline 多步骤负责）。
+ */
 export function buildCharacterTurnaroundPrompt(description: string, characterName?: string): string {
   return `Character four-view reference sheet — professional character design document.
 

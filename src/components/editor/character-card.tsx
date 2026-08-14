@@ -21,6 +21,7 @@ interface CharacterCardProps {
   name: string;
   description: string;
   visualHint: string | null;
+  t2iStructure?: string | null;
   referenceImage: string | null;
   referenceImageHistory?: string | null;
   onUpdate: () => void;
@@ -37,6 +38,7 @@ export function CharacterCard({
   name,
   description,
   visualHint,
+  t2iStructure,
   referenceImage,
   referenceImageHistory,
   onUpdate,
@@ -54,11 +56,13 @@ export function CharacterCard({
   const [editName, setEditName] = useState(name);
   const [editDesc, setEditDesc] = useState(description);
   const [editVisualHint, setEditVisualHint] = useState(visualHint ?? "");
+  const [editT2iStructure, setEditT2iStructure] = useState(t2iStructure ?? "");
 
   // Sync local state when props change (e.g. after re-extraction)
   useEffect(() => { setEditName(name); }, [name]);
   useEffect(() => { setEditDesc(description); }, [description]);
   useEffect(() => { setEditVisualHint(visualHint ?? ""); }, [visualHint]);
+  useEffect(() => { setEditT2iStructure(t2iStructure ?? ""); }, [t2iStructure]);
   const [generating, setGenerating] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -84,7 +88,7 @@ export function CharacterCard({
     await apiFetch(`/api/projects/${projectId}/characters/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName, description: editDesc, visualHint: editVisualHint }),
+      body: JSON.stringify({ name: editName, description: editDesc, visualHint: editVisualHint, t2iStructure: editT2iStructure }),
     });
     onUpdate();
   }
@@ -254,6 +258,22 @@ export function CharacterCard({
           placeholder={t("character.visualHint")}
           className="h-8 text-xs text-muted-foreground"
         />
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">T2I Structure (Qwen structured prompt)</summary>
+          <Textarea
+            value={editT2iStructure}
+            onChange={(e) => setEditT2iStructure(e.target.value)}
+            onBlur={handleSave}
+            placeholder='[age] 71-year-old, frail
+[subject] male, 162cm, thin, hunched
+[body] narrow shoulders, loose skin, bowed back
+[face] deep wrinkles, sunken cheeks, age spots
+[hair] sparse white hair, wispy beard
+[clothing] faded dragon robe, too large, sags at shoulders
+[lighting] warm front light, soft shadows'
+            className="h-24 resize-none text-xs font-mono"
+          />
+        </details>
         <div className="space-y-2">
             <InlineModelPicker capability="image" value={imageModelRef} onChange={setImageModelRef} />
             <div className="flex gap-2">

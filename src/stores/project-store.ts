@@ -10,6 +10,7 @@ interface Character {
   visualHint?: string | null;
   scope?: string;
   episodeId?: string | null;
+  t2iStructure?: string | null;
 }
 
 interface Dialogue {

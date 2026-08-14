@@ -26,6 +26,7 @@ export async function PATCH(
     name: string;
     description: string;
     visualHint: string;
+    t2iStructure: string | null;
     scope: string;
     episodeId: string | null;
     referenceImage: string;
@@ -36,6 +37,7 @@ export async function PATCH(
   if (body.name !== undefined) updateData.name = body.name;
   if (body.description !== undefined) updateData.description = body.description;
   if (body.visualHint !== undefined) updateData.visualHint = body.visualHint;
+  if (body.t2iStructure !== undefined) (updateData as any).t2iStructure = body.t2iStructure;
   if (body.referenceImage !== undefined) updateData.referenceImage = body.referenceImage;
   if (body.scope !== undefined) {
     updateData.scope = body.scope;

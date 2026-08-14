@@ -1,0 +1,1 @@
+ALTER TABLE characters ADD COLUMN t2i_structure TEXT;

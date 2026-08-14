@@ -13,8 +13,8 @@ steps:
       seed: ${params.seed}
       width: 640
       height: 1440
-      steps: 20
-      cfg: 3.5
+      steps: 8
+      cfg: 1.0
     outputs:
       front_image: ${outputs[0].localPath}
     retry:
@@ -28,7 +28,7 @@ steps:
     depends_on: [gen_front]
     inputs:
       source_image: ${steps.gen_front.outputs[0]}
-      prompt: "<sks> left view, body turn 45 degrees left."
+      prompt: "<sks> front-left quarter view eye-level shot medium shot"
       seed: ${params.seed + 1}
       steps: 4
       angle_strength: 1.0
@@ -46,7 +46,7 @@ steps:
     depends_on: [gen_front]
     inputs:
       source_image: ${steps.gen_front.outputs[0]}
-      prompt: "<sks> right side view, side profile."
+      prompt: "<sks> right side view eye-level shot medium shot"
       seed: ${params.seed + 2}
       steps: 4
       angle_strength: 1.0
@@ -64,7 +64,7 @@ steps:
     depends_on: [gen_front]
     inputs:
       source_image: ${steps.gen_front.outputs[0]}
-      prompt: "<sks> back view, from behind."
+      prompt: "<sks> back view eye-level shot medium shot"
       seed: ${params.seed + 3}
       steps: 4
       angle_strength: 1.0

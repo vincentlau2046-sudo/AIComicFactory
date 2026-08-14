@@ -22,6 +22,7 @@ interface Character {
   referenceImageHistory: string | null;
   scope: string;
   episodeId: string | null;
+  t2iStructure: string | null;
 }
 
 interface Episode {
@@ -209,6 +210,7 @@ export default function CharactersPage({
                 name={char.name}
                 description={char.description}
                 visualHint={char.visualHint}
+                t2iStructure={char.t2iStructure}
                 referenceImage={char.referenceImage}
                 referenceImageHistory={char.referenceImageHistory}
                 scope={char.scope}
@@ -259,6 +261,7 @@ export default function CharactersPage({
                       name={char.name}
                       description={char.description}
                       visualHint={char.visualHint}
+                      t2iStructure={char.t2iStructure}
                       referenceImage={char.referenceImage}
                       referenceImageHistory={char.referenceImageHistory}
                       scope={char.scope}
@@ -287,6 +290,7 @@ export default function CharactersPage({
                         name={char.name}
                         description={char.description}
                         visualHint={char.visualHint}
+                        t2iStructure={char.t2iStructure}
                         referenceImage={char.referenceImage}
                         referenceImageHistory={char.referenceImageHistory}
                         scope={char.scope}

@@ -176,6 +176,7 @@ export default function EpisodeCharactersPage() {
               name={char.name}
               description={char.description}
               visualHint={char.visualHint ?? null}
+              t2iStructure={char.t2iStructure}
               referenceImage={char.referenceImage}
               referenceImageHistory={char.referenceImageHistory}
               onUpdate={() => fetchProject(project.id, useProjectStore.getState().currentEpisodeId!)}
