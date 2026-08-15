@@ -212,8 +212,8 @@ function buildConstraintLayer(
       "【Dialogue — MANDATORY】\n5. This shot HAS dialogue! Assign (S1), (S2)... IDs. Format: (S1) says: <d>[Chinese] text</d>\n6. Embed dialogue in its time segment"
     )
     : L(
-      "【对白 — 强制执行】\n5. 对白格式：(S1)说：<d>[中文] 原文台词</d>。画外音：(S1) says in an off-screen voiceover: <d>...</d>\n6. 对白必须嵌入对应时间段",
-      "【Dialogue — MANDATORY】\n5. Format: (S1) says: <d>[Chinese] text</d>. Off-screen: (S1) says in an off-screen voiceover: <d>...</d>\n6. Embed dialogue in its time segment"
+      "【对白 — 强制执行】\n5. 对白格式：(S1)说：<d>[中文] 原文台词</d>\n   画外音格式（H3 官方标准）：角色名 (S1) says in an off-screen voiceover: <d>[Chinese] text</d> while his lips remain completely closed.\n6. 对白必须嵌入对应时间段——先描述角色动作，再写对白行",
+      "【Dialogue — MANDATORY】\n5. Format: (S1) says: <d>[Chinese] text</d>. Off-screen: Character (S1) says in an off-screen voiceover: <d>[Chinese] text</d> while lips remain completely closed.\n6. Embed dialogue in its time segment"
     )
   ) + "\n\n";
 
