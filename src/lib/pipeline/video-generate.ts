@@ -213,8 +213,8 @@ export async function handleVideoGenerate(task: Task) {
   const epOutline = episode?.outline || '';
   const shotList = allEpShots.map(s => {
     const marker = s.id === shot.id ? '▶' : ' ';
-    const scene = (s.prompt || '').substring(0, 60);
-    const act = (s.videoScript || '').replace(/\d+-\d+s[:\uff1a]\s*/g, '').substring(0, 60);
+    const scene = (s.prompt || '').replace(/\n/g, ' ');
+    const act = (s.videoScript || '').replace(/\d+-\d+s[:\uff1a]\s*/g, '').replace(/\n/g, ' ');
     return `${marker} Shot ${s.sequence}: ${scene} \u2014 ${act}`;
   }).join('\n');
   const episodeStructure = epOutline
