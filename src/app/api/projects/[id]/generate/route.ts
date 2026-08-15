@@ -3742,6 +3742,8 @@ async function handleSingleKeyframePrompts(
     }
     const parsed = JSON.parse(jsonMatch[0]) as Array<{
       shotSequence: number;
+      firstFrameCharacters?: string[];
+      lastFrameCharacters?: string[];
       characters?: string[];
       prompts: string[];
     }>;
@@ -3750,15 +3752,19 @@ async function handleSingleKeyframePrompts(
       throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
     }
 
-    const charsForShot = Array.isArray(entry.characters) ? entry.characters : [];
+    // Per-frame character resolution with backward compat
+    const firstFrameChars = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters
+      : Array.isArray(entry.characters) ? entry.characters : [];
+    const lastFrameChars = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters
+      : Array.isArray(entry.characters) ? entry.characters : [];
 
-    // Patch active asset in-place (no new version). Matches single_shot_rewrite pattern.
     for (const [idx, type] of (["first_frame", "last_frame"] as const).entries()) {
+      const charsForType = idx === 0 ? firstFrameChars : lastFrameChars;
       const existing = await getActiveAsset(shotId, type, 0);
       if (existing) {
         await patchAsset(existing.id, {
           prompt: entry.prompts[idx],
-          characters: charsForShot,
+          characters: charsForType,
         });
       } else {
         await insertAssetVersion({
@@ -3767,7 +3773,7 @@ async function handleSingleKeyframePrompts(
           sequenceInType: 0,
           prompt: entry.prompts[idx],
           status: "pending",
-          characters: charsForShot,
+          characters: charsForType,
         });
       }
     }
@@ -3830,13 +3836,15 @@ async function handleGenerateKeyframePrompts(
         const startFrame = (entry.startFrame || (entry.prompts as string[])?.[0] || "") as string;
         const endFrame = (entry.endFrame || (entry.prompts as string[])?.[1] || "") as string;
         const chars = Array.isArray(entry.characters) ? entry.characters as string[] : [];
+        const firstChars = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters as string[] : chars;
+        const lastChars = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters as string[] : chars;
 
         if (startFrame) {
-          await insertAssetVersion({ shotId: shot.id, type: "first_frame", sequenceInType: 0, prompt: startFrame, status: "pending", characters: chars });
+          await insertAssetVersion({ shotId: shot.id, type: "first_frame", sequenceInType: 0, prompt: startFrame, status: "pending", characters: firstChars });
           savedCount++;
         }
         if (endFrame) {
-          await insertAssetVersion({ shotId: shot.id, type: "last_frame", sequenceInType: 0, prompt: endFrame, status: "pending", characters: chars });
+          await insertAssetVersion({ shotId: shot.id, type: "last_frame", sequenceInType: 0, prompt: endFrame, status: "pending", characters: lastChars });
           savedCount++;
         }
       }
@@ -3984,6 +3992,8 @@ async function handleGenerateKeyframePrompts(
       }
       const parsed = JSON.parse(jsonMatch[0]) as Array<{
         shotSequence: number;
+        firstFrameCharacters?: string[];
+        lastFrameCharacters?: string[];
         characters?: string[];
         prompts: string[];
       }>;
@@ -3992,14 +4002,18 @@ async function handleGenerateKeyframePrompts(
         throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
       }
 
-      const charsForShot = Array.isArray(entry.characters) ? entry.characters : [];
+      const firstFrameChars = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters
+        : Array.isArray(entry.lastFrameCharacters) ? undefined /* don't use lastFrame for firstFrame */
+        : Array.isArray(entry.characters) ? entry.characters : [];
+      const lastFrameChars = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters
+        : Array.isArray(entry.characters) ? entry.characters : [];
       await insertAssetVersion({
         shotId: shot.id,
         type: "first_frame",
         sequenceInType: 0,
         prompt: entry.prompts[0],
         status: "pending",
-        characters: charsForShot,
+        characters: firstFrameChars,
       });
       await insertAssetVersion({
         shotId: shot.id,
@@ -4007,7 +4021,7 @@ async function handleGenerateKeyframePrompts(
         sequenceInType: 0,
         prompt: entry.prompts[1],
         status: "pending",
-        characters: charsForShot,
+        characters: lastFrameChars,
       });
       doneCount++;
       updatedCount++;

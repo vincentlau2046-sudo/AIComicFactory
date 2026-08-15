@@ -1447,11 +1447,14 @@ ${themeStyleMappingBlock()}
 [lighting] 正午烈日顶光，刺眼白光，地面热浪变形感，高对比度
 [color] 焦褐、灰白，荒芜压迫感`;
 
-const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一个对象。**prompts 数组必须恰好有 2 个元素：第 0 个是首帧、第 1 个是尾帧**。**characters 数组必须只包含此镜头画面中实际出现的角色**（不是项目里所有角色），名字必须与角色列表中完全一致：
+const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一个对象。**prompts 数组必须恰好有 2 个元素：第 0 个是首帧、第 1 个是尾帧**。
+
+**首尾帧角色分离**：half_characters 和 half_characters 必须**分别列出各自帧画面中实际出现的角色**。不同帧可能只有部分角色同时出现，必须分开列出。
 [
   {
     "shotSequence": 1,
-    "characters": ["此镜头中实际出现的角色名1", "角色名2"],
+    "firstFrameCharacters": ["首帧出现的角色1", "角色2"],
+    "lastFrameCharacters": ["尾帧出现的角色1"],
     "prompts": [
       "首帧的结构化标签文本",
       "尾帧的结构化标签文本"
@@ -1460,10 +1463,11 @@ const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一
 ]
 仅输出有效 JSON，不要 markdown 代码块，不要前言。
 
-**characters 字段判定规则**：
-- 仅列出在该镜头的 motionScript / videoScript / sceneDescription 中**视觉上出现**的角色
-- 仅旁白/画外音对白的角色，如果画面中没出现，不要列入
-- 空数组 [] 是合法的（纯环境镜头/空镜头）`;
+**firstFrameCharacters / lastFrameCharacters 判定规则**：
+- 分别列出各自帧画面中视觉上出现的角色（纯 MDN name，不带 visualHint 括号）
+- 若某角色仅在一帧出现（如首帧多人同屏、尾帧单角色特写），只放在对应帧的数组中
+- 仅旁白/画外音的角色不要列入
+- 空数组 [] 是合法的（纯环境镜头）；`
 
 const shotKeyframeAssetsDef: PromptDefinition = {
   key: "shot_split_keyframe_assets",

@@ -167,9 +167,9 @@ export async function handleFrameGenerate(task: Task) {
   const ffChars = resolveFrameChars(firstFrameAsset);
   const lfChars = resolveFrameChars(lastFrameAsset);
   const ffCharRefImages = ffChars.map((c) => c.referenceImage!);
-  const ffCharRefLabels = ffChars.map((c) => c.name);
+  const ffCharRefLabels = ffChars.map((c) => (c as any).baseName || stripCharHint(c.name));
   const lfCharRefImages = lfChars.map((c) => c.referenceImage!);
-  const lfCharRefLabels = lfChars.map((c) => c.name);
+  const lfCharRefLabels = lfChars.map((c) => (c as any).baseName || stripCharHint(c.name));
 
   // Character descriptions are redundant with reference images — the four-view
   // sheets already convey all visual identity info. Set to empty to avoid
