@@ -56,12 +56,10 @@ function buildContentLayer(
 
   // Phase 2: Pre-generated narration lines (injected by builder)
   if (input.narrations?.length) {
-    parts.push(`## ${L("旁白/画外音（已预生成）", "NARRATION (pre-generated)")}`);
-    parts.push(L(
-      "以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：",
-      "The following narration/voiceover lines have been pre-generated from the script and episode context. They MUST be embedded in the corresponding time segments:"
-    ));
-    parts.push(input.narrations.join("\n"));
+    const narrSlots = getDefaultSlotContents("video_h3_fl2v_narration");
+    const injectTemplate = narrSlots?.content_inject ||
+      "## 旁白/画外音（已预生成）\n以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：\n{{NARRATION_LINES}}";
+    parts.push(injectTemplate.replace("{{NARRATION_LINES}}", input.narrations.join("\n")));
     parts.push("");
   }
 

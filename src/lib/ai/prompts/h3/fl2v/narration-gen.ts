@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════
 
 import type { AIProvider } from "@/lib/ai/types";
-import { getPromptDefinition } from "@/lib/ai/prompts/registry";
+import { getPromptDefinition, getDefaultSlotContents } from "@/lib/ai/prompts/registry";
 
 export interface NarrationInput {
   videoScript: string;
@@ -87,40 +87,37 @@ export async function generateNarration(
 // ── Helpers ──
 
 function buildNarrationUserMessage(input: NarrationInput): string {
-  const parts: string[] = [];
+  // Read user template from registry, with hardcoded fallback
+  let template = "## 镜头视频脚本\n{{VIDEO_SCRIPT}}\n\n## 剧集背景\n{{EPISODE_CONTEXT}}\n\n## 出场角色\n{{CHARACTER_LIST}}\n\n## 要求\n{{REQUIREMENTS}}";
+  let requirements = `- 时长: {{DURATION}}s\n- 类型: 旁白（S0 第三人称叙述者）或 内心独白（角色 offscreen voiceover）\n- 格式: (S0) says in an off-screen voiceover: <d>[Chinese] text</d>\n- 旁白解说背景、推进叙事、揭示内心冲突\n- 内心独白自然口语化，符合角色性格\n- 生成 1-3 句`;
 
-  parts.push("## 镜头视频脚本");
-  parts.push(input.videoScript);
-  parts.push("");
-
-  if (input.episodeDescription) {
-    parts.push("## 剧集背景");
-    parts.push(input.episodeDescription);
-    if (input.episodeKeywords) parts.push(`关键词: ${input.episodeKeywords}`);
-    parts.push("");
-  }
-
-  if (input.characters?.length) {
-    parts.push("## 出场角色");
-    for (const c of input.characters) {
-      const role = c.scope === "guest" ? "[客串]" : "[主要]";
-      const style = c.performanceStyle ? ` — ${c.performanceStyle}` : "";
-      parts.push(`- ${c.name} ${role}${style}`);
+  try {
+    const slots = getDefaultSlotContents("video_h3_fl2v_narration");
+    if (slots) {
+      if (slots.user_template) template = slots.user_template;
+      if (slots.user_requirements) requirements = slots.user_requirements;
     }
-    parts.push("");
+  } catch {
+    // Use hardcoded fallbacks
   }
 
-  parts.push(`## 要求`);
-  parts.push(`- 时长: ${input.duration}s`);
-  parts.push("- 类型: 旁白（S0 第三人称叙述者）或 内心独白（角色 offscreen voiceover）");
-  parts.push("- 格式: (S0) says in an off-screen voiceover: <d>[Chinese] text</d>");
-  parts.push("- 旁白解说背景、推进叙事、揭示内心冲突");
-  parts.push("- 内心独白自然口语化，符合角色性格");
-  parts.push("- 生成 1-3 句");
-  parts.push("");
-  parts.push("仅输出声音行，不要前言/解释/markdown。");
+  // Build character list
+  const charList = input.characters?.length
+    ? input.characters.map(c => {
+        const role = c.scope === "guest" ? "[客串]" : "[主要]";
+        const style = c.performanceStyle ? ` — ${c.performanceStyle}` : "";
+        return `- ${c.name} ${role}${style}`;
+      }).join("\n")
+    : "(无)";
 
-  return parts.join("\n");
+  const epContext = input.episodeDescription || "(无)";
+
+  // Inject dynamic data into template
+  return template
+    .replace("{​{VIDEO_SCRIPT}​}", input.videoScript)
+    .replace("{​{EPISODE_CONTEXT}​}", epContext)
+    .replace("{​{CHARACTER_LIST}​}", charList)
+    .replace("{​{REQUIREMENTS}​}", requirements.replace("{​{DURATION}​}", String(input.duration)));
 }
 
 function buildFallbackNarrationSystem(): string {

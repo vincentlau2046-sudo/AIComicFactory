@@ -2216,7 +2216,7 @@ const fl2vConstraintsDef: PromptDefinition = {
 };
 
 // ─── 14d. video_h3_fl2v_narration ──────────────────────
-// FL2V narration generator system prompt.
+// FL2V narration generator prompts — system + user message template.
 
 const FL2V_NARRATION_SYSTEM = `你是一位历史剧旁白编剧。给定一个镜头（Shot）的上下文，为它撰写一段叙事声音。
 
@@ -2235,6 +2235,29 @@ const FL2V_NARRATION_SYSTEM = `你是一位历史剧旁白编剧。给定一个�
 
 仅输出声音行，不要前言/解释/markdown。`;
 
+const FL2V_NARRATION_USER_TEMPLATE = `## 镜头视频脚本
+{{VIDEO_SCRIPT}}
+
+## 剧集背景
+{{EPISODE_CONTEXT}}
+
+## 出场角色
+{{CHARACTER_LIST}}
+
+## 要求
+{{REQUIREMENTS}}`;
+
+const FL2V_NARRATION_REQUIREMENTS = `- 时长: {{DURATION}}s
+- 类型: 旁白（S0 第三人称叙述者）或 内心独白（角色 offscreen voiceover）
+- 格式: (S0) says in an off-screen voiceover: <d>[Chinese] text</d>
+- 旁白解说背景、推进叙事、揭示内心冲突
+- 内心独白自然口语化，符合角色性格
+- 生成 1-3 句`;
+
+const FL2V_CONTENT_NARRATION_INJECT = `## 旁白/画外音（已预生成）
+以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：
+{{NARRATION_LINES}}`;
+
 const fl2vNarrationDef: PromptDefinition = {
   key: "video_h3_fl2v_narration",
   nameKey: "promptTemplates.prompts.videoH3Fl2vNarration",
@@ -2242,6 +2265,9 @@ const fl2vNarrationDef: PromptDefinition = {
   category: "video",
   slots: [
     slot("system", FL2V_NARRATION_SYSTEM, true),
+    slot("user_template", FL2V_NARRATION_USER_TEMPLATE, true),
+    slot("user_requirements", FL2V_NARRATION_REQUIREMENTS, true),
+    slot("content_inject", FL2V_CONTENT_NARRATION_INJECT, true),
   ],
   buildFullPrompt(sc) {
     return resolve(sc, this.slots, "system");
