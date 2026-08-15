@@ -15,8 +15,8 @@ import type {
   H3PromptInput, H3PromptOutput,
   SubjectDef, PictureDef, AudioDef, H3TaskType,
   RetentionVision, RetentionAudio,
-} from "./types";
-import { buildH3BasePrompt } from "./base-mode";
+} from "../types";
+import { buildH3Sections } from "../shared/base-builder";
 
 // ═══ Public API ═══════════════════════════════════════════════
 
@@ -31,13 +31,13 @@ import { buildH3BasePrompt } from "./base-mode";
  *   [4] overall_soundscape
  *   [5] non_diegetic_music
  */
-export function buildH3Ref2VAPrompt(input: H3PromptInput): H3PromptOutput {
+export function buildR2VPrompt(input: H3PromptInput): H3PromptOutput {
   const subjects = buildAllSubjectDefs(input);
   const pictures = buildPictureDefs(input);
   const audios = buildAudioDefs(input);
   const taskTypes = detectTaskTypes(input);
 
-  const baseOutput = buildH3BasePrompt(input);
+  const baseOutput = buildH3Sections(input);
 
   return {
     mode: "ref2va",

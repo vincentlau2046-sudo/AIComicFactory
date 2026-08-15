@@ -3,6 +3,8 @@
 // Aligned with: MiniMax H3 official VIDEO_PROMPT_WRITING_GUIDE ref_en.md + base_en.md
 // ═══════════════════════════════════════════════
 
+export type H3Language = "zh" | "en";
+
 /** Vision retention levels (official guide §4.1) */
 export type RetentionVision =
   | "fully_preserved"

@@ -1,55 +1,27 @@
 // ═══════════════════════════════════════════════
-// H3 Base Mode Builder (v0.2.0)
-// LLM-optimized via 3-layer context engineering.
-// Uses system AI provider (via modelConfig) — no hardcoded URLs/models.
+// H3 Shared Base Builder
+// Local formatter used by FL2V fallback and R2V detailed_description.
 // ═══════════════════════════════════════════════
 
-import type { AIProvider } from "@/lib/ai/types";
-import type { H3PromptInput, H3PromptOutput } from "./types";
-import { buildH3PromptTemplate, resolveLanguage } from "./prompt-template";
-import { mapCameraDirection } from "./camera-map";
+import type { H3PromptInput, H3PromptOutput, H3Language } from "../types";
+import { mapCameraDirection } from "../camera-map";
+import { detectLanguage } from "../language-route";
 
 /**
- * Build H3 prompt via LLM using system-configured AI provider.
- * Falls back to local formatting on failure.
- *
- * @param input           All context data from AICF pipeline
- * @param textProvider    System AI provider (from resolveAIProvider(modelConfig))
- * @param systemOverride  Optional system prompt from prompt registry
+ * Resolve output language from input config or script auto-detection.
  */
-export async function buildH3BasePromptLLM(
-  input: H3PromptInput,
-  textProvider: AIProvider,
-  systemOverride?: string
-): Promise<H3PromptOutput> {
-  const lang = resolveLanguage(input);
-  try {
-    const { system, user } = buildH3PromptTemplate(input, systemOverride);
-
-    const raw = await textProvider.generateText(user, {
-      systemPrompt: system,
-      temperature: 0.7,
-      maxTokens: 32000,
-    });
-
-    if (!raw?.trim()) throw new Error("Empty LLM response");
-
-    return {
-      mode: "base",
-      taskType: "keyframe_completion",
-      languageUsed: lang === "zh" ? "zh" : "en",
-      sections: parseLLMSections(raw, input, lang),
-    };
-  } catch (e) {
-    console.warn("[H3] LLM call failed, falling back to local builder:", (e as Error).message);
-    return buildH3BasePrompt(input, lang);
-  }
+export function resolveLanguage(input: H3PromptInput): H3Language {
+  if (input.languageMode === "zh") return "zh";
+  if (input.languageMode === "en") return "en";
+  return detectLanguage(input.videoScript) as H3Language;
 }
 
 /**
- * Local builder — format-only, no LLM. Used as fallback.
+ * Build local H3 prompt sections — format-only, no LLM.
+ * Used as a fast fallback for FL2V and as the base component
+ * for R2V's detailed_description section.
  */
-export function buildH3BasePrompt(
+export function buildH3Sections(
   input: H3PromptInput,
   lang?: "zh" | "en"
 ): H3PromptOutput {
@@ -92,7 +64,7 @@ export function buildH3BasePrompt(
 
 // ── Helpers ──
 
-function buildInstructionPrefix(
+export function buildInstructionPrefix(
   input: H3PromptInput,
   lang: "zh" | "en"
 ): string | null {
@@ -120,14 +92,13 @@ function buildInstructionPrefix(
   return "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.";
 }
 
-function parseLLMSections(
+export function parseLLMSections(
   raw: string,
   input: H3PromptInput,
   lang: "zh" | "en"
 ): string[] {
   const sections: string[] = [];
 
-  // Extract instruction prefix (EN or ZH)
   const prefixMatch = raw.match(
     /^(How the reference pictures align[\s\S]*?video\.|参考图与目标视频的对齐方式[\s\S]*?秒。|For the target video[\s\S]*?referenced\.|目标视频第[\s\S]*?参考。)/
   );
@@ -135,7 +106,6 @@ function parseLLMSections(
   const body = prefixMatch ? raw.slice(prefixMatch[0].length).trim() : raw;
 
   if (lang === "zh") {
-    // Match both ZH-prefixed (集成多模态描述 (integrated_multimodal_description):) or bare EN (integrated_multimodal_description:) headers
     const imdMatch = body.match(
       /(?:集成多模态描述\s*[\(（]?integrated_multimodal_description[\)）]?|integrated_multimodal_description)\s*[:：]\s*([\s\S]*?)(?=\n\s*(?:整体环境音|overall_soundscape|非叙事音乐|non_diegetic_music)\s*[:：(（]|$)/i
     );

@@ -1,32 +1,41 @@
 // ═══════════════════════════════════════════════
-// H3 Prompt Builder — Main Export (v0.2.0)
+// H3 Prompt Builder — Mode Dispatcher (v0.3.0)
+// Routes to mode-specific builders: FL2V | R2V | T2V
 // ═══════════════════════════════════════════════
 
 import type { AIProvider } from "@/lib/ai/types";
 import type { H3PromptInput, H3PromptOutput } from "./types";
-import { buildH3BasePrompt, buildH3BasePromptLLM } from "./base-mode";
-import { buildH3Ref2VAPrompt } from "./ref-mode";
 
 /**
- * LLM-optimized builder (preferred for production — uses system AI provider).
+ * Build H3 prompt via LLM (production path).
+ * Dispatches to mode-specific builder based on input.generationMode.
  *
  * @param input           All context data from AICF pipeline
- * @param textProvider    System AI provider from resolveAIProvider(modelConfig)
- * @param systemOverride  Optional system prompt from prompt registry
+ * @param textProvider    System AI provider
+ * @param systemOverride  Optional system prompt override
  */
 export async function buildVideoPromptLLM(
   input: H3PromptInput,
   textProvider: AIProvider,
   systemOverride?: string
 ): Promise<H3PromptOutput> {
-  if (input.generationMode === "reference") return buildH3Ref2VAPrompt(input);
-  return buildH3BasePromptLLM(input, textProvider, systemOverride);
+  if (input.generationMode === "reference") {
+    const { buildR2VPrompt } = await import("./r2v/ref-builder");
+    return buildR2VPrompt(input);
+  }
+  // Default: FL2V (keyframe mode)
+  const { buildFL2VPromptLLM } = await import("./fl2v/builder");
+  return buildFL2VPromptLLM(input, textProvider, systemOverride);
 }
 
-/** Local builder (format-only, no LLM — fast fallback) */
+/** Local builder — no LLM, fast fallback */
 export function buildVideoPrompt(input: H3PromptInput): H3PromptOutput {
-  if (input.generationMode === "reference") return buildH3Ref2VAPrompt(input);
-  return buildH3BasePrompt(input);
+  if (input.generationMode === "reference") {
+    const { buildR2VPrompt } = require("./r2v/ref-builder");
+    return buildR2VPrompt(input);
+  }
+  const { buildFL2VPrompt } = require("./fl2v/builder");
+  return buildFL2VPrompt(input);
 }
 
 export type { H3PromptInput, H3PromptOutput };

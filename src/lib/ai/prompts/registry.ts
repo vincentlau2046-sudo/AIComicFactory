@@ -2013,6 +2013,297 @@ const videoH3PromptDef: PromptDefinition = {
   },
 };
 
+// ─── 14a. video_h3_fl2v_guide ──────────────────────────
+// FL2V Guide Layer — system prompt for FL2V mode.
+
+const FL2V_GUIDE_ROLE = `## 角色
+你是 MiniMax H3 FL2VA 模式的专家级提示词工程师。FL2VA = First-Last-Frame-to-Video/Audio：
+模型接收首帧图片（<Picture 1>）+ 尾帧图片（<Picture 2>），自动插值生成中间视频帧和同步音频。
+
+你的任务：将提供的视频剧本+角色+对白上下文，转换为描述"首帧→尾帧过渡路径"的 H3 结构化提示词。`;
+
+const FL2V_GUIDE_TASK = `## 任务
+重要——FL2VA 模式下，首尾帧图片已经提供了全部视觉锚点（角色外观、场景环境、光线、色调）。
+你的 prompt 不需要描述这些已存在的内容。你只需要描述：
+1. 从 Picture 1 到 Picture 2 之间发生了什么变化
+2. 运镜如何移动
+3. 角色的身体动作（具体物理动词，不用抽象词）
+4. 对白/旁白/画外音
+5. 音效和 BGM`;
+
+const FL2V_GUIDE_PROCESS = `## 流程
+1. 阅读视频剧本——理解叙事核心和情绪走向
+2. 阅读角色列表——分配 speaker ID (S1, S2...)，确认谁在何时说话
+3. 阅读对话台本——嵌入对应时间段
+4. 按约束规则中的时间段拆分——每段写运镜 + 角色动作 + 对白
+5. 如对白为空 → 必须主动生成画外音或旁白
+6. 生成完整的 H3 提示词`;
+
+const FL2V_GUIDE_PRINCIPLES = `## 关键原则
+- FL2V 是"过渡路径"模型，不是"场景说明书"——只描述变化，不描述静态
+- 每秒必须有视觉变化：光线移动、物体微动、角色微表情、镜头微调
+- 首帧→末帧过渡必须是因果推进：先发生A→随即触发B→然后导致C
+- 运镜必须绑定到具体时间段——不能只写一个方向粘在末尾
+- 用具体物理动词（转头/握拳/后退），禁用抽象词（陷入沉思/神情变化）
+- 无对白 ≠ 静默——补画外音/内心独白，每 3-5s 至少一句声音`;
+
+const FL2V_GUIDE_OUTPUT = `## 输出
+仅输出 H3 格式内容。无前言、无 markdown、无注释。`;
+
+const fl2vGuideDef: PromptDefinition = {
+  key: "video_h3_fl2v_guide",
+  nameKey: "promptTemplates.prompts.videoH3Fl2vGuide",
+  descriptionKey: "promptTemplates.prompts.videoH3Fl2vGuideDesc",
+  category: "video",
+  slots: [
+    slot("role", FL2V_GUIDE_ROLE, true),
+    slot("task", FL2V_GUIDE_TASK, true),
+    slot("process", FL2V_GUIDE_PROCESS, true),
+    slot("principles", FL2V_GUIDE_PRINCIPLES, true),
+    slot("output", FL2V_GUIDE_OUTPUT, false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role"), "", r("task"), "", r("process"), "", r("principles"), "", r("output")].join("\n");
+  },
+};
+
+// ─── 14b. video_h3_fl2v_content ────────────────────────
+// FL2V Content Layer labels — static labels with {{PLACEHOLDERS}} injected at runtime.
+
+const FL2V_CONTENT_SCRIPT_LABEL = `## 视频剧本
+{{VIDEO_SCRIPT}}`;
+
+const FL2V_CONTENT_CHAR_LABEL = `## 角色
+（这些角色已出现在首尾帧中。仅描述他们的动作和对话，不要描述外貌。）
+分配说话人 ID（按出场顺序：S1, S2, ...）：
+{{CHARACTER_LIST}}`;
+
+const FL2V_CONTENT_DIALOGUE_LABEL = `## 对话台本（必须在视频中呈现！）
+{{DIALOGUE_LIST}}`;
+
+const FL2V_CONTENT_FRAME_LABEL = `## 帧锚点（关键帧图片）
+以下是实际用作首/末帧锚点的图片。你只需了解角色的位置和构图——不要描述环境/光线/物件细节（图片已提供）。
+{{FRAME_ANCHORS}}`;
+
+const FL2V_CONTENT_EPISODE_LABEL = `## 剧集背景
+{{EPISODE_CONTEXT}}`;
+
+const FL2V_CONTENT_AUDIO_LABEL = `## 音频
+{{AUDIO_CONTEXT}}`;
+
+const FL2V_CONTENT_NARRATION_HINT = `## 声音提示
+如果本 shot 无对白或对白不足，你必须添加画外音/旁白：
+- 旁白格式：(S0) says in an off-screen voiceover: <d>[Chinese] 文本</d>
+- 内心独白格式：(S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed
+每 3-5 秒至少插入一句。`;
+
+const fl2vContentDef: PromptDefinition = {
+  key: "video_h3_fl2v_content",
+  nameKey: "promptTemplates.prompts.videoH3Fl2vContent",
+  descriptionKey: "promptTemplates.prompts.videoH3Fl2vContentDesc",
+  category: "video",
+  slots: [
+    slot("script_label", FL2V_CONTENT_SCRIPT_LABEL, false),
+    slot("character_label", FL2V_CONTENT_CHAR_LABEL, true),
+    slot("dialogue_label", FL2V_CONTENT_DIALOGUE_LABEL, false),
+    slot("frame_label", FL2V_CONTENT_FRAME_LABEL, true),
+    slot("episode_label", FL2V_CONTENT_EPISODE_LABEL, false),
+    slot("audio_label", FL2V_CONTENT_AUDIO_LABEL, false),
+    slot("narration_hint", FL2V_CONTENT_NARRATION_HINT, true),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [
+      r("script_label"), "", r("character_label"), "",
+      r("dialogue_label"), "", r("frame_label"), "",
+      r("episode_label"), "", r("audio_label"), "",
+      r("narration_hint"),
+    ].join("\n");
+  },
+};
+
+// ─── 14c. video_h3_fl2v_constraints ─────────────────────
+// FL2V constraint rules — all hard rules for FL2V prompt output.
+
+const FL2V_CONSTRAINT_TIME_STRUCTURE = `【时间结构 — 强制执行】
+1. 必须按 {{SEGMENT_COUNT}} 个时间段拆分（不要创建 [Shot 2]）
+2. 每个时间段必须有独立的视觉变化和运镜动作`;
+
+const FL2V_CONSTRAINT_ACTION_BEATS = `【动作节拍 — 强制执行】
+3. 每 2-3 秒安排一个微动作节点——即使静态镜头也要加入：呼吸节奏、衣物飘动、光线变化、水面波动、镜头微调
+4. 用「先...随即...然后...最终...」串联微动作，禁止把全部动作写成同时发生`;
+
+const FL2V_CONSTRAINT_CAMERA = `【运镜 — 第一优先级】
+7. 每个时间段首句必须是运镜动作：
+   格式："镜头 [运动类型] [幅度] [速度]"
+   例："镜头极缓慢推近，小幅度。"
+   运镜写完后，才写角色动作。
+8. 运镜必须含幅度+速度修饰
+9. 主运镜方向：{{CAMERA_DIRECTION}}`;
+
+const FL2V_CONSTRAINT_DIALOGUE = `【对白 — 强制执行】
+5. 对白格式：(S1)说：<d>[中文] 原文台词</d>
+   画外音格式：(S1) says in an off-screen voiceover: <d>[Chinese] text</d>
+6. 对白必须嵌入对应时间段——先描述角色动作，再写对白行`;
+
+const FL2V_CONSTRAINT_FORMAT = `【格式】
+10. 角色已在帧中——仅描述动作和移动，禁止描述外貌
+11. 禁止 markdown、代码块、注释——纯 H3 格式输出
+12. 禁止逐字复制剧本——转换为丰富的影视级散文`;
+
+const FL2V_CONSTRAINT_NO_ENV = `【环境 — FL2V 专属规则】
+13. 首尾帧图片已提供全部环境/光线/物件。禁止在 prompt 中描述：
+    - 静态场景元素（建筑、家具、自然景物）
+    - 静态光线条件（光位/色温/质感）
+    - 静态物件细节（道具、装饰、纹理）
+14. 只描述环境变化：火焰忽明忽暗 ✅ / 云遮月导致光线暗下 ✅ /
+    破庙内篝火舞蹈映照土墙 ❌ / 暖橘光从左低角照亮 ❌`;
+
+const FL2V_CONSTRAINT_BODY_VOCAB = `【身体动作 — 白名单】
+15. 使用具体物理动词：转头、抬眼、垂眼、握紧、松开、抬手、放手、
+    迈步、后退、前倾、后仰、起身、坐下、跪地、站起、转体、眯眼、眨眼
+16. 禁止抽象词："陷入沉思"→"眼帘低垂，眉心微蹙"
+    禁止模糊词："神情变化"→"眉头从紧锁渐转为舒展"`;
+
+const FL2V_CONSTRAINT_VOICE = `【声音 — 主动补位】
+17. 如果本 shot 对话台本为空，必须主动生成画外音或旁白
+18. 每 3-5 秒至少一句声音。禁止纯默片 shot。`;
+
+const fl2vConstraintsDef: PromptDefinition = {
+  key: "video_h3_fl2v_constraints",
+  nameKey: "promptTemplates.prompts.videoH3Fl2vConstraints",
+  descriptionKey: "promptTemplates.prompts.videoH3Fl2vConstraintsDesc",
+  category: "video",
+  slots: [
+    slot("time_structure", FL2V_CONSTRAINT_TIME_STRUCTURE, true),
+    slot("action_beats", FL2V_CONSTRAINT_ACTION_BEATS, true),
+    slot("camera", FL2V_CONSTRAINT_CAMERA, true),
+    slot("dialogue", FL2V_CONSTRAINT_DIALOGUE, true),
+    slot("format", FL2V_CONSTRAINT_FORMAT, true),
+    slot("no_env", FL2V_CONSTRAINT_NO_ENV, true),
+    slot("body_vocab", FL2V_CONSTRAINT_BODY_VOCAB, true),
+    slot("voice", FL2V_CONSTRAINT_VOICE, true),
+  ],
+  buildFullPrompt(sc, params?) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    let text = [
+      "## 约束规则",
+      "",
+      r("time_structure"),
+      "",
+      r("action_beats"),
+      "",
+      r("dialogue"),
+      "",
+      r("camera"),
+      "",
+      r("format"),
+      "",
+      r("no_env"),
+      "",
+      r("body_vocab"),
+      "",
+      r("voice"),
+    ].join("\n");
+    text = text.replace(/\{\{SEGMENT_COUNT\}\}/g, String(params?.segmentCount ?? 3));
+    text = text.replace(/\{\{CAMERA_DIRECTION\}\}/g, String(params?.cameraDirection ?? "static"));
+    return text;
+  },
+};
+
+// ─── 14d. video_h3_fl2v_narration ──────────────────────
+// FL2V narration generator system prompt.
+
+const FL2V_NARRATION_SYSTEM = `你是一位历史剧旁白编剧。给定一个镜头（Shot）的上下文，为它撰写一段叙事声音。
+
+输入：
+- 镜头视频脚本（videoScript）
+- 剧集背景（episode description）
+- 出场角色列表
+
+输出要求：
+- 生成 1-3 句声音内容
+- 类型：旁白（第三人称叙述者 S0）或内心独白（角色 offscreen voiceover S1/S2）
+- 格式：(S0) says in an off-screen voiceover: <d>[Chinese] text</d>
+- 旁白应解说背景、推进叙事、揭示内心冲突
+- 内心独白应自然、口语化，符合角色性格和当前情绪
+- 语言：中文
+
+仅输出声音行，不要前言/解释/markdown。`;
+
+const fl2vNarrationDef: PromptDefinition = {
+  key: "video_h3_fl2v_narration",
+  nameKey: "promptTemplates.prompts.videoH3Fl2vNarration",
+  descriptionKey: "promptTemplates.prompts.videoH3Fl2vNarrationDesc",
+  category: "video",
+  slots: [
+    slot("system", FL2V_NARRATION_SYSTEM, true),
+  ],
+  buildFullPrompt(sc) {
+    return resolve(sc, this.slots, "system");
+  },
+};
+
+// ─── 14e. video_h3_r2v_guide ────────────────────────────
+// R2V Guide Layer — migrated from legacy video_h3_prompt for R2V mode.
+
+const R2V_GUIDE_ROLE = `## ROLE
+You are an expert prompt engineer for MiniMax H3 (Ref2VA mode), a video generation model that produces synchronized video+audio from structured text prompts with reference assets.
+
+## TASK
+Transform the provided context data into a H3-compatible 6-section Ref2VA prompt. The output will be sent directly to MiniMax H3 for video generation.`;
+
+const R2V_GUIDE_PROCESS = `## PROCESS
+1. Read the provided reference assets (images, video, audio)
+2. Build subject definitions for each character and scene element
+3. Analyze retention levels for each subject and reference
+4. Generate detailed_description reusing the base prompt format
+5. Compose overall_soundscape and non_diegetic_music sections`;
+
+const R2V_GUIDE_OUTPUT = `## OUTPUT
+6-section structured Ref2VA prompt:
+- subject_definitions
+- summary
+- retention_analysis
+- detailed_description
+- overall_soundscape
+- non_diegetic_music`;
+
+const r2vGuideDef: PromptDefinition = {
+  key: "video_h3_r2v_guide",
+  nameKey: "promptTemplates.prompts.videoH3R2vGuide",
+  descriptionKey: "promptTemplates.prompts.videoH3R2vGuideDesc",
+  category: "video",
+  slots: [
+    slot("role", R2V_GUIDE_ROLE, true),
+    slot("process", R2V_GUIDE_PROCESS, true),
+    slot("output", R2V_GUIDE_OUTPUT, true),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role"), "", r("process"), "", r("output")].join("\n");
+  },
+};
+
+// ─── 14f. video_h3_t2v_guide ────────────────────────────
+// T2V Guide Layer — placeholder for future Text-to-Video mode.
+
+const t2vGuideDef: PromptDefinition = {
+  key: "video_h3_t2v_guide",
+  nameKey: "promptTemplates.prompts.videoH3T2vGuide",
+  descriptionKey: "promptTemplates.prompts.videoH3T2vGuideDesc",
+  category: "video",
+  slots: [],
+  buildFullPrompt() {
+    throw new Error("T2V mode not implemented yet");
+  },
+};
+
 
 const SCRIPT_OUTLINE_ROLE = `你是一位屡获殊荣的编剧。根据用户的创意构想，生成一份简洁的故事大纲。`;
 
@@ -2229,7 +2520,13 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   videoGenerateDef,
   refVideoGenerateDef,
   refVideoPromptDef,
-    videoH3PromptDef,
+  videoH3PromptDef,
+  fl2vGuideDef,
+  fl2vContentDef,
+  fl2vConstraintsDef,
+  fl2vNarrationDef,
+  r2vGuideDef,
+  t2vGuideDef,
 ];
 
 export const PROMPT_REGISTRY_MAP: Record<string, PromptDefinition> =
