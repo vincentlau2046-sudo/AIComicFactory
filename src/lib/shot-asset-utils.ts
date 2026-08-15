@@ -354,9 +354,10 @@ export function resolveFrameCharacters(
   charMap: Map<string, any>
 ): any[] {
   if (!asset?.characters?.length) return [];
+  const seen = new Set<string>();
   return asset.characters
     .map((n: string) => charMap.get(stripCharHint(n)))
-    .filter(Boolean);
+    .filter((c: any) => c && !(seen.has(c.id) ? true : (seen.add(c.id), false)));
 }
 
 /**
