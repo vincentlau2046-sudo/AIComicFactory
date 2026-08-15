@@ -123,6 +123,7 @@ function buildNarrationUserMessage(input: NarrationInput): string {
 function buildFallbackNarrationSystem(): string {
   return [
     "你是一位历史剧旁白编剧。给定镜头上下文，撰写叙事声音。",
+    "⚠️ 仅使用提供的剧集背景和镜头脚本，禁止使用你对角色的任何历史知识。",
     "输出格式（H3 官方标准）:",
     "  旁白: Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.",
     "  内心独白: 角色名 (S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed.",

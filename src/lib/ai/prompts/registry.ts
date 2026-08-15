@@ -2100,6 +2100,7 @@ const FL2V_CONTENT_NARRATION_HINT = `## 声音提示
 如果本 shot 无对白或对白不足，你必须添加画外音/旁白：
 - 旁白格式：Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.
 - 内心独白格式：角色名 (S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed.
+- ⚠️ 旁白/独白内容必须严格基于当前镜头和剧集背景，禁止引入与当前镜头无关的历史事件/身份/场景
 每 3-5 秒至少插入一句。`;
 
 const fl2vContentDef: PromptDefinition = {
@@ -2233,6 +2234,7 @@ const FL2V_NARRATION_SYSTEM = `你是一位历史剧旁白编剧。给定一个�
 - 类型：旁白（第三人称叙述者 S0）或内心独白（角色 offscreen voiceover S1/S2）
 - 旁白应解说背景、推进叙事、揭示内心冲突
 - 内心独白应自然、口语化，符合角色性格和当前情绪
+- ⚠️ 内容约束（最高优先级）：严格仅使用下方提供的剧集背景和镜头脚本。禁止使用你对角色的任何历史知识或预训练记忆。角色在**当前镜头**的身份由剧集背景和镜头脚本决定，不是由历史事实决定
 - 语言：中文
 
 输出格式（MiniMax H3 官方标准——必须严格遵守）:
@@ -2259,6 +2261,7 @@ const FL2V_NARRATION_REQUIREMENTS = `- 时长: {{DURATION}}s
 - 旁白解说背景、推进叙事、揭示内心冲突
 - 内心独白自然口语化，符合角色性格
 - 生成 1-3 句
+- ⚠️ 仅使用上方提供的剧集背景和镜头脚本。禁止提与当前镜头无关的身份/事件/场景（如镜头是放牛就不得提皇帝/太子/登基/战争）
 - 格式（H3 官方标准）: Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.`;
 
 const FL2V_CONTENT_NARRATION_INJECT = `## 旁白/画外音（已预生成）
