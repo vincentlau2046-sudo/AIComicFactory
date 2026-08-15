@@ -20,57 +20,12 @@ function buildContentLayer(
   const r = (key: string, fallback: string) => contentSlots[key] || fallback;
   const parts: string[] = [];
 
-  // Video Script
-  const scriptLabel = r("script_label", `## ${L("视频剧本", "VIDEO SCRIPT")}`);
-  parts.push(scriptLabel.replace("{{VIDEO_SCRIPT}}", input.videoScript || "(no script)"));
-  parts.push("");
-
-  // Characters
-  if (input.characters?.length) {
-    const charLabel = r("character_label", `## ${L("角色", "CHARACTERS")}`);
-    const charPrompt = charLabel.replace("{{CHARACTER_LIST}}", input.characters.map(c => {
-      const role = c.scope === "guest" ? L("[客串]", "[guest]") : "";
-      const style = c.performanceStyle ? `— ${c.performanceStyle}` : "";
-      return `- ${c.name} ${role}${style}`;
-    }).join("\n"));
-    parts.push(charPrompt);
-    parts.push("");
-  }
-
-  // Dialogues
-  if (input.dialogues?.length) {
-    const dialLabel = r("dialogue_label", `## ${L("对话台本（必须在视频中呈现！）", "DIALOGUE SCRIPT (MUST be included in the video!)")}`);
-    const usedNames: string[] = [];
-    for (const d of input.dialogues) {
-      if (!usedNames.includes(d.characterName)) usedNames.push(d.characterName);
-    }
-    const dialLines = input.dialogues.map(d => {
-      const sid = usedNames.indexOf(d.characterName) + 1;
-      return d.offscreen
-        ? L(`(S${sid})画外音`, `(S${sid}) off-screen`)
-        : `(S${sid})`;
-    }).join("\n");
-    parts.push(dialLabel.replace("{{DIALOGUE_LIST}}", dialLines));
-    parts.push("");
-  }
-
-  // Phase 2: Pre-generated narration lines (injected by builder)
-  // Only rendered when narration module is active
-  if (input.activeModules?.includes("narration") && input.narrations?.length) {
-    const narrSlots = getDefaultSlotContents("video_h3_fl2v_narration");
-    const injectTemplate = narrSlots?.content_inject ||
-      "## 旁白/画外音（已预生成）\n以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：\n{{NARRATION_LINES}}";
-    parts.push(injectTemplate.replace("{{NARRATION_LINES}}", input.narrations.join("\n")));
-    parts.push("");
-  }
-
-  // Frame Anchors — FL2V mode: only pass composition, not environment
+  // ── 1. Frame Anchors (visual facts first) ──
   const hasFrames = input.firstFrame?.prompt || input.lastFrame?.prompt;
   if (hasFrames) {
     const frameLabel = r("frame_label", `## ${L("帧锚点（关键帧图片）", "FRAME ANCHORS (keyframe images)")}`);
     const frameLines: string[] = [frameLabel];
     if (input.firstFrame?.prompt) {
-      // Extract only [shot] + [subject] from the structured tag prompt
       const trimmedFF = extractShotSubject(input.firstFrame.prompt);
       frameLines.push(L(
         `<Picture 1>（首帧）：${trimmedFF}`,
@@ -88,7 +43,12 @@ function buildContentLayer(
     parts.push("");
   }
 
-  // Episode context (keep — LLM needs narrative context)
+  // ── 2. Shot Intent ──
+  const scriptLabel = r("script_label", `## ${L("镜头意图", "SHOT INTENT")}`);
+  parts.push(scriptLabel.replace("{{VIDEO_SCRIPT}}", input.videoScript || "(no script)"));
+  parts.push("");
+
+  // ── 3. Episode Context ──
   if (input.episodeDescription) {
     const epLabel = r("episode_label", `## ${L("剧集背景", "EPISODE CONTEXT")}`);
     parts.push(epLabel.replace("{{EPISODE_CONTEXT}}", input.episodeDescription));
@@ -96,7 +56,45 @@ function buildContentLayer(
     parts.push("");
   }
 
-  // Audio
+  // ── 4. Characters ──
+  if (input.characters?.length) {
+    const charLabel = r("character_label", `## ${L("角色", "CHARACTERS")}`);
+    const charPrompt = charLabel.replace("{{CHARACTER_LIST}}", input.characters.map(c => {
+      const role = c.scope === "guest" ? L("[客串]", "[guest]") : "";
+      const style = c.performanceStyle ? `— ${c.performanceStyle}` : "";
+      return `- ${c.name} ${role}${style}`;
+    }).join("\n"));
+    parts.push(charPrompt);
+    parts.push("");
+  }
+
+  // ── 5. Dialogues ──
+  if (input.dialogues?.length) {
+    const dialLabel = r("dialogue_label", `## ${L("对话台本", "DIALOGUE SCRIPT")}`);
+    const usedNames: string[] = [];
+    for (const d of input.dialogues) {
+      if (!usedNames.includes(d.characterName)) usedNames.push(d.characterName);
+    }
+    const dialLines = input.dialogues.map(d => {
+      const sid = usedNames.indexOf(d.characterName) + 1;
+      return d.offscreen
+        ? L(`(S${sid})画外音`, `(S${sid}) off-screen`)
+        : `(S${sid})`;
+    }).join("\n");
+    parts.push(dialLabel.replace("{{DIALOGUE_LIST}}", dialLines));
+    parts.push("");
+  }
+
+  // ── 6. Pre-generated narration (if any) ──
+  if (input.activeModules?.includes("narration") && input.narrations?.length) {
+    const narrSlots = getDefaultSlotContents("video_h3_fl2v_narration");
+    const injectTemplate = narrSlots?.content_inject ||
+      "## 旁白/画外音（已预生成）\n以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：\n{{NARRATION_LINES}}";
+    parts.push(injectTemplate.replace("{{NARRATION_LINES}}", input.narrations.join("\n")));
+    parts.push("");
+  }
+
+  // ── 7. Audio ──
   if (input.soundDesign || input.musicCue || input.bgmUrl) {
     const audioLabel = r("audio_label", `## ${L("音频", "AUDIO")}`);
     const audioParts: string[] = [];
@@ -107,7 +105,7 @@ function buildContentLayer(
     parts.push("");
   }
 
-  // P2 prep: narration hint for dialogue-free shots (opt-in)
+  // ── 8. Narration hint (dialogue-free shots, opt-in) ──
   if (input.activeModules?.includes("narration") && !input.dialogues?.length && !input.narrations?.length) {
     const narrHint = r("narration_hint", "");
     if (narrHint) {
@@ -296,20 +294,20 @@ function buildGuideLayerFallback(lang: H3Language): string {
   return [
     `## ${L("角色", "ROLE")}`,
     L(
-      "你是 MiniMax H3 FL2VA 模式的专家级提示词工程师。",
-      "You are an expert prompt engineer for MiniMax H3 (FL2VA mode)."
+      "你是一位导演/编剧。",
+      "You are a director/screenwriter."
     ),
     "",
-    `## ${L("任务", "TASK")}`,
+    `## ${L("关键原则", "KEY PRINCIPLES")}`,
     L(
-      "将提供的视频剧本+上下文转换为 H3 兼容的结构化提示词。",
-      "Transform the provided video script + context into a H3-compatible structured prompt."
+      "视觉为先。静默是节奏。对话有骨头。动作是语言。因果有逻辑。",
+      "Visuals first. Silence is rhythm. Dialogue has bones. Action is language. Causality has logic."
     ),
     "",
     `## ${L("输出", "OUTPUT")}`,
     L(
-      "仅输出 H3 格式内容。无前言、无 markdown、无注释。",
-      "Only the H3 format content. No introduction, no markdown, no commentary."
+      "仅输出 H3 格式内容。",
+      "Only H3 format content."
     ),
   ].join("\n");
 }

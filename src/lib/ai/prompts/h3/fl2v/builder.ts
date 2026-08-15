@@ -25,9 +25,9 @@ export async function buildFL2VPromptLLM(
 ): Promise<H3PromptOutput> {
   const lang = resolveLanguage(input);
 
-  // Phase 2: Auto-generate narration for dialogue-free shots (opt-in via activeModules)
-  const narrationEnabled = input.activeModules?.includes("narration");
-  if (narrationEnabled && !input.dialogues?.length && !input.narrations?.length) {
+  // Phase 2: Auto-generate narration only when explicitly enabled per shot
+  const narrationEnabled = input.activeModules?.includes("narration") && input.enableNaration;
+  if (narrationEnabled && !input.narrations?.length) {
     try {
       const narration = await generateNarration(
         {
