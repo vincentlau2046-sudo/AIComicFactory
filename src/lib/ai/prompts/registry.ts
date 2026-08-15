@@ -1378,6 +1378,12 @@ ComfyUI 图像生成器每个镜头只支持 ≤3 张角色参考图。
   ● [subject] 标签中可以描述超过 3 个角色（文字角色无限制），
     但 firstFrameCharacters / lastFrameCharacters 数组必须 ≤3
 
+【characters 数组顺序必须等于 [subject] 描述顺序——致命约束】
+Picture 1/2/3 标签严格按 firstFrameCharacters 数组顺序（index 0→Picture 1）分配参考图。
+  ● 数组顺序必须与 [subject] 标签中角色从上到下的描述顺序**完全一致**
+  ● 若 [subject] 先写朱父后写朱元璋，数组必须是 ["朱父","朱元璋"]，不可颠倒
+  ● **自检**：生成完成后，逐行对比 [subject] 中的角色名和 firstFrameCharacters 的排列顺序
+
 [camera] 构图说明 + 前景/中景/背景层次 + 景深
   如: "低地平线构图，人物居中偏下，天空占画面 2/3，深景深"
 
@@ -1483,7 +1489,8 @@ const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一
 - 分别列出各自帧画面中视觉上出现的角色（纯 MDN name，不带 visualHint 括号）
 - 若某角色仅在一帧出现（如首帧多人同屏、尾帧单角色特写），只放在对应帧的数组中
 - 仅旁白/画外音的角色不要列入
-- **每帧最多 3 个角色**（ComfyUI 参考图 slot 限制）。超过 3 个时选最重要的 3 个，其余在 [subject] 中用文字描述
+- **每帧最多 3 个角色**（ComfyUI 参考图 slot 限制）。超过 3 个时选最重要的 3 个
+- **数组顺序必须等于 [subject] 标签中角色的描述顺序**（Picture N 按数组 index 分配，顺序错会导致参考图对调）
 - 空数组 [] 是合法的（纯环境镜头）；`
 
 const shotKeyframeAssetsDef: PromptDefinition = {
