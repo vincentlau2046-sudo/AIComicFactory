@@ -1,16 +1,22 @@
 // ═══════════════════════════════════════════════
 // H3 FL2V Builder — LLM + local fallback (v0.3.0)
 // Reads Guide/Content/Constraint layers from prompt registry.
+// Phase 2: auto-generates narration for dialogue-free shots.
 // ═══════════════════════════════════════════════
 
 import type { AIProvider } from "@/lib/ai/types";
 import type { H3PromptInput, H3PromptOutput } from "../types";
 import { buildFL2VPromptTemplate } from "./prompt-template";
 import { resolveLanguage, buildH3Sections, parseLLMSections } from "../shared/base-builder";
+import { generateNarration } from "./narration-gen";
 
 /**
  * FL2V LLM builder — calls system AI provider with registry-sourced template.
  * Falls back to local formatting on failure.
+ *
+ * Phase 2: If the shot has no dialogues, automatically generates narration lines
+ * (historical context / inner monologue) via the same textProvider before
+ * building the main prompt template.
  */
 export async function buildFL2VPromptLLM(
   input: H3PromptInput,
@@ -18,6 +24,32 @@ export async function buildFL2VPromptLLM(
   systemOverride?: string
 ): Promise<H3PromptOutput> {
   const lang = resolveLanguage(input);
+
+  // Phase 2: Auto-generate narration for dialogue-free shots
+  if (!input.dialogues?.length && !input.narrations?.length) {
+    try {
+      const narration = await generateNarration(
+        {
+          videoScript: input.videoScript,
+          episodeDescription: input.episodeDescription,
+          episodeKeywords: input.episodeKeywords,
+          characters: input.characters.map(c => ({
+            name: c.name,
+            scope: c.scope,
+            performanceStyle: c.performanceStyle,
+          })),
+          duration: input.duration,
+        },
+        textProvider
+      );
+      if (narration.generated && narration.lines.length > 0) {
+        input = { ...input, narrations: narration.lines };
+      }
+    } catch (e) {
+      console.warn("[H3-FL2V] Narration generation skipped:", (e as Error).message);
+    }
+  }
+
   try {
     const { system, user } = await buildFL2VPromptTemplate(input, systemOverride);
 

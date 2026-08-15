@@ -54,6 +54,17 @@ function buildContentLayer(
     parts.push("");
   }
 
+  // Phase 2: Pre-generated narration lines (injected by builder)
+  if (input.narrations?.length) {
+    parts.push(`## ${L("旁白/画外音（已预生成）", "NARRATION (pre-generated)")}`);
+    parts.push(L(
+      "以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：",
+      "The following narration/voiceover lines have been pre-generated from the script and episode context. They MUST be embedded in the corresponding time segments:"
+    ));
+    parts.push(input.narrations.join("\n"));
+    parts.push("");
+  }
+
   // Frame Anchors — FL2V mode: only pass composition, not environment
   const hasFrames = input.firstFrame?.prompt || input.lastFrame?.prompt;
   if (hasFrames) {
@@ -234,10 +245,16 @@ function buildConstraintLayer(
   )) + "\n\n";
 
   // Rule 17-18: Voice auto-fill
-  text += r("voice", L(
-    "【声音 — 主动补位】\n17. 如果本 shot 对话台本为空，必须主动生成画外音或旁白\n18. 每 3-5 秒至少一句声音。禁止纯默片 shot。",
-    "【Voice — Active Fill】\n17. If dialogue is empty, actively generate off-screen voiceover or narration.\n18. At least one spoken line every 3-5s. No pure silent shots."
-  )) + "\n";
+  const voiceRule = input.narrations?.length
+    ? r("voice", L(
+      "【声音 — 预生成旁白已提供】\n17. 上方「旁白/画外音（已预生成）」中提供了叙事声音行。你必须将它们嵌入到 integrated_multimodal_description 的对应时间段中。\n18. 每 3-5 秒至少嵌入一句。禁止纯默片 shot。",
+      "【Voice — Pre-generated Narration Provided】\n17. The NARRATION section above provides voice lines. Embed them into the corresponding time segments.\n18. At least one spoken line every 3-5s. No pure silent shots."
+    ))
+    : r("voice", L(
+      "【声音 — 主动补位】\n17. 如果本 shot 对话台本为空，必须主动生成画外音或旁白\n18. 每 3-5 秒至少一句声音。禁止纯默片 shot。",
+      "【Voice — Active Fill】\n17. If dialogue is empty, actively generate off-screen voiceover or narration.\n18. At least one spoken line every 3-5s. No pure silent shots."
+    ));
+  text += voiceRule + "\n";
 
   return text;
 }
