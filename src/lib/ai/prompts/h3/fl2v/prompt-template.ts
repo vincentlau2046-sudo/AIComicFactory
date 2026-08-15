@@ -300,7 +300,7 @@ function buildGuideLayerFallback(lang: H3Language): string {
     "",
     `## ${L("关键原则", "KEY PRINCIPLES")}`,
     L(
-      "视觉为先。静默是节奏。对话有骨头。动作是语言。因果有逻辑。",
+      "视觉为先。适当的时候加入画外音或内心独白。对话有骨头。动作是语言。因果有逻辑。",
       "Visuals first. Silence is rhythm. Dialogue has bones. Action is language. Causality has logic."
     ),
     "",
