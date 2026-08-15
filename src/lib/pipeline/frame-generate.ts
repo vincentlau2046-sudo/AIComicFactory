@@ -135,8 +135,15 @@ export async function handleFrameGenerate(task: Task) {
   const lastFrameAsset = await getActiveAsset(payload.shotId, "last_frame", 0)
     || await getLatestCompletedAsset(payload.shotId, "last_frame");
 
-  const startFrameDescText = firstFrameAsset?.prompt || shot.prompt || "";
-  const endFrameDescText = lastFrameAsset?.prompt || shot.prompt || "";
+  if (!firstFrameAsset?.prompt) {
+    throw new Error(`Shot ${shot.sequence}: missing first_frame keyframe prompt. Run keyframe prompt generation first.`);
+  }
+  if (!lastFrameAsset?.prompt) {
+    throw new Error(`Shot ${shot.sequence}: missing last_frame keyframe prompt. Run keyframe prompt generation first.`);
+  }
+
+  const startFrameDescText = firstFrameAsset.prompt;
+  const endFrameDescText = lastFrameAsset.prompt;
 
   // Pick character refs to attach as visual anchors. Per-frame: each frame
   // has its own cast — don't merge. Preserve frame character order (not DB order).
