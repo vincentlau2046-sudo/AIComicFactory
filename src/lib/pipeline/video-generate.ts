@@ -10,9 +10,9 @@ import { checkVideoQuality } from "./video-quality-check";
 import { buildVideoPrompt } from "@/lib/ai/prompts/video-generate";
 import { resolvePrompt, resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { getModelMaxDuration } from "@/lib/ai/model-limits";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, asc, and } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
-import { getActiveAsset, insertAssetVersion } from "@/lib/shot-asset-utils";
+import { getActiveAsset, insertAssetVersion, stripCharHint } from "@/lib/shot-asset-utils";
 import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 import { getUploadDir } from "@/lib/env";
 
@@ -55,6 +55,26 @@ export async function handleVideoGenerate(task: Task) {
   }
 
   const projectCharacters = await getEpisodeCharacters(payload.projectId ?? shot.projectId, shot.episodeId);
+
+  // Filter to only characters present in the frames
+  const parseCharList = (raw: unknown): string[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.map(String);
+    if (typeof raw === 'string') {
+      try { const p = JSON.parse(raw); return Array.isArray(p) ? p.map(String) : []; } catch { return []; }
+    }
+    return [];
+  };
+  const ffChars = parseCharList(firstFrameAsset?.characters);
+  const lfChars = parseCharList(lastFrameAsset?.characters);
+  const frameCharNames = [...new Set([...ffChars, ...lfChars])];
+  const frameCharacters = frameCharNames.length > 0
+    ? projectCharacters.filter(c =>
+        frameCharNames.some(n =>
+          c.baseName === n || stripCharHint(c.name) === n
+        )
+      )
+    : projectCharacters;
 
   // ─── Read context tables (v0.2.0: H3 prompt enrichment) ───
 
@@ -184,13 +204,31 @@ export async function handleVideoGenerate(task: Task) {
       }
     }
 
+  // Build episode structure (story outline + shot list)
+  const allEpShots = (shot.episodeId && shot.versionId)
+    ? await db.select().from(shots)
+        .where(and(eq(shots.episodeId, shot.episodeId!), eq(shots.versionId, shot.versionId!)))
+        .orderBy(asc(shots.sequence))
+    : [];
+  const epOutline = episode?.outline || '';
+  const shotList = allEpShots.map(s => {
+    const marker = s.id === shot.id ? '▶' : ' ';
+    const scene = (s.prompt || '').substring(0, 60);
+    const act = (s.videoScript || '').replace(/\d+-\d+s[:\uff1a]\s*/g, '').substring(0, 60);
+    return `${marker} Shot ${s.sequence}: ${scene} \u2014 ${act}`;
+  }).join('\n');
+  const episodeStructure = epOutline
+    ? `\u672c\u5267\u96c6\u5171 ${allEpShots.length} \u4e2a\u955c\u5934\u3002\u25b6 \u6807\u8bb0\u4e3a\u5f53\u524d\u6b63\u5728\u5904\u7406\u7684\u955c\u5934\uff1a\n\n${shotList}`
+    : shotList;
+
+
     const h3Output = await buildH3Builder({
       videoScript,
       motionScript: shot.motionScript,
       duration: effectiveDuration,
       cameraDirection: shot.cameraDirection || "static",
       generationMode,
-      characters: projectCharacters.map(c => ({
+      characters: frameCharacters.map(c => ({
         id: c.id, name: c.name,
         description: c.description, visualHint: c.visualHint,
         referenceImage: c.referenceImage, performanceStyle: c.performanceStyle,
@@ -199,7 +237,7 @@ export async function handleVideoGenerate(task: Task) {
       firstFrame: firstFrameAsset.fileUrl ? { fileUrl: firstFrameAsset.fileUrl, prompt: firstFrameAsset.prompt } : undefined,
       lastFrame: lastFrameAsset.fileUrl ? { fileUrl: lastFrameAsset.fileUrl, prompt: lastFrameAsset.prompt } : undefined,
       dialogues: enrichedDialogues,
-      sceneDescription: sceneDesc,
+      sceneDescription: shot.prompt || sceneDesc,
       sceneLighting,
       sceneColorPalette,
       soundDesign: shot.soundDesign || undefined,
@@ -210,7 +248,7 @@ export async function handleVideoGenerate(task: Task) {
         referenceImage: c.referenceImage, characterId: c.characterId,
       })),
       compositionGuide: shot.compositionGuide || undefined,
-      episodeDescription: episodeDesc,
+      episodeDescription: episodeStructure || episodeDesc,
       episodeKeywords,
       projectIdea: project?.idea || undefined,
       languageMode: h3Lang,
@@ -226,7 +264,7 @@ export async function handleVideoGenerate(task: Task) {
       startFrameDesc: firstFrameAsset?.prompt ?? undefined,
       endFrameDesc: lastFrameAsset?.prompt ?? undefined,
       duration: effectiveDuration,
-      characters: projectCharacters,
+      characters: frameCharacters.length > 0 ? frameCharacters : projectCharacters,
       slotContents: videoSlots,
     });
   }

@@ -2118,7 +2118,7 @@ const fl2vGuideDef: PromptDefinition = {
 // ─── 14b. video_h3_fl2v_content ────────────────────────
 // FL2V Content Layer labels — static labels with {{PLACEHOLDERS}} injected at runtime.
 
-const FL2V_CONTENT_SCRIPT_LABEL = `## 视频剧本
+const FL2V_CONTENT_SCRIPT_LABEL = `## 镜头动作（从首帧到尾帧的时间线）
 {{VIDEO_SCRIPT}}`;
 
 const FL2V_CONTENT_CHAR_LABEL = `## 角色
@@ -2133,7 +2133,7 @@ const FL2V_CONTENT_FRAME_LABEL = `## 帧锚点（关键帧图片）
 以下是实际用作首/末帧锚点的图片。你只需了解角色的位置和构图——不要描述环境/光线/物件细节（图片已提供）。
 {{FRAME_ANCHORS}}`;
 
-const FL2V_CONTENT_EPISODE_LABEL = `## 剧集背景
+const FL2V_CONTENT_EPISODE_LABEL = `## 故事与分集
 {{EPISODE_CONTEXT}}`;
 
 const FL2V_CONTENT_AUDIO_LABEL = `## 音频

@@ -48,6 +48,13 @@ function buildContentLayer(
   parts.push(scriptLabel.replace("{{VIDEO_SCRIPT}}", input.videoScript || "(no script)"));
   parts.push("");
 
+  // ── 2b. Scene Description ──
+  if (input.sceneDescription) {
+    parts.push(`## ${L("场景描述", "SCENE")}`);
+    parts.push(input.sceneDescription);
+    parts.push("");
+  }
+
   // ── 3. Episode Context ──
   if (input.episodeDescription) {
     const epLabel = r("episode_label", `## ${L("剧集背景", "EPISODE CONTEXT")}`);
@@ -122,14 +129,17 @@ function buildContentLayer(
  * Strips [environment], [lighting], [color] — those are provided by reference images.
  */
 function extractShotSubject(prompt: string): string {
-  // Match [shot] ... and [subject] ... or [scene] ... blocks
+  // Match [shot], [subject]/[scene], [environment] blocks
+  // Skip [lighting] and [color] — those are provided by the image itself
   const shotMatch = prompt.match(/\[shot\][^\[]*/);
   const subjectMatch = prompt.match(/\[subject\][^\[]*/);
   const sceneMatch = prompt.match(/\[scene\][^\[]*/);
+  const envMatch = prompt.match(/\[environment\][^\[]*/);
   const parts: string[] = [];
   if (shotMatch) parts.push(shotMatch[0].trim());
   if (subjectMatch) parts.push(subjectMatch[0].trim());
   else if (sceneMatch) parts.push(sceneMatch[0].trim());
+  if (envMatch) parts.push(envMatch[0].trim());
   return parts.join(" | ") || prompt.slice(0, 100);
 }
 
