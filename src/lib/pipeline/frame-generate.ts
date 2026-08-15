@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { shots, characters, projects, episodes, characterCostumes } from "@/lib/db/schema";
+import { shots, projects, episodes, characterCostumes } from "@/lib/db/schema";
 import { resolveImageProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import {
@@ -10,6 +10,7 @@ import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { eq, and, lt, desc } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { getActiveAsset, getLatestCompletedAsset, insertAssetVersion, patchAsset, copyToUploads, stripCharHint } from "@/lib/shot-asset-utils";
+import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 import { ratioToSize } from "@/lib/ai/size";
 
 export async function handleFrameGenerate(task: Task) {
@@ -29,10 +30,7 @@ export async function handleFrameGenerate(task: Task) {
 
   if (!shot) throw new Error("Shot not found");
 
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(eq(characters.projectId, payload.projectId));
+  const projectCharacters = await getEpisodeCharacters(payload.projectId, shot.episodeId);
 
   // Parse costume overrides from shot
   const rawCostumeOverrides = shot.costumeOverrides as string | null | undefined;

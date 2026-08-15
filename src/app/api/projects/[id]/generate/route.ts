@@ -72,34 +72,8 @@ export const maxDuration = 300;
 
 
 /** Fetch characters linked to an episode via episode_characters, or all project characters if no episode. */
-async function getEpisodeCharacters(projectId: string, epId?: string | null) {
-  if (epId) {
-    // Priority 1: linked via episode_characters join table (instance rows, Type B)
-    const linkedIds = await db
-      .select({ characterId: episodeCharacters.characterId })
-      .from(episodeCharacters)
-      .where(eq(episodeCharacters.episodeId, epId));
-    if (linkedIds.length > 0) {
-      return db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)));
-    }
-    // Priority 2: direct lookup by episode_id on characters table (instance rows without join)
-    const directInstances = await db.select().from(characters).where(eq(characters.episodeId, epId));
-    if (directInstances.length > 0) {
-      return directInstances;
-    }
-    // Priority 3: fallback to project-level template rows (Type A, episode_id=null)
-    return db.select().from(characters).where(and(
-      eq(characters.projectId, projectId),
-      isNull(characters.episodeId)
-    ));
-  }
-  return db.select().from(characters).where(eq(characters.projectId, projectId));
-}
+import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 
-/**
- * Check if a character is visible on-screen by looking for their name
- * in the videoScript or startFrameDesc fields.
- */
 function isCharacterOnScreen(
   characterName: string,
   videoScript: string,
@@ -1910,10 +1884,7 @@ async function handleSingleVideoGenerate(
 
   const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
 
-  const shotCharacters = await db
-    .select()
-    .from(characters)
-    .where(eq(characters.projectId, shot.projectId));
+  const shotCharacters = await getEpisodeCharacters(projectId, shot.episodeId);
   const characterDescriptions = shotCharacters
     .map((c) => `${c.name}${c.visualHint ? `（${c.visualHint}）` : ""}: ${c.description}`)
     .join("\n");
@@ -2290,10 +2261,7 @@ async function handleSingleReferenceVideo(
 
   const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
 
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(eq(characters.projectId, shot.projectId));
+  const projectCharacters = await getEpisodeCharacters(projectId, shot.episodeId);
 
   // Collect the union of character names declared on this shot's
   // reference assets — this is the precise set of characters the AI said
@@ -2871,7 +2839,7 @@ async function handleSingleVideoPrompt(
   console.log(`[SingleVideoPrompt] shot.sequence=${shot.sequence}, mode=${genMode}, frames=${visionFrames.length}`);
   // Allow text-only prompt when no frames available (non-vision models)
 
-  const shotCharacters = await db.select().from(characters).where(eq(characters.projectId, shot.projectId));
+  const shotCharacters = await getEpisodeCharacters(projectId, shot.episodeId);
 
   // ── H3 prompt: build from structured data ──
   const textProvider = resolveAIProvider(modelConfig);

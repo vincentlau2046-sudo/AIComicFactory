@@ -13,6 +13,7 @@ import { getModelMaxDuration } from "@/lib/ai/model-limits";
 import { eq, inArray } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { getActiveAsset, insertAssetVersion } from "@/lib/shot-asset-utils";
+import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 import { getUploadDir } from "@/lib/env";
 
 async function getVersionedUploadDirFromPipeline(versionId: string | null | undefined): Promise<string> {
@@ -53,10 +54,7 @@ export async function handleVideoGenerate(task: Task) {
     return { videoPath: existingVideo.fileUrl, skipped: true };
   }
 
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(eq(characters.projectId, shot.projectId));
+  const projectCharacters = await getEpisodeCharacters(payload.projectId ?? shot.projectId, shot.episodeId);
 
   // ─── Read context tables (v0.2.0: H3 prompt enrichment) ───
 

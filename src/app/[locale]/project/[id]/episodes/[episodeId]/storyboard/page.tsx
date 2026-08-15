@@ -271,20 +271,23 @@ export default function EpisodeStoryboardPage() {
       const data = await response.json() as { enqueued: number; taskIds: string[]; totalShots: number };
       if (data.enqueued === 0) {
         toast.success("所有镜头已有画面，无需生成");
+        setGeneratingFrames(false);
+        setGeneratingFramesOverwrite(false);
       } else {
         toast.success(`已调度 ${data.enqueued} 个生成任务，后台处理中`);
         startTaskPolling(project.id, data.taskIds, () => {
+          setGeneratingFrames(false);
+          setGeneratingFramesOverwrite(false);
           toast.success(`${data.enqueued} 个镜头生成完成`);
+          fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
         });
       }
     } catch (err) {
       console.error("Batch frame generate error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+      setGeneratingFrames(false);
+      setGeneratingFramesOverwrite(false);
     }
-
-    setGeneratingFramesOverwrite(false);
-    setGeneratingFrames(false);
-    await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
   }
 
   async function handleBatchGenerateVideos(overwrite = false) {
@@ -308,20 +311,23 @@ export default function EpisodeStoryboardPage() {
       const data = await response.json() as { enqueued: number; taskIds: string[]; totalShots: number };
       if (data.enqueued === 0) {
         toast.success("所有镜头已有视频，无需生成");
+        setGeneratingVideos(false);
+        setGeneratingVideosOverwrite(false);
       } else {
         toast.success(`已调度 ${data.enqueued} 个视频任务，后台处理中`);
         startTaskPolling(project.id, data.taskIds, () => {
+          setGeneratingVideos(false);
+          setGeneratingVideosOverwrite(false);
           toast.success(`${data.enqueued} 个视频生成完成`);
+          fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
         });
       }
     } catch (err) {
       console.error("Batch video generate error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+      setGeneratingVideos(false);
+      setGeneratingVideosOverwrite(false);
     }
-
-    setGeneratingVideosOverwrite(false);
-    setGeneratingVideos(false);
-    await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
   }
 
   // ── Task queue progress polling ──
