@@ -55,7 +55,8 @@ function buildContentLayer(
   }
 
   // Phase 2: Pre-generated narration lines (injected by builder)
-  if (input.narrations?.length) {
+  // Only rendered when narration module is active
+  if (input.activeModules?.includes("narration") && input.narrations?.length) {
     const narrSlots = getDefaultSlotContents("video_h3_fl2v_narration");
     const injectTemplate = narrSlots?.content_inject ||
       "## 旁白/画外音（已预生成）\n以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：\n{{NARRATION_LINES}}";
@@ -106,8 +107,8 @@ function buildContentLayer(
     parts.push("");
   }
 
-  // P2 prep: narration hint for dialogue-free shots
-  if (!input.dialogues?.length) {
+  // P2 prep: narration hint for dialogue-free shots (opt-in)
+  if (input.activeModules?.includes("narration") && !input.dialogues?.length && !input.narrations?.length) {
     const narrHint = r("narration_hint", "");
     if (narrHint) {
       parts.push(narrHint);
@@ -242,8 +243,9 @@ function buildConstraintLayer(
     "【Body Action Vocabulary】\n15. Use concrete physical verbs: turn head, raise eyes, clench, release, step forward, lean back...\n16. No abstract terms"
   )) + "\n\n";
 
-  // Rule 17-18: Voice auto-fill
-  const voiceRule = input.narrations?.length
+  // Rule 17-18: Voice auto-fill (opt-in via narration module)
+  if (input.activeModules?.includes("narration")) {
+    const voiceRule = input.narrations?.length
     ? r("voice", L(
       "【声音 — 预生成旁白已提供】\n17. 上方「旁白/画外音（已预生成）」中提供了叙事声音行。你必须将它们嵌入到 integrated_multimodal_description 的对应时间段中。\n18. 每 3-5 秒至少嵌入一句。禁止纯默片 shot。",
       "【Voice — Pre-generated Narration Provided】\n17. The NARRATION section above provides voice lines. Embed them into the corresponding time segments.\n18. At least one spoken line every 3-5s. No pure silent shots."
@@ -252,7 +254,8 @@ function buildConstraintLayer(
       "【声音 — 主动补位】\n17. 如果本 shot 对话台本为空，必须主动生成画外音或旁白\n18. 每 3-5 秒至少一句声音。禁止纯默片 shot。",
       "【Voice — Active Fill】\n17. If dialogue is empty, actively generate off-screen voiceover or narration.\n18. At least one spoken line every 3-5s. No pure silent shots."
     ));
-  text += voiceRule + "\n";
+    text += voiceRule + "\n";
+  }
 
   return text;
 }

@@ -215,6 +215,7 @@ export async function handleVideoGenerate(task: Task) {
       projectIdea: project?.idea || undefined,
       languageMode: h3Lang,
       slotContents: videoSlots,
+      activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
     }, textProvider, h3System);
     prompt = h3Output.sections.join("\n\n");
   } else {

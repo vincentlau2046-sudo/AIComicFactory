@@ -1963,6 +1963,7 @@ async function handleSingleVideoGenerate(
         languageMode: h3Lang,
         dialogues: undefined,
             // TODO: load per-shot dialogues for batch H3
+        activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
       }, textProvider, h3System);
       videoPrompt = h3Output.sections.join("\n\n");
     } else {
@@ -2886,6 +2887,7 @@ async function handleSingleVideoPrompt(
       soundDesign: shot.soundDesign || undefined,
       musicCue: shot.musicCue || undefined,
       languageMode: h3Lang,
+      activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
     }, textProvider, h3System);
     const h3Text = h3Output.sections.join("\n\n");
     await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shotId));
@@ -3053,6 +3055,7 @@ async function handleBatchVideoPrompt(
           languageMode: h3Lang,
           dialogues: undefined,
           // TODO: load per-shot dialogues for batch H3
+          activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
         }, textProvider, h3System);
         const h3Text = h3Output.sections.join("\n\n");
         await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shot.id));
