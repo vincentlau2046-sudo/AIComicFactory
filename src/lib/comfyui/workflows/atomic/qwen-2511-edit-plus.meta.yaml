@@ -58,9 +58,10 @@ inputs:
     default: 42
   - node_id: 13
     field: steps
-    name: steps
+    name: edit_steps
     type: int
-    default: 8
+    default: 4
+    description: "编辑步骤（Pass 2 角色嵌入，4-step Lightning LoRA 可稳定工作）"
   - node_id: 13
     field: cfg
     name: cfg
