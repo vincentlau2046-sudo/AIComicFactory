@@ -89,7 +89,7 @@ export async function generateNarration(
 function buildNarrationUserMessage(input: NarrationInput): string {
   // Read user template from registry, with hardcoded fallback
   let template = "## 镜头视频脚本\n{{VIDEO_SCRIPT}}\n\n## 剧集背景\n{{EPISODE_CONTEXT}}\n\n## 出场角色\n{{CHARACTER_LIST}}\n\n## 要求\n{{REQUIREMENTS}}";
-  let requirements = `- 时长: {{DURATION}}s\n- 类型: 旁白（S0 第三人称叙述者）或 内心独白（角色 offscreen voiceover）\n- 格式: (S0) says in an off-screen voiceover: <d>[Chinese] text</d>\n- 旁白解说背景、推进叙事、揭示内心冲突\n- 内心独白自然口语化，符合角色性格\n- 生成 1-3 句`;
+  let requirements = `- 时长: {{DURATION}}s\n- 类型: 旁白（S0 第三人称叙述者）或 内心独白（角色 offscreen voiceover）\n- 旁白解说背景、推进叙事、揭示内心冲突\n- 内心独白自然口语化，符合角色性格\n- 生成 1-3 句\n- 格式（H3 官方标准）: Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator\'s lips remain completely closed.`;
 
   try {
     const slots = getDefaultSlotContents("video_h3_fl2v_narration");
@@ -123,7 +123,9 @@ function buildNarrationUserMessage(input: NarrationInput): string {
 function buildFallbackNarrationSystem(): string {
   return [
     "你是一位历史剧旁白编剧。给定镜头上下文，撰写叙事声音。",
-    "输出格式: (S0) says in an off-screen voiceover: <d>[Chinese] text</d>",
+    "输出格式（H3 官方标准）:",
+    "  旁白: Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.",
+    "  内心独白: 角色名 (S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed.",
     "仅输出声音行，不要前言。",
   ].join("\n");
 }

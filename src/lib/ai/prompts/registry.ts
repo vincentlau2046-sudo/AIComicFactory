@@ -2098,8 +2098,8 @@ const FL2V_CONTENT_AUDIO_LABEL = `## 音频
 
 const FL2V_CONTENT_NARRATION_HINT = `## 声音提示
 如果本 shot 无对白或对白不足，你必须添加画外音/旁白：
-- 旁白格式：(S0) says in an off-screen voiceover: <d>[Chinese] 文本</d>
-- 内心独白格式：(S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed
+- 旁白格式：Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.
+- 内心独白格式：角色名 (S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed.
 每 3-5 秒至少插入一句。`;
 
 const fl2vContentDef: PromptDefinition = {
@@ -2149,7 +2149,7 @@ const FL2V_CONSTRAINT_CAMERA = `【运镜 — 第一优先级】
 
 const FL2V_CONSTRAINT_DIALOGUE = `【对白 — 强制执行】
 5. 对白格式：(S1)说：<d>[中文] 原文台词</d>
-   画外音格式：(S1) says in an off-screen voiceover: <d>[Chinese] text</d>
+   画外音格式（H3 官方标准）：角色名 (S1) says in an off-screen voiceover: <d>[Chinese] text</d> while his lips remain completely closed.
 6. 对白必须嵌入对应时间段——先描述角色动作，再写对白行`;
 
 const FL2V_CONSTRAINT_FORMAT = `【格式】
@@ -2231,10 +2231,14 @@ const FL2V_NARRATION_SYSTEM = `你是一位历史剧旁白编剧。给定一个�
 输出要求：
 - 生成 1-3 句声音内容
 - 类型：旁白（第三人称叙述者 S0）或内心独白（角色 offscreen voiceover S1/S2）
-- 格式：(S0) says in an off-screen voiceover: <d>[Chinese] text</d>
 - 旁白应解说背景、推进叙事、揭示内心冲突
 - 内心独白应自然、口语化，符合角色性格和当前情绪
 - 语言：中文
+
+输出格式（MiniMax H3 官方标准——必须严格遵守）:
+  旁白:    Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.
+  内心独白: 角色名 (S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed.
+  注意: <d> 标签内必须包含 [Chinese] 语言标识。每句后必须跟 while ... lips remain completely closed。
 
 仅输出声音行，不要前言/解释/markdown。`;
 
@@ -2252,10 +2256,10 @@ const FL2V_NARRATION_USER_TEMPLATE = `## 镜头视频脚本
 
 const FL2V_NARRATION_REQUIREMENTS = `- 时长: {{DURATION}}s
 - 类型: 旁白（S0 第三人称叙述者）或 内心独白（角色 offscreen voiceover）
-- 格式: (S0) says in an off-screen voiceover: <d>[Chinese] text</d>
 - 旁白解说背景、推进叙事、揭示内心冲突
 - 内心独白自然口语化，符合角色性格
-- 生成 1-3 句`;
+- 生成 1-3 句
+- 格式（H3 官方标准）: Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.`;
 
 const FL2V_CONTENT_NARRATION_INJECT = `## 旁白/画外音（已预生成）
 以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：
