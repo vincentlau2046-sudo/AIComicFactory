@@ -3769,10 +3769,17 @@ async function handleSingleKeyframePrompts(
     }
 
     // Per-frame character resolution with backward compat
-    const firstFrameChars = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters
-      : Array.isArray(entry.characters) ? entry.characters : [];
-    const lastFrameChars = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters
-      : Array.isArray(entry.characters) ? entry.characters : [];
+    // Safety: strip visualHint and dedup — LLM may output hint names despite prompt rules
+    const cleanChars = (arr: string[]): string[] =>
+      [...new Set(arr.map((n: string) => stripCharHint(n)))];
+    const firstFrameChars = cleanChars(
+      Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters
+      : Array.isArray(entry.characters) ? entry.characters : []
+    );
+    const lastFrameChars = cleanChars(
+      Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters
+      : Array.isArray(entry.characters) ? entry.characters : []
+    );
 
     for (const [idx, type] of (["first_frame", "last_frame"] as const).entries()) {
       const charsForType = idx === 0 ? firstFrameChars : lastFrameChars;
@@ -3851,9 +3858,12 @@ async function handleGenerateKeyframePrompts(
 
         const startFrame = (entry.startFrame || (entry.prompts as string[])?.[0] || "") as string;
         const endFrame = (entry.endFrame || (entry.prompts as string[])?.[1] || "") as string;
-        const chars = Array.isArray(entry.characters) ? entry.characters as string[] : [];
-        const firstChars = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters as string[] : chars;
-        const lastChars = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters as string[] : chars;
+        const rawChars = Array.isArray(entry.characters) ? entry.characters as string[] : [];
+        const chars = [...new Set(rawChars.map((n: string) => stripCharHint(n)))];
+        const rawFirst = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters as string[] : chars;
+        const rawLast = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters as string[] : chars;
+        const firstChars = [...new Set(rawFirst.map((n: string) => stripCharHint(n)))];
+        const lastChars = [...new Set(rawLast.map((n: string) => stripCharHint(n)))];
 
         if (startFrame) {
           await insertAssetVersion({ shotId: shot.id, type: "first_frame", sequenceInType: 0, prompt: startFrame, status: "pending", characters: firstChars });
@@ -4018,11 +4028,14 @@ async function handleGenerateKeyframePrompts(
         throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
       }
 
-      const firstFrameChars = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters
-        : Array.isArray(entry.lastFrameCharacters) ? undefined /* don't use lastFrame for firstFrame */
+      const rc = (arr: string[]): string[] => [...new Set(arr.map((n: string) => stripCharHint(n)))];
+      const rawFF = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters
+        : Array.isArray(entry.lastFrameCharacters) ? undefined 
         : Array.isArray(entry.characters) ? entry.characters : [];
-      const lastFrameChars = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters
+      const rawLF = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters
         : Array.isArray(entry.characters) ? entry.characters : [];
+      const firstFrameChars = rawFF ? rc(rawFF as string[]) : undefined;
+      const lastFrameChars = rc(rawLF as string[]);
       await insertAssetVersion({
         shotId: shot.id,
         type: "first_frame",
