@@ -1362,6 +1362,14 @@ ${themeStyleMappingBlock()}
   ▶ 无角色（characters 数组为空，纯环境镜头）→ 使用 [scene]:
     场景主体描述 + 关键视觉元素
 
+【多角色场景精简规则——firstFrameCharacters 或 lastFrameCharacters 含 2+ 角色时强制生效】
+为控制 Qwen Image 模型 conditioning 复杂度，防止失真/角色丢失：
+  ● [subject] 每个角色只写：baseName + 身体姿态 + 面部表情 + 视线方向
+    （不写双脚位置/手部位置/手持物/衣物临时状态——参考图已提供）
+  ● [camera] 不指定前景物体（不写堆叠木柴、摊位、货摊等）
+  ● [environment] 缩减到 1 句：地点 + 1 个氛围词
+  ● [color] 缩减到 1-2 个主导色
+
 [camera] 构图说明 + 前景/中景/背景层次 + 景深
   如: "低地平线构图，人物居中偏下，天空占画面 2/3，深景深"
 

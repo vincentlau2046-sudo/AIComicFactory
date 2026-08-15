@@ -1793,7 +1793,7 @@ async function handleSingleFrameGenerate(
   const lfRefImages = lfChars.map((c: any) => c.referenceImage);
   const lfRefLabels = lfChars.map((c: any) => (c.baseName as string) || stripCharHint(c.name));
 
-  console.log(`[SingleFrameGen] Shot ${shot.sequence} FF: chars=${JSON.stringify(ffAsset?.characters)} labels=${JSON.stringify(ffRefLabels)} refs=${ffRefImages.length} LF: chars=${JSON.stringify(lfAsset?.characters)} labels=${JSON.stringify(lfRefLabels)} refs=${lfRefImages.length}`);
+  console.log(`[SingleFrameGen] Shot ${shot.sequence} FF: chars=${JSON.stringify(ffAsset?.characters)} labels=${JSON.stringify(ffRefLabels)} refs=${ffRefImages.length} refPaths=${JSON.stringify(ffRefImages.map((p: string) => p.split('/').pop()))}`);
 
   const ai = resolveImageProvider(modelConfig, versionedUploadDir);
   const imageOpts = { size: ratioToSize(payload?.ratio as string), aspectRatio: (payload?.ratio as string) || "16:9" };
