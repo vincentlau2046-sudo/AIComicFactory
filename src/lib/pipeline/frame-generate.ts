@@ -224,7 +224,7 @@ export async function handleFrameGenerate(task: Task) {
         prompt: startFrameDescText,
         fileUrl: firstFramePath,
         status: "completed",
-        characters: ffChars.map((c) => c.name),
+        characters: ffChars.map((c: any) => c.name),
       });
     }
 
@@ -252,7 +252,7 @@ export async function handleFrameGenerate(task: Task) {
         prompt: endFrameDescText,
         fileUrl: lastFramePath,
         status: "completed",
-        characters: lfChars.map((c) => c.name),
+        characters: lfChars.map((c: any) => c.baseName || stripCharHint(c.name)),
       });
     }
   } catch (err) {

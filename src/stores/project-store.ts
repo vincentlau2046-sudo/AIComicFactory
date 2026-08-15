@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api-fetch";
 interface Character {
   id: string;
   name: string;
+  baseName: string;
   description: string;
   referenceImage: string | null;
   referenceImageHistory?: string | null;

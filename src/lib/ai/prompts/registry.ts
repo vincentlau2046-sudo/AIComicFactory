@@ -1370,6 +1370,14 @@ ${themeStyleMappingBlock()}
   ● [environment] 缩减到 1 句：地点 + 1 个氛围词
   ● [color] 缩减到 1-2 个主导色
 
+【每帧角色数量上限——硬件约束（最高优先级）】
+ComfyUI 图像生成器每个镜头只支持 ≤3 张角色参考图。
+  ● firstFrameCharacters / lastFrameCharacters 数组长度**不得超过 3**
+  ● 如果该帧需要出现 ≥4 个角色：选择最重要的 3 个列在数组中，
+    其余角色在 [subject] 中用文字描述位置和动作（不用参考图），或在另一帧出现
+  ● [subject] 标签中可以描述超过 3 个角色（文字角色无限制），
+    但 firstFrameCharacters / lastFrameCharacters 数组必须 ≤3
+
 [camera] 构图说明 + 前景/中景/背景层次 + 景深
   如: "低地平线构图，人物居中偏下，天空占画面 2/3，深景深"
 
@@ -1475,6 +1483,7 @@ const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一
 - 分别列出各自帧画面中视觉上出现的角色（纯 MDN name，不带 visualHint 括号）
 - 若某角色仅在一帧出现（如首帧多人同屏、尾帧单角色特写），只放在对应帧的数组中
 - 仅旁白/画外音的角色不要列入
+- **每帧最多 3 个角色**（ComfyUI 参考图 slot 限制）。超过 3 个时选最重要的 3 个，其余在 [subject] 中用文字描述
 - 空数组 [] 是合法的（纯环境镜头）；`
 
 const shotKeyframeAssetsDef: PromptDefinition = {

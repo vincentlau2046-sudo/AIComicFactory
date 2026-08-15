@@ -1145,15 +1145,15 @@ export function ShotCard({
                       <div className="flex items-center gap-1 flex-wrap border-t border-[--border-subtle] px-2 py-1.5">
                         <span className="text-[9px] text-[--text-muted] shrink-0">{t("shot.refChars") || "Chars"}:</span>
                         {projectCharacters.map((char) => {
-                          const isSelected = ref.characters?.includes(char.name);
+                          const isSelected = ref.characters?.includes(char.baseName);
                           return (
                             <button
                               key={char.id}
                               onClick={() => {
                                 const currentChars = ref.characters || [];
                                 const newChars = isSelected
-                                  ? currentChars.filter((n) => n !== char.name)
-                                  : [...currentChars, char.name];
+                                  ? currentChars.filter((n) => n !== char.baseName)
+                                  : [...currentChars, char.baseName];
                                 const updated = parsedRefImages.map((r) =>
                                   r.id === ref.id ? { ...r, characters: newChars } : r
                                 );
@@ -1165,7 +1165,7 @@ export function ShotCard({
                                   : "bg-[--bg-muted] text-[--text-muted] border border-transparent hover:border-[--border-subtle]"
                               }`}
                             >
-                              {char.name}
+                              {char.baseName}
                             </button>
                           );
                         })}
@@ -1330,15 +1330,15 @@ export function ShotCard({
                         <div className="flex items-center gap-1 flex-wrap border-t border-[--border-subtle] px-2 py-1.5">
                           <span className="text-[9px] text-[--text-muted] shrink-0">{t("shot.refChars")}:</span>
                           {projectCharacters.map((char) => {
-                            const isSelected = currentChars.includes(char.name);
+                            const isSelected = currentChars.includes(char.baseName);
                             return (
                               <button
                                 key={char.id}
                                 onClick={() => {
                                   if (!frameItem) return;
                                   const newChars = isSelected
-                                    ? currentChars.filter((n) => n !== char.name)
-                                    : [...currentChars, char.name];
+                                    ? currentChars.filter((n) => n !== char.baseName)
+                                    : [...currentChars, char.baseName];
                                   const updated = allRefItems.map((r) =>
                                     r.id === frameItem.id ? { ...r, characters: newChars } : r
                                   );
@@ -1350,7 +1350,7 @@ export function ShotCard({
                                     : "bg-[--bg-muted] text-[--text-muted] border border-transparent hover:border-[--border-subtle]"
                                 }`}
                               >
-                                {char.name}
+                                {char.baseName}
                               </button>
                             );
                           })}
