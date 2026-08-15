@@ -1347,7 +1347,7 @@ ${themeStyleMappingBlock()}
 【提示词写作格式——Qwen Image 结构化格式】
 
 首尾帧 prompt 直接传给 Qwen Image 2512（MMDiT 架构，前置标签权重最高）。
-每个 startFrame / endFrame 使用结构化标签格式，每标签 1-2 句中文描述，按以下固定顺序：
+每个 startFrame / endFrame 使用以下标签，按固定顺序排列，每标签 1-2 句中文：
 
 [shot] 景别 + 角度 + 焦段
   如: "全景，平视，35mm 广角"
@@ -1358,31 +1358,18 @@ ${themeStyleMappingBlock()}
       baseName + 身体姿态 + 双脚位置 + 身体朝向 + 面部表情 + 视线方向 + 手部位置 +
       （可选）临时道具 + 衣物临时状态（如袖口撕裂、衣摆被风吹起）
     多角色时每个角色换行写，只用 baseName，不要 visualHint
-  ⚠️ 禁止写体型/服装/发型/肤色——参考图已锚定，文字重复导致 T2I 信号冲突
+    ⚠️ 禁止写体型/服装/发型/肤色——参考图已锚定，文字重复导致 T2I 信号冲突
   ▶ 无角色（characters 数组为空，纯环境镜头）→ 使用 [scene]:
     场景主体描述 + 关键视觉元素
 
-【多角色场景精简规则——firstFrameCharacters 或 lastFrameCharacters 含 2+ 角色时强制生效】
-为控制 Qwen Image 模型 conditioning 复杂度，防止失真/角色丢失：
+【多角色场景精简规则——含 2+ 角色时强制生效】
   ● [subject] 每个角色只写：baseName + 身体姿态 + 面部表情 + 视线方向
     （不写双脚位置/手部位置/手持物/衣物临时状态——参考图已提供）
   ● [camera] 不指定前景物体（不写堆叠木柴、摊位、货摊等）
   ● [environment] 缩减到 1 句：地点 + 1 个氛围词
   ● [color] 缩减到 1-2 个主导色
-
-【每帧角色数量上限——硬件约束（最高优先级）】
-ComfyUI 图像生成器每个镜头只支持 ≤3 张角色参考图。
-  ● firstFrameCharacters / lastFrameCharacters 数组长度**不得超过 3**
-  ● 如果该帧需要出现 ≥4 个角色：选择最重要的 3 个列在数组中，
-    其余角色在 [subject] 中用文字描述位置和动作（不用参考图），或在另一帧出现
-  ● [subject] 标签中可以描述超过 3 个角色（文字角色无限制），
-    但 firstFrameCharacters / lastFrameCharacters 数组必须 ≤3
-
-【characters 数组顺序必须等于 [subject] 描述顺序——致命约束】
-Picture 1/2/3 标签严格按 firstFrameCharacters 数组顺序（index 0→Picture 1）分配参考图。
-  ● 数组顺序必须与 [subject] 标签中角色从上到下的描述顺序**完全一致**
-  ● 若 [subject] 先写朱父后写朱元璋，数组必须是 ["朱父","朱元璋"]，不可颠倒
-  ● **自检**：生成完成后，逐行对比 [subject] 中的角色名和 firstFrameCharacters 的排列顺序
+  ● 每帧 firstFrameCharacters / lastFrameCharacters 数组长度 ≤3（参考图 slot 限制），
+    超过 3 个角色时选最重要的 3 个，其余在 [subject] 文字描述
 
 [camera] 构图说明 + 前景/中景/背景层次 + 景深
   如: "低地平线构图，人物居中偏下，天空占画面 2/3，深景深"
@@ -1431,9 +1418,9 @@ Picture 1/2/3 标签严格按 firstFrameCharacters 数组顺序（index 0→Pict
 
 ● 禁止对白文字——对白属于 videoScript，不属于静态帧描述
 
-════════════════════════════════
+═══════════════════════════════
 完整示例 (有角色)
-════════════════════════════════
+═══════════════════════════════
 
 首帧:
 [shot] 全景，平视，35mm 广角
@@ -1451,9 +1438,9 @@ Picture 1/2/3 标签严格按 firstFrameCharacters 数组顺序（index 0→Pict
 [lighting] 正午顶光直射，硬光质，高对比度，暖黄色温，人物脚下阴影短而深
 [color] 焦黄、土褐、枯草色，干燥荒芜氛围
 
-════════════════════════════════
+═══════════════════════════════
 完整示例 (无角色，纯场景)
-════════════════════════════════
+═══════════════════════════════
 
 首帧:
 [shot] 全景，俯拍，35mm 广角
@@ -1471,7 +1458,7 @@ Picture 1/2/3 标签严格按 firstFrameCharacters 数组顺序（index 0→Pict
 
 const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一个对象。**prompts 数组必须恰好有 2 个元素：第 0 个是首帧、第 1 个是尾帧**。
 
-**首尾帧角色分离**：half_characters 和 half_characters 必须**分别列出各自帧画面中实际出现的角色**。不同帧可能只有部分角色同时出现，必须分开列出。
+**首尾帧角色分离**：firstFrameCharacters 和 lastFrameCharacters 必须**分别列出各自帧画面中实际出现的角色**。不同帧可能只有部分角色同时出现，必须分开列出。
 [
   {
     "shotSequence": 1,
