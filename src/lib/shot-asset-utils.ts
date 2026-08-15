@@ -273,6 +273,7 @@ export async function patchAsset(
     fileUrl: string | null;
     status: ShotAssetStatus;
     prompt: string;
+    characters: string[] | null;
     modelProvider: string | null;
     modelId: string | null;
     meta: Record<string, unknown> | null;
@@ -282,6 +283,8 @@ export async function patchAsset(
   if (patch.fileUrl !== undefined) update.fileUrl = patch.fileUrl;
   if (patch.status !== undefined) update.status = patch.status;
   if (patch.prompt !== undefined) update.prompt = patch.prompt;
+  if (patch.characters !== undefined)
+    update.characters = patch.characters ? JSON.stringify(patch.characters) : null;
   if (patch.modelProvider !== undefined)
     update.modelProvider = patch.modelProvider;
   if (patch.modelId !== undefined) update.modelId = patch.modelId;

@@ -69,6 +69,7 @@ export default function EpisodeStoryboardPage() {
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [versionDropdownOpen, setVersionDropdownOpen] = useState(false);
   const versionDropdownRef = useRef<HTMLDivElement>(null);
+  const taskPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [batchProgress, setBatchProgress] = useState<{
     total: number;
     completed: number;
@@ -104,6 +105,13 @@ export default function EpisodeStoryboardPage() {
     const stored = localStorage.getItem(`storyboardView:${project.id}`);
     if (stored === "list" || stored === "kanban") setViewMode(stored);
   }, [project?.id]);
+
+  // Clean up task polling on unmount
+  useEffect(() => {
+    return () => {
+      if (taskPollRef.current) clearInterval(taskPollRef.current);
+    };
+  }, []);
 
   // Derived: if user's selection is valid keep it, otherwise fall back to latest
   const selectedVersionId = (_selectedVersionId && versions.some((v) => v.id === _selectedVersionId))
@@ -151,7 +159,9 @@ export default function EpisodeStoryboardPage() {
     const stats = new Map<string, { totalShots: number; completedFrames: number; completedVideos: number }>();
     for (const v of versions) stats.set(v.id, { totalShots: 0, completedFrames: 0, completedVideos: 0 });
     for (const shot of project.shots) {
-      const s = stats.get(shot.versionId);
+      const vid = shot.versionId;
+      if (!vid) continue;
+      const s = stats.get(vid);
       if (!s) continue;
       s.totalShots++;
       if (hasKeyframePair(shot)) s.completedFrames++;
@@ -247,9 +257,6 @@ export default function EpisodeStoryboardPage() {
     setGeneratingFrames(true);
     setLastBatchAction("batch_frame_generate");
 
-    const targets = project.shots.filter((s) => overwrite ? true : !getFirstFrameUrl(s));
-    setBatchProgress({ total: targets.length, completed: 0, failed: [] });
-
     try {
       const response = await apiFetch(`/api/projects/${project.id}/generate`, {
         method: "POST",
@@ -261,17 +268,14 @@ export default function EpisodeStoryboardPage() {
           episodeId: useProjectStore.getState().currentEpisodeId,
         }),
       });
-      const data = await response.json() as { results: Array<{ shotId?: string; status: string }> };
-      const failedIds = (data.results || []).filter((r) => r.status === "error").map((r) => r.shotId!).filter(Boolean);
-      const totalProcessed = data.results?.length || targets.length;
-      setBatchProgress({ total: totalProcessed, completed: totalProcessed, failed: failedIds });
-
-      if (failedIds.length > 0) {
-        setLastFailedShots(failedIds);
-        toast.error(`${failedIds.length}/${totalProcessed} shots failed`);
+      const data = await response.json() as { enqueued: number; taskIds: string[]; totalShots: number };
+      if (data.enqueued === 0) {
+        toast.success("所有镜头已有画面，无需生成");
       } else {
-        setLastFailedShots([]);
-        toast.success(`All ${totalProcessed} shots completed`);
+        toast.success(`已调度 ${data.enqueued} 个生成任务，后台处理中`);
+        startTaskPolling(project.id, data.taskIds, () => {
+          toast.success(`${data.enqueued} 个镜头生成完成`);
+        });
       }
     } catch (err) {
       console.error("Batch frame generate error:", err);
@@ -281,7 +285,6 @@ export default function EpisodeStoryboardPage() {
     setGeneratingFramesOverwrite(false);
     setGeneratingFrames(false);
     await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
-    setBatchProgress(null);
   }
 
   async function handleBatchGenerateVideos(overwrite = false) {
@@ -290,9 +293,6 @@ export default function EpisodeStoryboardPage() {
     setGeneratingVideosOverwrite(overwrite);
     setGeneratingVideos(true);
     setLastBatchAction("batch_video_generate");
-
-    const targets = project.shots.filter((s) => overwrite ? true : !getKeyframeVideoUrl(s));
-    setBatchProgress({ total: targets.length, completed: 0, failed: [] });
 
     try {
       const response = await apiFetch(`/api/projects/${project.id}/generate`, {
@@ -305,17 +305,14 @@ export default function EpisodeStoryboardPage() {
           episodeId: useProjectStore.getState().currentEpisodeId,
         }),
       });
-      const data = await response.json() as { results: Array<{ shotId?: string; status: string }> };
-      const failedIds = (data.results || []).filter((r) => r.status === "error").map((r) => r.shotId!).filter(Boolean);
-      const totalProcessed = data.results?.length || targets.length;
-      setBatchProgress({ total: totalProcessed, completed: totalProcessed, failed: failedIds });
-
-      if (failedIds.length > 0) {
-        setLastFailedShots(failedIds);
-        toast.error(`${failedIds.length}/${totalProcessed} shots failed`);
+      const data = await response.json() as { enqueued: number; taskIds: string[]; totalShots: number };
+      if (data.enqueued === 0) {
+        toast.success("所有镜头已有视频，无需生成");
       } else {
-        setLastFailedShots([]);
-        toast.success(`All ${totalProcessed} shots completed`);
+        toast.success(`已调度 ${data.enqueued} 个视频任务，后台处理中`);
+        startTaskPolling(project.id, data.taskIds, () => {
+          toast.success(`${data.enqueued} 个视频生成完成`);
+        });
       }
     } catch (err) {
       console.error("Batch video generate error:", err);
@@ -325,7 +322,33 @@ export default function EpisodeStoryboardPage() {
     setGeneratingVideosOverwrite(false);
     setGeneratingVideos(false);
     await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
-    setBatchProgress(null);
+  }
+
+  // ── Task queue progress polling ──
+  // Polls the tasks API until all tasks for a batch complete or fail.
+  function startTaskPolling(projectId: string, taskIds: string[], onComplete: () => void) {
+    if (taskPollRef.current) clearInterval(taskPollRef.current);
+    const taskIdSet = new Set(taskIds);
+    taskPollRef.current = setInterval(async () => {
+      try {
+        const resp = await apiFetch(`/api/projects/${projectId}/tasks`);
+        if (!resp.ok) return;
+        const data = await resp.json() as { tasks: Array<{ id: string; status: string }> };
+        const remaining = data.tasks.filter(
+          (t) => taskIdSet.has(t.id) && (t.status === "pending" || t.status === "running")
+        );
+        if (remaining.length === 0) {
+          if (taskPollRef.current) { clearInterval(taskPollRef.current); taskPollRef.current = null; }
+          const failed = data.tasks.filter((t) => taskIdSet.has(t.id) && t.status === "failed");
+          await fetchProject(projectId, useProjectStore.getState().currentEpisodeId!);
+          if (failed.length > 0) {
+            toast.error(`${failed.length} 个任务失败`);
+          } else {
+            onComplete();
+          }
+        }
+      } catch (_) { /* keep polling */ }
+    }, 5000);
   }
 
   async function handleBatchGenerateSceneFrames(overwrite = false) {

@@ -15,7 +15,7 @@ interface Character {
   id: string;
   name: string;
   referenceImage: string | null;
-  visualHint?: string;
+  visualHint?: string | null;
 }
 
 interface CharactersInlinePanelProps {

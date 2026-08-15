@@ -46,6 +46,13 @@ export async function handleVideoGenerate(task: Task) {
     throw new Error("Shot frames not generated yet");
   }
 
+  // Idempotency: skip if a completed video already exists for this shot
+  const existingVideo = await getActiveAsset(payload.shotId, "keyframe_video", 0);
+  if (existingVideo?.status === "completed" && existingVideo.fileUrl) {
+    await db.update(shots).set({ status: "completed" }).where(eq(shots.id, payload.shotId));
+    return { videoPath: existingVideo.fileUrl, skipped: true };
+  }
+
   const projectCharacters = await db
     .select()
     .from(characters)
@@ -225,28 +232,35 @@ export async function handleVideoGenerate(task: Task) {
     });
   }
 
-  const result = await videoProvider.generateVideo({
-    firstFrame: firstFrameUrl,
-    lastFrame: lastFrameUrl,
-    prompt,
-    duration: effectiveDuration,
-    ratio: payload.ratio ?? "16:9",
-  });
+  let videoPath: string;
+  try {
+    const result = await videoProvider.generateVideo({
+      firstFrame: firstFrameUrl,
+      lastFrame: lastFrameUrl,
+      prompt,
+      duration: effectiveDuration,
+      ratio: payload.ratio ?? "16:9",
+    });
+    videoPath = result.filePath;
 
-  // Persist the keyframe video output as a new versioned asset row.
-  await insertAssetVersion({
-    shotId: payload.shotId,
-    type: "keyframe_video",
-    sequenceInType: 0,
-    prompt,
-    fileUrl: result.filePath,
-    status: "completed",
-  });
+    // Persist the keyframe video output as a new versioned asset row.
+    await insertAssetVersion({
+      shotId: payload.shotId,
+      type: "keyframe_video",
+      sequenceInType: 0,
+      prompt,
+      fileUrl: videoPath,
+      status: "completed",
+    });
 
-  await db
-    .update(shots)
-    .set({ status: "completed" })
-    .where(eq(shots.id, payload.shotId));
+    await db
+      .update(shots)
+      .set({ status: "completed" })
+      .where(eq(shots.id, payload.shotId));
+  } catch (err) {
+    await db.update(shots).set({ status: "failed" }).where(eq(shots.id, payload.shotId));
+    throw err;
+  }
 
   // Best-effort video quality check — does not block or fail generation
   try {
@@ -254,7 +268,7 @@ export async function handleVideoGenerate(task: Task) {
     if (textProvider) {
       const qualityResult = await checkVideoQuality(
         textProvider,
-        result.filePath,
+        videoPath,
         firstFrameUrl
       );
 
@@ -267,7 +281,7 @@ export async function handleVideoGenerate(task: Task) {
       }
 
       return {
-        videoPath: result.filePath,
+        videoPath: videoPath,
         qualityScore: qualityResult.score,
         qualityIssues: qualityResult.issues,
       };
@@ -276,5 +290,5 @@ export async function handleVideoGenerate(task: Task) {
     console.warn("[VideoQuality] Quality check skipped:", e);
   }
 
-  return { videoPath: result.filePath };
+  return { videoPath: videoPath };
 }

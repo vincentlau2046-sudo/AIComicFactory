@@ -141,6 +141,8 @@
     "lastFrame": "尾帧",
     "cameraDirection": "镜头方向",
     "rewriteText": "重新生成文本",
+    "generateKeyframePrompts": "生成首尾帧提示词",
+    "regenerateKeyframePrompts": "重新生成首尾帧提示词",
     "aiOptimize": "AI 优化",
     "aiOptimizeInstruction": "优化指令",
     "aiOptimizeOriginal": "原始内容",

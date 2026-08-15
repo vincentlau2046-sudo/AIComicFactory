@@ -237,6 +237,7 @@ export function ShotCard({
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [rewritingText, setRewritingText] = useState(false);
+  const [generatingKeyframePrompt, setGeneratingKeyframePrompt] = useState(false);
 
   // Error log panel state
   const [errorLogs, setErrorLogs] = useState<
@@ -325,6 +326,26 @@ export function ShotCard({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(fields),
     });
+  }
+
+  async function handleGenerateKeyframePrompts() {
+    setGeneratingKeyframePrompt(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "single_keyframe_prompts",
+          payload: { shotId: id },
+          modelConfig: getModelConfig(),
+        }),
+      });
+      onUpdate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+    } finally {
+      setGeneratingKeyframePrompt(false);
+    }
   }
 
   async function handleGenerateFrames() {
@@ -1363,6 +1384,23 @@ export function ShotCard({
               )}
             </div>
           )}
+
+          {/* Per-shot keyframe prompt regeneration */}
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={handleGenerateKeyframePrompts}
+            disabled={generatingKeyframePrompt || generatingFrames || generatingSceneFrame || generatingVideo || batchGeneratingFrames}
+          >
+            {generatingKeyframePrompt ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            {generatingKeyframePrompt
+              ? t("common.generating")
+              : (getFirstFramePrompt(shot) || getLastFramePrompt(shot))
+                ? t("shot.regenerateKeyframePrompts")
+                : t("shot.generateKeyframePrompts")
+            }
+          </Button>
+
           <Button
             size="xs"
             variant={nextStep === "frame" ? "default" : "outline"}

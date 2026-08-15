@@ -60,6 +60,7 @@ export interface Shot {
   motionScript: string | null;
   cameraDirection: string;
   duration: number;
+  versionId: string | null;
   sceneId?: string;
   transitionIn?: string;
   transitionOut?: string;
