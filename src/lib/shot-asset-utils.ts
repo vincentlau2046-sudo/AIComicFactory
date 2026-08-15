@@ -332,6 +332,34 @@ export async function deleteAssetsByType(
 }
 
 /**
+ * Shared character resolution for frame generation.
+ * Builds a dual-key Map (name + baseName) from per-episode character rows,
+ * then resolves a shot_asset's characters array into Character objects.
+ * Used by both the pipeline handler (batch) and route handler (single shot).
+ */
+export function buildCharMap<T extends { name: string; referenceImage: string | null }>(
+  charsWithRefs: T[]
+): Map<string, T> {
+  const map = new Map<string, T>();
+  for (const c of charsWithRefs) {
+    map.set(c.name, c);
+    const base = (c as any).baseName || stripCharHint(c.name);
+    if (base !== c.name) map.set(base, c);
+  }
+  return map;
+}
+
+export function resolveFrameCharacters(
+  asset: { characters?: string[] | null } | null,
+  charMap: Map<string, any>
+): any[] {
+  if (!asset?.characters?.length) return [];
+  return asset.characters
+    .map((n: string) => charMap.get(stripCharHint(n)))
+    .filter(Boolean);
+}
+
+/**
  * Legacy-shaped view of a single shot's currently-active assets. Used by code
  * that was previously reading the legacy columns on the shots table
  * (firstFrame, lastFrame, videoUrl, referenceVideoUrl, sceneRefFrame, etc.)

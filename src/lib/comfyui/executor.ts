@@ -242,7 +242,10 @@ export class AtomicWorkflowExecutor {
           // (e.g. all character refs saved as "character_reference.png").
           const cacheKey = `${def.name}::${filePath}`
           if (!uploaded.has(cacheKey)) {
-            const result = await this.client.uploadImage(filePath, { uniqueName: def.name })
+            // Include directory UUID in uniqueName to prevent cross-character overwrites
+            // when different characters share the same slot (e.g. character_ref_1).
+            const dirId = path.dirname(filePath).split(path.sep).pop() || 'unknown';
+            const result = await this.client.uploadImage(filePath, { uniqueName: `${def.name}_${dirId}` })
             uploaded.set(cacheKey, result)
           }
 

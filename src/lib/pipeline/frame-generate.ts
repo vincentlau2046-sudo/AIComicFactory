@@ -9,7 +9,7 @@ import {
 import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { eq, and, lt, desc } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
-import { getActiveAsset, getLatestCompletedAsset, insertAssetVersion, patchAsset, copyToUploads, stripCharHint } from "@/lib/shot-asset-utils";
+import { getActiveAsset, getLatestCompletedAsset, insertAssetVersion, patchAsset, copyToUploads, stripCharHint, buildCharMap, resolveFrameCharacters } from "@/lib/shot-asset-utils";
 import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 import { ratioToSize } from "@/lib/ai/size";
 
@@ -146,30 +146,19 @@ export async function handleFrameGenerate(task: Task) {
   const endFrameDescText = lastFrameAsset.prompt;
 
   // Pick character refs to attach as visual anchors. Per-frame: each frame
-  // has its own cast — don't merge. Preserve frame character order (not DB order).
+  // has its own cast — don't merge.
   const charsWithRefs = projectCharacters.filter((c) => !!c.referenceImage);
-  // Build dual-key map: match by name AND baseName (per-EP instance rows have
-  // names like "朱元璋（皮包骨头放牛娃）" but shot_assets store stripped names)
-  const charMap = new Map<string, typeof charsWithRefs[0]>();
-  for (const c of charsWithRefs) {
-    charMap.set(c.name, c);
-    const base = (c as any).baseName || stripCharHint(c.name);
-    if (base !== c.name) charMap.set(base, c);
-  }
+  const charMap = buildCharMap(charsWithRefs);
 
-  function resolveFrameChars(asset: { characters?: string[] | null } | null): typeof charsWithRefs {
-    if (!asset?.characters?.length) return [];
-    return asset.characters
-      .map((n: string) => charMap.get(stripCharHint(n)))
-      .filter(Boolean) as typeof charsWithRefs;
-  }
-
-  const ffChars = resolveFrameChars(firstFrameAsset);
-  const lfChars = resolveFrameChars(lastFrameAsset);
+  const ffChars = resolveFrameCharacters(firstFrameAsset, charMap);
+  const lfChars = resolveFrameCharacters(lastFrameAsset, charMap);
   const ffCharRefImages = ffChars.map((c) => c.referenceImage!);
   const ffCharRefLabels = ffChars.map((c) => (c as any).baseName || stripCharHint(c.name));
   const lfCharRefImages = lfChars.map((c) => c.referenceImage!);
   const lfCharRefLabels = lfChars.map((c) => (c as any).baseName || stripCharHint(c.name));
+
+  console.log(`[FrameGen] Shot ${shot.sequence} FF: chars=${JSON.stringify(firstFrameAsset?.characters)} labels=${JSON.stringify(ffCharRefLabels)} refs=${JSON.stringify(ffCharRefImages.map(p => p.substring(p.lastIndexOf('/')+1)))}`);
+  console.log(`[FrameGen] Shot ${shot.sequence} LF: chars=${JSON.stringify(lastFrameAsset?.characters)} labels=${JSON.stringify(lfCharRefLabels)} refs=${JSON.stringify(lfCharRefImages.map(p => p.substring(p.lastIndexOf('/')+1)))}`);
 
   // Character descriptions are redundant with reference images — the four-view
   // sheets already convey all visual identity info. Set to empty to avoid

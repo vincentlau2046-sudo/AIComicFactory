@@ -61,6 +61,8 @@ import {
   patchAsset,
   copyToUploads,
   stripCharHint,
+  buildCharMap,
+  resolveFrameCharacters,
 } from "@/lib/shot-asset-utils";
 import { buildRefImagePromptsRequest } from "@/lib/ai/prompts/ref-image-prompts";
 import { buildKeyframePromptsRequest } from "@/lib/ai/prompts/keyframe-prompts";
@@ -1779,16 +1781,19 @@ async function handleSingleFrameGenerate(
   const shotEpisodeId = episodeId || shot.episodeId;
   const projectCharacters = await getEpisodeCharacters(projectId, shotEpisodeId);
 
-  // Per-shot character filter: only inject refs for characters declared
-  // on the first_frame / last_frame asset metadata for this shot.
-  const shotCharNameSet = new Set<string>([
-    ...(ffAsset?.characters ?? []).map(stripCharHint),
-    ...(lfAsset?.characters ?? []).map(stripCharHint),
-  ]);
-  const filteredChars = shotCharNameSet.size > 0
-    ? projectCharacters.filter((c) => c.referenceImage && (shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || "")))
-    : [];
-  const shotCharRefImages = filteredChars.map((c) => c.referenceImage as string);
+  // Per-frame character refs — resolve first_frame and last_frame independently.
+  // Same shared logic as the pipeline handler (handleFrameGenerate).
+  const charsWithRefs = projectCharacters.filter((c: any) => !!c.referenceImage);
+  const charMap = buildCharMap(charsWithRefs);
+
+  const ffChars = resolveFrameCharacters(ffAsset, charMap);
+  const lfChars = resolveFrameCharacters(lfAsset, charMap);
+  const ffRefImages = ffChars.map((c: any) => c.referenceImage);
+  const ffRefLabels = ffChars.map((c: any) => (c.baseName as string) || stripCharHint(c.name));
+  const lfRefImages = lfChars.map((c: any) => c.referenceImage);
+  const lfRefLabels = lfChars.map((c: any) => (c.baseName as string) || stripCharHint(c.name));
+
+  console.log(`[SingleFrameGen] Shot ${shot.sequence} FF: chars=${JSON.stringify(ffAsset?.characters)} labels=${JSON.stringify(ffRefLabels)} refs=${ffRefImages.length} LF: chars=${JSON.stringify(lfAsset?.characters)} labels=${JSON.stringify(lfRefLabels)} refs=${lfRefImages.length}`);
 
   const ai = resolveImageProvider(modelConfig, versionedUploadDir);
   const imageOpts = { size: ratioToSize(payload?.ratio as string), aspectRatio: (payload?.ratio as string) || "16:9" };
@@ -1805,12 +1810,16 @@ async function handleSingleFrameGenerate(
       characterDescriptions: "",
       slotContents: frameFirstSlots,
     });
-    const firstFramePath = await ai.generateImage(firstPrompt, {
-      ...imageOpts,
-      quality: "hd",
-      referenceImages: shotCharRefImages,
-      scenePrompt: shot.prompt || "",
-    });
+    let firstFramePath: string;
+    if (ffRefImages.length === 0) {
+      firstFramePath = await ai.generateImage(firstPrompt, { ...imageOpts, quality: "hd" });
+    } else {
+      firstFramePath = await ai.generateImage(firstPrompt, {
+        ...imageOpts, quality: "hd",
+        referenceImages: ffRefImages, referenceLabels: ffRefLabels,
+        scenePrompt: shot.prompt || "",
+      });
+    }
 
     const lastPrompt = buildLastFramePrompt({
       sceneDescription: shot.prompt || "",
@@ -1819,12 +1828,16 @@ async function handleSingleFrameGenerate(
       firstFramePath,
       slotContents: frameLastSlots,
     });
-    const lastFramePath = await ai.generateImage(lastPrompt, {
-      ...imageOpts,
-      quality: "hd",
-      referenceImages: shotCharRefImages,
-      scenePrompt: shot.prompt || "",
-    });
+    let lastFramePath: string;
+    if (lfRefImages.length === 0) {
+      lastFramePath = await ai.generateImage(lastPrompt, { ...imageOpts, quality: "hd" });
+    } else {
+      lastFramePath = await ai.generateImage(lastPrompt, {
+        ...imageOpts, quality: "hd",
+        referenceImages: lfRefImages, referenceLabels: lfRefLabels,
+        scenePrompt: shot.prompt || "",
+      });
+    }
 
     await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shotId));
 

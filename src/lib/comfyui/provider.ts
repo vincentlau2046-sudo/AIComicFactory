@@ -174,9 +174,13 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     } else {
       // ≥1 ref → edit-plus，带角色参考图合成
       workflowId = 'qwen-2511-edit-plus'
-      // Build composite prompt with Picture N tokens.
+      // Build composite prompt with Picture N: baseName references.
       // Picture N maps to imageN in node config (hard binding).
-      const picRefs = refImages.map((_, i) => `Picture ${i + 1}`);
+      // Using JUST baseName (no visualHint) prevents visual distortion.
+      const picRefs = refImages.map((_, i) => {
+        const label = options?.referenceLabels?.[i] || `角色${i + 1}`;
+        return `Picture ${i + 1}: ${label}`;
+      });
       inputs.composite_prompt = `${picRefs.join(", ")}. ${prompt}`;
       const compatLabel = (options?.referenceLabels || []).join(",");
       console.log(`[H3-ComfyUI] edit-plus composite: ${refImages.length} refs, labels=[${compatLabel}], picRefs=[${picRefs.join("; ")}]`);
