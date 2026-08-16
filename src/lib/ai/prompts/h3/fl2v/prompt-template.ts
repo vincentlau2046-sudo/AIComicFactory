@@ -101,8 +101,8 @@ function buildContentLayer(
     const dialLines = input.dialogues.map(d => {
       const sid = usedNames.indexOf(d.characterName) + 1;
       return d.offscreen
-        ? L(`(S${sid})画外音`, `(S${sid}) off-screen`)
-        : `(S${sid})`;
+        ? L(`(S${sid})画外音：<d>[中文] ${d.text}</d>`, `(S${sid}) off-screen: <d>[Chinese] ${d.text}</d>`)
+        : L(`(S${sid})说：<d>[中文] ${d.text}</d>`, `(S${sid}) says: <d>[Chinese] ${d.text}</d>`);
     }).join("\n");
     parts.push(dialLabel.replace("{{DIALOGUE_LIST}}", dialLines));
     parts.push("");
