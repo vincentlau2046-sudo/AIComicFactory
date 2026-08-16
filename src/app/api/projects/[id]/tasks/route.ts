@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { tasks } from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 /**
  * GET /api/projects/[id]/tasks?status=pending,running&type=frame_generate
@@ -29,7 +29,7 @@ export async function GET(
     })
     .from(tasks)
     .where(eq(tasks.projectId, projectId))
-    .orderBy(asc(tasks.createdAt))
+    .orderBy(desc(tasks.createdAt))
     .limit(limit);
 
   // Summary by status

@@ -343,6 +343,10 @@ export default function EpisodeStoryboardPage() {
         const remaining = data.tasks.filter(
           (t) => taskIdSet.has(t.id) && (t.status === "pending" || t.status === "running")
         );
+        // Guard: if none of our task IDs appeared in the response at all,
+        // the batch hasn't been picked up yet — keep polling
+        const anyFound = data.tasks.some((t) => taskIdSet.has(t.id));
+        if (!anyFound) return;
         if (remaining.length === 0) {
           if (taskPollRef.current) { clearInterval(taskPollRef.current); taskPollRef.current = null; }
           const failed = data.tasks.filter((t) => taskIdSet.has(t.id) && t.status === "failed");
