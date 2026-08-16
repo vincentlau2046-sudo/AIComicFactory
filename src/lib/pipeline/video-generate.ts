@@ -26,6 +26,16 @@ async function getVersionedUploadDirFromPipeline(versionId: string | null | unde
   return path.join(getUploadDir(), "projects", version.projectId, version.label);
 }
 
+/** Build project-level story arc from all episode titles + descriptions. */
+function buildEpisodeOutline(
+  episodes: Array<{ title: string; description: string | null }>
+): string | undefined {
+  if (!episodes.length) return undefined;
+  return episodes
+    .map((ep, i) => `EP${i + 1}. ${ep.title}：${ep.description || ""}`)
+    .join("\n");
+}
+
 export async function handleVideoGenerate(task: Task) {
   const payload = task.payload as { shotId: string; projectId?: string; userId?: string; ratio?: string; modelConfig?: ModelConfigPayload };
 
@@ -86,6 +96,13 @@ export async function handleVideoGenerate(task: Task) {
 
   // Project metadata
   const [project] = await db.select().from(projects).where(eq(projects.id, shot.projectId));
+
+  // All episodes for project-level story arc (used as outline fallback)
+  const allEpisodes = await db
+    .select({ title: episodes.title, description: episodes.description })
+    .from(episodes)
+    .where(eq(episodes.projectId, shot.projectId))
+    .orderBy(asc(episodes.sequence));
 
   // Dialogues with character enrichment
   const shotDialogues = await db
@@ -223,7 +240,7 @@ export async function handleVideoGenerate(task: Task) {
       episodeTitle: episode?.title || undefined,
       projectIdea: project?.idea || undefined,
       projectTitle: project?.title || undefined,
-      projectOutline: project?.outline || undefined,
+      projectOutline: project?.outline || buildEpisodeOutline(allEpisodes),
       projectWorldSetting: project?.worldSetting || undefined,
       languageMode: h3Lang,
       slotContents: videoSlots,
