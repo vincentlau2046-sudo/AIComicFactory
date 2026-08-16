@@ -111,8 +111,6 @@ export interface H3PromptInput {
   narrations?: string[];
   /** Active optional modules (e.g. ["narration"]). Empty or missing = base only. */
   activeModules?: string[];
-  /** Explicitly enable narration generation for this shot (default: false) */
-  enableNaration?: boolean;
 }
 
 export interface H3PromptOutput {

@@ -165,7 +165,7 @@ async function concatWithTransitions(
       ffmpeg()
         .input(concatListPath)
         .inputOptions(["-f", "concat", "-safe", "0"])
-        .outputOptions(["-c", "copy"])
+        .outputOptions(["-c", "copy", "-movflags", "faststart"])
         .output(outputPath)
         .on("end", () => {
           fs.unlinkSync(concatListPath);
@@ -225,6 +225,7 @@ async function concatWithTransitions(
         "-preset", "fast",
         "-crf", "23",
         "-an",
+        "-movflags", "faststart",
       ])
       .output(outputPath)
       .on("end", () => resolve())
@@ -291,6 +292,7 @@ export async function assembleVideo(params: AssembleParams): Promise<AssembleRes
             "-preset", "fast",
             "-crf", "23",
             "-c:a", "aac",
+            "-movflags", "faststart",
           ])
           .output(outputPath)
           .on("end", () => {
