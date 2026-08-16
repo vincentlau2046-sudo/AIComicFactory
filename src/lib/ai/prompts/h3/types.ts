@@ -98,6 +98,10 @@ export interface H3PromptInput {
   bgmUrl?: string;
   costumes?: { name: string; description?: string | null; referenceImage?: string | null; characterId: string }[];
   compositionGuide?: string;
+  projectTitle?: string;
+  projectOutline?: string;
+  projectWorldSetting?: string;
+  episodeTitle?: string;
   episodeDescription?: string;
   episodeKeywords?: string;
   projectIdea?: string;

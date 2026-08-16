@@ -164,7 +164,6 @@ export async function handleVideoGenerate(task: Task) {
   if (useH3Prompt) {
     // v0.2.0: H3 structured prompt (based on official MiniMax VIDEO_PROMPT_WRITING_GUIDE)
     const { buildVideoPromptLLM: buildH3Builder } = await import("@/lib/ai/prompts/h3");
-    const { detectLanguage, routeLanguage, translateNarrative } = await import("@/lib/ai/prompts/h3/language-route");
     const generationMode: "keyframe" | "reference" =
       (episode?.generationMode ?? project?.generationMode ?? "keyframe") as "keyframe" | "reference";
 
@@ -174,35 +173,6 @@ export async function handleVideoGenerate(task: Task) {
       h3System = await resolvePrompt("video_h3_prompt", { userId: payload.userId, projectId: payload.projectId }).catch(() => undefined);
     }
     const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
-
-    // Auto-translate Chinese script to English (H3 requires English body)
-    let translatedVideoScript = videoScript;
-    if (detectLanguage(videoScript) === "zh") {
-      try {
-        const routed = routeLanguage(videoScript, "auto");
-        if (routed.hasDialogue) {
-          // Dialogue already wrapped in <d> tags → translate only narrative parts
-          translatedVideoScript = routed.body.replace(
-            /\[ZH: ([^\]]+)\]/g,
-            (_: string, zhText: string) => zhText
-          );
-          // Translate the narrative parts (preserving <d> tags)
-          const narrativeParts = translatedVideoScript.replace(/<d>.*?<\/d>/g, "");
-          const translatedNarrative = await translateNarrative(narrativeParts);
-          // Rebuild: translated narrative + original <d> dialogues
-          translatedVideoScript = routed.body.replace(
-            /\[ZH: ([^\]]+)\]/g,
-            () => translatedNarrative
-          );
-        } else {
-          // No dialogue → translate entire script
-          translatedVideoScript = await translateNarrative(videoScript);
-        }
-      } catch (e) {
-        console.warn("[H3] Translation failed, using original script:", e);
-        // Fall through with original videoScript (will have [ZH: ...] markers)
-      }
-    }
 
   // Build episode structure (story outline + shot list)
   const allEpShots = (shot.episodeId && shot.versionId)
@@ -250,7 +220,11 @@ export async function handleVideoGenerate(task: Task) {
       compositionGuide: shot.compositionGuide || undefined,
       episodeDescription: episodeStructure || episodeDesc,
       episodeKeywords,
+      episodeTitle: episode?.title || undefined,
       projectIdea: project?.idea || undefined,
+      projectTitle: project?.title || undefined,
+      projectOutline: project?.outline || undefined,
+      projectWorldSetting: project?.worldSetting || undefined,
       languageMode: h3Lang,
       slotContents: videoSlots,
       activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],

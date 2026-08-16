@@ -20,6 +20,20 @@ function buildContentLayer(
   const r = (key: string, fallback: string) => contentSlots[key] || fallback;
   const parts: string[] = [];
 
+  // ── 0. Project Overview ────────────────────────────
+  if (input.projectTitle || input.projectOutline || input.projectWorldSetting) {
+    parts.push(`## ${L("项目纲要", "PROJECT OVERVIEW")}`);
+    if (input.projectTitle) parts.push(L(`项目：${input.projectTitle}`, `Project: ${input.projectTitle}`));
+    if (input.projectOutline) {
+      parts.push(L("故事大纲：", "Story Outline:"));
+      parts.push(input.projectOutline);
+    }
+    if (input.projectWorldSetting) {
+      parts.push(L(`世界观：${input.projectWorldSetting}`, `World Setting: ${input.projectWorldSetting}`));
+    }
+    parts.push("");
+  }
+
   // ── 1. Frame Anchors (visual facts first) ──
   const hasFrames = input.firstFrame?.prompt || input.lastFrame?.prompt;
   if (hasFrames) {
@@ -56,9 +70,11 @@ function buildContentLayer(
   }
 
   // ── 3. Episode Context ──
-  if (input.episodeDescription) {
+  if (input.episodeTitle || input.episodeDescription) {
     const epLabel = r("episode_label", `## ${L("剧集背景", "EPISODE CONTEXT")}`);
-    parts.push(epLabel.replace("{{EPISODE_CONTEXT}}", input.episodeDescription));
+    parts.push(epLabel);
+    if (input.episodeTitle) parts.push(L(`集标题：${input.episodeTitle}`, `Episode: ${input.episodeTitle}`));
+    if (input.episodeDescription) parts.push(input.episodeDescription);
     if (input.episodeKeywords) parts.push(`${L("关键词", "Keywords")}: ${input.episodeKeywords}`);
     parts.push("");
   }
