@@ -25,57 +25,56 @@ async function getVersionedUploadDirFromPipeline(versionId: string | null | unde
   return path.join(getUploadDir(), "projects", version.projectId, version.label);
 }
 
-export async function handleVideoGenerate(task: Task) {
-  const payload = task.payload as { shotId: string; projectId?: string; userId?: string; ratio?: string; modelConfig?: ModelConfigPayload };
+// ── Shared H3 context assembler (exported for batch path) ──
+// Single source of truth for all DB context passed to H3 prompt builder.
+// Both single-shot and batch paths call this — no duplicate DB reads.
 
-  const [shot] = await db
-    .select()
-    .from(shots)
-    .where(eq(shots.id, payload.shotId));
+export interface H3ShotContext {
+  shot: typeof shots.$inferSelect;
+  firstFrameAsset: Awaited<ReturnType<typeof getActiveAsset>>;
+  lastFrameAsset: Awaited<ReturnType<typeof getActiveAsset>>;
+  projectCharacters: (typeof characters.$inferSelect)[];
+  episode: typeof episodes.$inferSelect | null;
+  project: typeof projects.$inferSelect | null;
+  enrichedDialogues: Array<{
+    characterName: string; text: string; sequence: number;
+    startRatio: string; endRatio: string; audioUrl: string | null; offscreen: boolean;
+  }>;
+  sceneDesc?: string;
+  sceneLighting?: string;
+  sceneColorPalette?: string;
+  costumes: (typeof characterCostumes.$inferSelect)[];
+  bgmUrl?: string;
+  episodeDesc?: string;
+  episodeKeywords?: string;
+}
 
+export async function assembleH3ShotContext(shotId: string): Promise<H3ShotContext> {
+  const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
   if (!shot) throw new Error("Shot not found");
 
-  // Read first/last frame URL from shot_assets
-  const firstFrameAsset = await getActiveAsset(payload.shotId, "first_frame", 0);
-  const lastFrameAsset = await getActiveAsset(payload.shotId, "last_frame", 0);
+  const [firstFrameAsset, lastFrameAsset] = await Promise.all([
+    getActiveAsset(shotId, "first_frame", 0),
+    getActiveAsset(shotId, "last_frame", 0),
+  ]);
 
-  const firstFrameUrl = firstFrameAsset?.fileUrl;
-  const lastFrameUrl = lastFrameAsset?.fileUrl;
+  const [projectCharacters, episode, project] = await Promise.all([
+    db.select().from(characters).where(eq(characters.projectId, shot.projectId)),
+    shot.episodeId
+      ? db.select().from(episodes).where(eq(episodes.id, shot.episodeId)).then(r => r[0] ?? null)
+      : null,
+    db.select().from(projects).where(eq(projects.id, shot.projectId)).then(r => r[0] ?? null),
+  ]);
 
-  if (!firstFrameUrl || !lastFrameUrl) {
-    throw new Error("Shot frames not generated yet");
-  }
-
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(eq(characters.projectId, shot.projectId));
-
-  // ─── Read context tables (v0.2.0: H3 prompt enrichment) ───
-
-  // Episode metadata
-  let episode: typeof episodes.$inferSelect | null = null;
-  if (shot.episodeId) {
-    [episode] = await db.select().from(episodes).where(eq(episodes.id, shot.episodeId));
-  }
-
-  // Project metadata
-  const [project] = await db.select().from(projects).where(eq(projects.id, shot.projectId));
-
-  // Dialogues with character enrichment
-  const shotDialogues = await db
-    .select()
-    .from(dialogues)
-    .where(eq(dialogues.shotId, payload.shotId));
+  // Dialogues with character name enrichment
+  const shotDialogues = await db.select().from(dialogues).where(eq(dialogues.shotId, shotId));
   const dialogueCharIds = [...new Set(shotDialogues.map(d => d.characterId))];
   const dialogueCharacters = dialogueCharIds.length > 0
     ? await db.select().from(characters).where(inArray(characters.id, dialogueCharIds))
     : [];
   const charMap = new Map(dialogueCharacters.map(c => [c.id, c]));
   const enrichedDialogues = shotDialogues.map(d => ({
-    characterName: d.characterId
-      ? (charMap.get(d.characterId)?.name ?? "Unknown")
-      : "Unknown",
+    characterName: d.characterId ? (charMap.get(d.characterId)?.name ?? "Unknown") : "Unknown",
     text: d.text,
     sequence: d.sequence,
     startRatio: d.startRatio ?? "0",
@@ -84,7 +83,7 @@ export async function handleVideoGenerate(task: Task) {
     offscreen: false,
   })).sort((a, b) => a.sequence - b.sequence);
 
-  // Scene context (by shot.sceneId FK)
+  // Scene context
   let sceneDesc: string | undefined;
   let sceneLighting: string | undefined;
   let sceneColorPalette: string | undefined;
@@ -95,7 +94,7 @@ export async function handleVideoGenerate(task: Task) {
     sceneColorPalette = scene?.colorPalette || undefined;
   }
 
-  // Character costumes
+  // Costumes
   const allCharacterIds = [
     ...new Set([
       ...projectCharacters.map(c => c.id),
@@ -108,12 +107,30 @@ export async function handleVideoGenerate(task: Task) {
     ? await db.select().from(characterCostumes).where(inArray(characterCostumes.characterId, allCharacterIds))
     : [];
 
-  // Audio reference: BGM URL from episode > project
+  // Audio
   const bgmUrl: string | undefined = episode?.bgmUrl || project?.bgmUrl || undefined;
   const episodeDesc: string | undefined = episode?.description || undefined;
   const episodeKeywords: string | undefined = episode?.keywords || undefined;
 
-  // ─── End context reads ───
+  return {
+    shot, firstFrameAsset, lastFrameAsset, projectCharacters,
+    episode, project, enrichedDialogues,
+    sceneDesc, sceneLighting, sceneColorPalette, costumes,
+    bgmUrl, episodeDesc, episodeKeywords,
+  };
+}
+
+export async function handleVideoGenerate(task: Task) {
+  const payload = task.payload as { shotId: string; projectId?: string; userId?: string; ratio?: string; modelConfig?: ModelConfigPayload };
+
+  const ctx = await assembleH3ShotContext(payload.shotId);
+  const { shot, firstFrameAsset, lastFrameAsset, projectCharacters, episode, project,
+    enrichedDialogues, sceneDesc, sceneLighting, sceneColorPalette, costumes,
+    bgmUrl, episodeDesc, episodeKeywords } = ctx;
+
+  const firstFrameUrl = firstFrameAsset?.fileUrl;
+  const lastFrameUrl = lastFrameAsset?.fileUrl;
+  if (!firstFrameUrl || !lastFrameUrl) throw new Error("Shot frames not generated yet");
 
   const versionedUploadDir = await getVersionedUploadDirFromPipeline(shot.versionId);
   const videoProvider = resolveVideoProvider(payload.modelConfig, versionedUploadDir);
@@ -126,58 +143,23 @@ export async function handleVideoGenerate(task: Task) {
   const projectId = payload.projectId ?? shot.projectId;
   const videoSlots = await resolveSlotContents("video_generate", { userId, projectId });
 
-  await db
-    .update(shots)
-    .set({ status: "generating" })
-    .where(eq(shots.id, payload.shotId));
+  await db.update(shots).set({ status: "generating" }).where(eq(shots.id, payload.shotId));
 
   const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
   const textProvider = resolveAIProvider(payload.modelConfig);
-  const useH3Prompt = process.env.H3_PROMPT_MODE !== "seedance"; // H3 is default, set seedance to opt out
+  const useH3Prompt = process.env.H3_PROMPT_MODE !== "seedance";
 
   let prompt: string;
   if (useH3Prompt) {
-    // v0.2.0: H3 structured prompt (based on official MiniMax VIDEO_PROMPT_WRITING_GUIDE)
     const { buildVideoPromptLLM: buildH3Builder } = await import("@/lib/ai/prompts/h3");
-    const { detectLanguage, routeLanguage, translateNarrative } = await import("@/lib/ai/prompts/h3/language-route");
     const generationMode: "keyframe" | "reference" =
       (episode?.generationMode ?? project?.generationMode ?? "keyframe") as "keyframe" | "reference";
 
-    // Resolve H3 guide prompt from registry if userId/projectId available
     let h3System: string | undefined;
     if (payload.userId && payload.projectId) {
       h3System = await resolvePrompt("video_h3_prompt", { userId: payload.userId, projectId: payload.projectId }).catch(() => undefined);
     }
     const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
-
-    // Auto-translate Chinese script to English (H3 requires English body)
-    let translatedVideoScript = videoScript;
-    if (detectLanguage(videoScript) === "zh") {
-      try {
-        const routed = routeLanguage(videoScript, "auto");
-        if (routed.hasDialogue) {
-          // Dialogue already wrapped in <d> tags → translate only narrative parts
-          translatedVideoScript = routed.body.replace(
-            /\[ZH: ([^\]]+)\]/g,
-            (_: string, zhText: string) => zhText
-          );
-          // Translate the narrative parts (preserving <d> tags)
-          const narrativeParts = translatedVideoScript.replace(/<d>.*?<\/d>/g, "");
-          const translatedNarrative = await translateNarrative(narrativeParts);
-          // Rebuild: translated narrative + original <d> dialogues
-          translatedVideoScript = routed.body.replace(
-            /\[ZH: ([^\]]+)\]/g,
-            () => translatedNarrative
-          );
-        } else {
-          // No dialogue → translate entire script
-          translatedVideoScript = await translateNarrative(videoScript);
-        }
-      } catch (e) {
-        console.warn("[H3] Translation failed, using original script:", e);
-        // Fall through with original videoScript (will have [ZH: ...] markers)
-      }
-    }
 
     const h3Output = await buildH3Builder({
       videoScript,
@@ -200,20 +182,20 @@ export async function handleVideoGenerate(task: Task) {
       soundDesign: shot.soundDesign || undefined,
       musicCue: shot.musicCue || undefined,
       bgmUrl,
-      costumes: costumes.map(c => ({
-        name: c.name, description: c.description,
-        referenceImage: c.referenceImage, characterId: c.characterId,
-      })),
+      costumes: costumes.map(c => ({ name: c.name, description: c.description, referenceImage: c.referenceImage, characterId: c.characterId })),
       compositionGuide: shot.compositionGuide || undefined,
       episodeDescription: episodeDesc,
       episodeKeywords,
+      episodeTitle: episode?.title || undefined,
       projectIdea: project?.idea || undefined,
+      projectTitle: project?.title || undefined,
+      projectOutline: project?.outline || undefined,
+      projectWorldSetting: project?.worldSetting || undefined,
       languageMode: h3Lang,
       slotContents: videoSlots,
     }, textProvider, h3System);
     prompt = h3Output.sections.join("\n\n");
   } else {
-    // Legacy path: Seedance-style prompt (unchanged from v0.1.x)
     prompt = buildVideoPrompt({
       videoScript,
       cameraDirection: shot.cameraDirection || "static",
@@ -233,44 +215,20 @@ export async function handleVideoGenerate(task: Task) {
     ratio: payload.ratio ?? "16:9",
   });
 
-  // Persist the keyframe video output as a new versioned asset row.
   await insertAssetVersion({
-    shotId: payload.shotId,
-    type: "keyframe_video",
-    sequenceInType: 0,
-    prompt,
-    fileUrl: result.filePath,
-    status: "completed",
+    shotId: payload.shotId, type: "keyframe_video", sequenceInType: 0,
+    prompt, fileUrl: result.filePath, status: "completed",
   });
 
-  await db
-    .update(shots)
-    .set({ status: "completed" })
-    .where(eq(shots.id, payload.shotId));
+  await db.update(shots).set({ status: "completed" }).where(eq(shots.id, payload.shotId));
 
-  // Best-effort video quality check — does not block or fail generation
   try {
     const textProvider = resolveAIProvider(payload.modelConfig);
     if (textProvider) {
-      const qualityResult = await checkVideoQuality(
-        textProvider,
-        result.filePath,
-        firstFrameUrl
-      );
-
-      console.log(
-        `[VideoQuality] Shot ${payload.shotId}: score=${qualityResult.score}, pass=${qualityResult.pass}`
-      );
-
-      if (!qualityResult.pass) {
-        console.warn(`[VideoQuality] Issues: ${qualityResult.issues.join(", ")}`);
-      }
-
-      return {
-        videoPath: result.filePath,
-        qualityScore: qualityResult.score,
-        qualityIssues: qualityResult.issues,
-      };
+      const qualityResult = await checkVideoQuality(textProvider, result.filePath, firstFrameUrl);
+      console.log(`[VideoQuality] Shot ${payload.shotId}: score=${qualityResult.score}, pass=${qualityResult.pass}`);
+      if (!qualityResult.pass) console.warn(`[VideoQuality] Issues: ${qualityResult.issues.join(", ")}`);
+      return { videoPath: result.filePath, qualityScore: qualityResult.score, qualityIssues: qualityResult.issues };
     }
   } catch (e) {
     console.warn("[VideoQuality] Quality check skipped:", e);

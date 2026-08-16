@@ -48,6 +48,7 @@ import {
 import { buildSceneFramePrompt } from "@/lib/ai/prompts/scene-frame-generate";
 import { resolveImageProvider, resolveVideoProvider, resolveAIProvider } from "@/lib/ai/provider-factory";
 import { buildVideoPrompt, buildReferenceVideoPrompt } from "@/lib/ai/prompts/video-generate";
+import { assembleH3ShotContext } from "@/lib/pipeline/video-generate";
 import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-generate";
 import { buildCharacterTurnaroundPrompt } from "@/lib/ai/prompts/character-image";
 import { assembleVideo } from "@/lib/video/ffmpeg";
@@ -1015,7 +1016,16 @@ async function handleSingleCharacterImage(
   }
 
   const ai = resolveImageProvider(modelConfig);
-  const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
+
+  // Build front-view prompt from template system (matching pipeline/character-image.ts)
+  // T2I prompt: character description IS the prompt (templates are for LLM, not direct injection)
+  const prompt = [
+    `角色正面参考图。全身站立正面视图，纯白背景。`,
+    ``,
+    `${character.description || character.name}`,
+    ``,
+    `全身比例正确，从头顶到脚底完整展示，禁止半身图。`,
+  ].join("\n");
 
   try {
     const rawImagePath = await ai.generateImage(prompt, {
@@ -1026,6 +1036,7 @@ async function handleSingleCharacterImage(
       pipelineParams: {
         character_name: character.name,
         character_desc: character.description || character.name,
+        character_prompt: prompt,
       },
     });
 
@@ -1535,6 +1546,104 @@ async function handleShotSplitStream(
     }
   }
 
+  // Auto-create missing guest characters from shot scene descriptions
+  if (episodeId) {
+    // Blacklist: generic crowd/scene terms that are not real characters
+    const CROWD_BLACKLIST = new Set([
+      "士兵", "路人", "百姓", "尸体", "群演", "太监", "宫女", "侍女",
+      "小贩", "商贩", "乞丐", "僧侣", "道士", "骑士", "守卫", "门卫",
+      "仆从", "丫鬟", "家丁", "侍卫", "随从", "使者", "信使", "难民",
+    ]);
+    // Hint quality check: must contain at least one concrete visual descriptor
+    // (body part, color, texture, clothing), not just transient states
+    const VISUAL_HINT_PATTERN = /[体型体态态面相面容脸眼眉鼻嘴唇发须胡服饰衣袍甲冠色肤]/;
+
+    const charPattern = /([\u4e00-\u9fa5a-zA-Z]{1,6})[（(]([^）)]{1,10})[）)]/g;
+    const foundChars = new Map<string, { hint: string; contexts: string[]; shotCount: number }>();
+    for (const shot of allShots) {
+      const desc = shot.sceneDescription || "";
+      const sentences = desc.split(/[。！？；]+/).filter((s) => s.trim());
+      let match;
+      while ((match = charPattern.exec(desc)) !== null) {
+        const base = match[1];
+        const hint = match[2];
+        // Filter 1: skip blacklisted crowd terms
+        if (CROWD_BLACKLIST.has(base)) continue;
+        // Filter 2: skip hints that are only transient states, not visual descriptors
+        if (!VISUAL_HINT_PATTERN.test(hint)) continue;
+
+        if (!foundChars.has(base)) foundChars.set(base, { hint, contexts: [], shotCount: 0 });
+        const entry = foundChars.get(base)!;
+        entry.shotCount++;
+        // Collect unique sentences containing this character
+        for (const s of sentences) {
+          if (s.includes(match[0]) && !entry.contexts.includes(s.trim())) {
+            entry.contexts.push(s.trim());
+          }
+        }
+      }
+    }
+
+    // Filter 3: must appear in at least 2 shots to be a real character
+    const qualifyingChars = [...foundChars.entries()].filter(([, v]) => v.shotCount >= 2);
+
+    const existingNames = new Set(shotCharacters.map((c) => c.name));
+    const existingBaseNames = new Set(shotCharacters.map((c) => stripCharHint(c.name)));
+    const missingEntries = qualifyingChars.filter(([base]) =>
+      !existingNames.has(base) && !existingBaseNames.has(base)
+    );
+    if (missingEntries.length > 0) {
+      console.log(`[ShotSplit] Generating ${missingEntries.length} guest characters via LLM: ${missingEntries.map(([n]) => n).join(", ")}`);
+
+      // Fetch EP context for the prompt
+      const [ep] = await db.select({
+        title: episodes.title, description: episodes.description, idea: episodes.idea
+      }).from(episodes).where(eq(episodes.id, episodeId));
+
+      // Build bulk prompt for all missing characters
+      let bulkPrompt = `${ep?.title || ""}\n构思: ${ep?.idea || "（无）"}\n描述: ${ep?.description || "（无）"}\n\n=== 需要补充外观描述的角色（均为本集客串角色，scope="guest"）===\n`;
+      for (const [base, { hint, contexts }] of missingEntries) {
+        bulkPrompt += `\n角色名: ${base}\n已有外观线索: ${hint}\n出场场景:\n`;
+        for (const ctx of contexts.slice(0, 3)) {
+          bulkPrompt += `  - ${ctx}\n`;
+        }
+      }
+      bulkPrompt += "\n请为以上每个角色生成完整的 visualHint（2-4字）和 description（单段密集角色外观描写，含体态/面部/发型/服装/标志特征）。返回 JSON 数组。";
+
+      try {
+        if (!modelConfig?.text) {
+          console.warn("[ShotSplit] No text model — skipping guest character generation");
+        } else {
+          const model = createLanguageModel(modelConfig.text);
+          const charSystem = await resolvePrompt("character_extract", { userId, projectId }).catch(() => undefined);
+          const { text } = await generateText({
+            model,
+            system: charSystem || "你是角色设计师，生成角色视觉描述。仅返回JSON。",
+            prompt: bulkPrompt,
+          });
+          const parsed = parseLLMJSON(text);
+          const chars: Array<{ name: string; visualHint?: string; description: string }> = Array.isArray(parsed) ? parsed : (parsed.characters || []);
+          for (const c of chars) {
+            const charId = genId();
+            await db.insert(characters).values({
+              id: charId, projectId,
+              baseName: c.name, name: c.name,
+              description: c.description || "",
+              visualHint: c.visualHint || "",
+              scope: "guest", episodeId,
+            });
+            await db.insert(episodeCharacters).values({
+              id: genId(), episodeId, characterId: charId,
+            });
+            console.log(`[ShotSplit] Created guest character: ${c.name}`);
+          }
+        }
+      } catch (err) {
+        console.error("[ShotSplit] Guest character generation failed:", err);
+      }
+    }
+  }
+
   console.log(`[ShotSplit] Created ${allShots.length} shots from ${sceneChunks.length} chunks`);
   return NextResponse.json({ shots: allShots.length });
 }
@@ -1803,7 +1912,7 @@ async function handleBatchFrameGenerate(
         ...(lfAssetExisting?.characters ?? []).map(stripCharHint),
       ]);
       const filteredChars = shotCharNameSet.size > 0
-        ? charsWithImages.filter((c) => shotCharNameSet.has(c.name))
+        ? charsWithImages.filter((c) => shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || ""))
         : [];
       const shotCharRefImages = filteredChars.map((c) => c.referenceImage!);
       const shotCharRefLabels = filteredChars.map((c) => c.name);
@@ -1925,7 +2034,7 @@ async function handleSingleFrameGenerate(
     ...(lfAsset?.characters ?? []).map(stripCharHint),
   ]);
   const filteredChars = shotCharNameSet.size > 0
-    ? projectCharacters.filter((c) => c.referenceImage && shotCharNameSet.has(c.name))
+    ? projectCharacters.filter((c) => c.referenceImage && (shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || "")))
     : [];
   const shotCharRefImages = filteredChars.map((c) => c.referenceImage as string);
 
@@ -2185,25 +2294,10 @@ async function handleBatchVideoGenerate(
     return NextResponse.json({ results: [], message: "No eligible shots" });
   }
 
-  const batchCharacters = await getEpisodeCharacters(projectId, episodeId);
-  const characterDescriptions = batchCharacters
-    .map((c) => `${c.name}: ${c.description}`)
-    .join("\n");
-
   const videoProvider = resolveVideoProvider(modelConfig, versionedUploadDir);
   const ratio = (payload?.ratio as string) || "16:9";
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
   const videoSlots = await resolveSlotContents("video_generate", { userId, projectId });
-
-  // Generation mode for H3 prompt builder
-  let batchGenMode: "keyframe" | "reference" = "keyframe";
-  if (episodeId) {
-    const [ep] = await db.select({ gm: episodes.generationMode }).from(episodes).where(eq(episodes.id, episodeId));
-    batchGenMode = (ep?.gm as "keyframe" | "reference") || "keyframe";
-  } else {
-    const [proj] = await db.select({ gm: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
-    batchGenMode = (proj?.gm as "keyframe" | "reference") || "keyframe";
-  }
 
   // ── Sequential per-shot generation ──
   // Process shots one at a time with immediate DB persistence.
@@ -2218,27 +2312,14 @@ async function handleBatchVideoGenerate(
     try {
       await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
 
+      const ctx = await assembleH3ShotContext(shot.id);
+      const { projectCharacters, episode, project,
+        enrichedDialogues, sceneDesc, sceneLighting, sceneColorPalette,
+        costumes, bgmUrl, episodeDesc, episodeKeywords } = ctx;
+
       const shotLegacy = allShotsLegacy.get(shot.id);
       const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
-      const shotDialogues = await db
-        .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
-        .from(dialogues)
-        .where(eq(dialogues.shotId, shot.id))
-        .orderBy(asc(dialogues.sequence));
-
       const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
-      const videoContextForDialogue = videoScript;
-      const onScreenDialogueChars = shotDialogues
-        .map((d) => batchCharacters.find((c) => c.id === d.characterId)?.name ?? "Unknown")
-        .filter((name) => isCharacterOnScreen(name, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null));
-
-      const dialogueList = shotDialogues.map((d) => {
-        const char = batchCharacters.find((c) => c.id === d.characterId);
-        const characterName = char?.name ?? "Unknown";
-        const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null);
-        const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
-        return { characterName, text: d.text, offscreen: !onScreen, visualHint };
-      });
 
       const textProvider = resolveAIProvider(modelConfig);
       const useH3VG = process.env.H3_PROMPT_MODE !== "seedance";
@@ -2248,18 +2329,33 @@ async function handleBatchVideoGenerate(
       } else if (useH3VG) {
         const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
         const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
-        const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "zh";
+        const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
+
         const h3Output = await buildH3({
           videoScript,
           motionScript: shot.motionScript,
           duration: effectiveDuration,
           cameraDirection: shot.cameraDirection || "static",
-          generationMode: batchGenMode as "keyframe" | "reference",
-          characters: batchCharacters.map(c => ({ id: c.id, name: c.name, description: c.description, visualHint: c.visualHint, referenceImage: c.referenceImage, performanceStyle: c.performanceStyle, scope: c.scope, heightCm: c.heightCm, bodyType: c.bodyType })),
+          generationMode: (episode?.generationMode ?? project?.generationMode ?? "keyframe") as "keyframe" | "reference",
+          characters: projectCharacters.map(c => ({ id: c.id, name: c.name, description: c.description, visualHint: c.visualHint, referenceImage: c.referenceImage, performanceStyle: c.performanceStyle, scope: c.scope, heightCm: c.heightCm, bodyType: c.bodyType })),
           firstFrame: { fileUrl: shotLegacy?.firstFrame || "", prompt: shotLegacy?.startFrameDesc },
           lastFrame: { fileUrl: shotLegacy?.lastFrame || "", prompt: shotLegacy?.endFrameDesc },
+          dialogues: enrichedDialogues,
+          sceneDescription: sceneDesc,
+          sceneLighting,
+          sceneColorPalette,
           soundDesign: shot.soundDesign || undefined,
           musicCue: shot.musicCue || undefined,
+          bgmUrl,
+          costumes: costumes.map(c => ({ name: c.name, description: c.description, referenceImage: c.referenceImage, characterId: c.characterId })),
+          compositionGuide: shot.compositionGuide || undefined,
+          episodeDescription: episodeDesc,
+          episodeKeywords,
+          episodeTitle: episode?.title || undefined,
+          projectIdea: project?.idea || undefined,
+          projectTitle: project?.title || undefined,
+          projectOutline: project?.outline || undefined,
+          projectWorldSetting: project?.worldSetting || undefined,
           languageMode: h3Lang,
         }, textProvider, h3System);
         videoPrompt = h3Output.sections.join("\n\n");
@@ -2271,9 +2367,7 @@ async function handleBatchVideoGenerate(
           startFrameDesc: shotLegacy?.startFrameDesc ?? undefined,
           endFrameDesc: shotLegacy?.endFrameDesc ?? undefined,
           duration: effectiveDuration,
-          characters: batchCharacters,
-          dialogues: undefined,
-            // TODO: load per-shot dialogues for batch H3
+          characters: projectCharacters,
           slotContents: videoSlots,
         });
       }
@@ -2528,7 +2622,7 @@ async function handleSingleReferenceVideo(
   }
 
   const charRefs = projectCharacters
-    .filter((c) => !!c.referenceImage && shotCharNameSet.has(c.name))
+    .filter((c) => !!c.referenceImage && (shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || "")))
     .map((c) => ({ name: c.name, imagePath: c.referenceImage as string }));
 
   // charRefs may be empty — that's legal for shots with no characters
@@ -2808,7 +2902,7 @@ async function handleBatchReferenceVideo(
           for (const n of r.characters ?? []) shotCharNameSet.add(stripCharHint(n));
         }
         const charRefs = charsWithRefsAll
-          .filter((c) => shotCharNameSet.size === 0 || shotCharNameSet.has(c.name))
+          .filter((c) => shotCharNameSet.size === 0 || shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || ""))
           .map((c) => ({ name: c.name, imagePath: c.referenceImage as string }));
 
         // Step 2: Build ordered Seedance 2 reference image list (chars first, scenes second)

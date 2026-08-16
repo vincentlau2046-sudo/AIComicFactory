@@ -21,45 +21,39 @@ function buildContentLayer(input: H3PromptInput, lang: H3Language): string {
   const L = (zh: string, en: string) => lang === "zh" ? zh : en;
   const parts: string[] = [];
 
-  // Video Script
-  parts.push(`## ${L("视频剧本", "VIDEO SCRIPT")}`);
-  parts.push(input.videoScript || "(no script)");
-  parts.push("");
-
-  // Characters
-  if (input.characters?.length) {
-    parts.push(`## ${L("角色", "CHARACTERS")}`);
-    parts.push(L(
-      "（这些角色已出现在首尾帧中。仅描述他们的动作和对话，不要描述外貌。）",
-      "(These characters are already present in the first/last frames. Describe their ACTIONS and DIALOGUE only, NOT their appearance.)"
-    ));
-    parts.push(L("分配说话人 ID（按出场顺序：S1, S2, ...）：", "Assign speaker IDs (first-appearance order: S1, S2, ...):"));
-    for (const c of input.characters) {
-      const role = c.scope === "guest" ? L("[客串]", "[guest]") : "";
-      const style = c.performanceStyle ? `— ${c.performanceStyle}` : "";
-      parts.push(`- ${c.name} ${role}${style}`);
+  // ── 1. Project Overview ───────────────────────────
+  if (input.projectTitle || input.projectOutline || input.projectWorldSetting) {
+    parts.push(`## ${L("项目纲要", "PROJECT OVERVIEW")}`);
+    if (input.projectTitle) parts.push(L(`项目：${input.projectTitle}`, `Project: ${input.projectTitle}`));
+    if (input.projectOutline) {
+      parts.push(L("故事大纲：", "Story Outline:"));
+      parts.push(input.projectOutline);
+    }
+    if (input.projectWorldSetting) {
+      parts.push(L(`世界观：${input.projectWorldSetting}`, `World Setting: ${input.projectWorldSetting}`));
     }
     parts.push("");
   }
 
-  // Dialogues
-  if (input.dialogues?.length) {
-    parts.push(`## ${L("对话台本（必须在视频中呈现！）", "DIALOGUE SCRIPT (MUST be included in the video!)")}`);
-    const usedNames: string[] = [];
-    for (const d of input.dialogues) {
-      if (!usedNames.includes(d.characterName)) usedNames.push(d.characterName);
-    }
-    for (const d of input.dialogues) {
-      const sid = usedNames.indexOf(d.characterName) + 1;
-      const tag = d.offscreen
-        ? L(`(S${sid})画外音`, `(S${sid}) off-screen`)
-        : `(S${sid})`;
-      parts.push(L(`${tag}说：<d>[中文] ${d.text}</d>`, `${tag} says: <d>[Chinese] ${d.text}</d>`));
-    }
+  // ── 2. Episode Context ────────────────────────────
+  if (input.episodeTitle || input.episodeDescription) {
+    parts.push(`## ${L("剧集背景", "EPISODE CONTEXT")}`);
+    if (input.episodeTitle) parts.push(L(`集标题：${input.episodeTitle}`, `Episode: ${input.episodeTitle}`));
+    if (input.episodeDescription) parts.push(input.episodeDescription);
+    if (input.episodeKeywords) parts.push(`${L("关键词", "Keywords")}: ${input.episodeKeywords}`);
     parts.push("");
   }
 
-  // Frame Anchors
+  // ── 3. Scene ──────────────────────────────────────
+  if (input.sceneDescription || input.sceneLighting || input.sceneColorPalette) {
+    parts.push(`## ${L("场景", "SCENE")}`);
+    if (input.sceneDescription) parts.push(`${L("地点", "Location")}: ${input.sceneDescription}`);
+    if (input.sceneLighting) parts.push(`${L("光线", "Lighting")}: ${input.sceneLighting}`);
+    if (input.sceneColorPalette) parts.push(`${L("色调", "Color palette")}: ${input.sceneColorPalette}`);
+    parts.push("");
+  }
+
+  // ── 4. Frame Anchors ──────────────────────────────
   const hasFrames = input.firstFrame?.prompt || input.lastFrame?.prompt;
   if (hasFrames) {
     parts.push(`## ${L("帧锚点（关键帧图片）", "FRAME ANCHORS (keyframe images)")}`);
@@ -82,24 +76,45 @@ function buildContentLayer(input: H3PromptInput, lang: H3Language): string {
     parts.push("");
   }
 
-  // Scene
-  if (input.sceneDescription || input.sceneLighting || input.sceneColorPalette) {
-    parts.push(`## ${L("场景", "SCENE")}`);
-    if (input.sceneDescription) parts.push(`${L("地点", "Location")}: ${input.sceneDescription}`);
-    if (input.sceneLighting) parts.push(`${L("光线", "Lighting")}: ${input.sceneLighting}`);
-    if (input.sceneColorPalette) parts.push(`${L("色调", "Color palette")}: ${input.sceneColorPalette}`);
+  // ── 5. Characters ─────────────────────────────────
+  if (input.characters?.length) {
+    parts.push(`## ${L("角色", "CHARACTERS")}`);
+    parts.push(L(
+      "（这些角色已出现在首尾帧中。仅描述他们的动作和对话，不要描述外貌。）",
+      "(These characters are already present in the first/last frames. Describe their ACTIONS and DIALOGUE only, NOT their appearance.)"
+    ));
+    parts.push(L("分配说话人 ID（按出场顺序：S1, S2, ...）：", "Assign speaker IDs (first-appearance order: S1, S2, ...):"));
+    for (const c of input.characters) {
+      const role = c.scope === "guest" ? L("[客串]", "[guest]") : "";
+      const style = c.performanceStyle ? `— ${c.performanceStyle}` : "";
+      parts.push(`- ${c.name} ${role}${style}`);
+    }
     parts.push("");
   }
 
-  // Episode
-  if (input.episodeDescription) {
-    parts.push(`## ${L("剧集背景", "EPISODE CONTEXT")}`);
-    parts.push(input.episodeDescription);
-    if (input.episodeKeywords) parts.push(`${L("关键词", "Keywords")}: ${input.episodeKeywords}`);
+  // ── 6. Video Script ───────────────────────────────
+  parts.push(`## ${L("视频剧本", "VIDEO SCRIPT")}`);
+  parts.push(input.videoScript || "(no script)");
+  parts.push("");
+
+  // ── 7. Dialogues ──────────────────────────────────
+  if (input.dialogues?.length) {
+    parts.push(`## ${L("对话台本（必须在视频中呈现！）", "DIALOGUE SCRIPT (MUST be included in the video!)")}`);
+    const usedNames: string[] = [];
+    for (const d of input.dialogues) {
+      if (!usedNames.includes(d.characterName)) usedNames.push(d.characterName);
+    }
+    for (const d of input.dialogues) {
+      const sid = usedNames.indexOf(d.characterName) + 1;
+      const tag = d.offscreen
+        ? L(`(S${sid})画外音`, `(S${sid}) off-screen`)
+        : `(S${sid})`;
+      parts.push(L(`${tag}说：<d>[中文] ${d.text}</d>`, `${tag} says: <d>[Chinese] ${d.text}</d>`));
+    }
     parts.push("");
   }
 
-  // Audio
+  // ── 8. Audio ──────────────────────────────────────
   if (input.soundDesign || input.musicCue || input.bgmUrl) {
     parts.push(`## ${L("音频", "AUDIO")}`);
     if (input.soundDesign) parts.push(`${L("环境音", "Diegetic sound")}: ${input.soundDesign}`);
