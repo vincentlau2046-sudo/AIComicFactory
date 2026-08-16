@@ -128,11 +128,19 @@ function buildContentLayer(
     parts.push("");
   }
 
-  // ── 8. Narration hint (dialogue-free shots, opt-in) ──
-  if (input.activeModules?.includes("narration") && !input.dialogues?.length && !input.narrations?.length) {
-    const narrHint = r("narration_hint", "");
-    if (narrHint) {
-      parts.push(narrHint);
+  // ── 8. Narration hint (opt-in via narration module) ──
+  if (input.activeModules?.includes("narration") && !input.narrations?.length) {
+    const hintContent = input.dialogues?.length
+      ? r("narration_hint_with_dialogue", L(
+          "## 叙事增强提示\n此镜头有对话台本。在对话空档，请补充画外音或内心独白，增强叙事氛围和角色心理刻画——让读者身临其境。",
+          "## Narrative Enhancement Hint\nThis shot has dialogue. Between lines, add voiceover or inner monologue to enhance storytelling atmosphere and character depth — immerse the reader."
+        ))
+      : r("narration_hint", L(
+          "## 叙事旁白提示\n此镜头无对话台本。必须主动生成画外音或旁白，每 3-5 秒至少一句，禁止纯默片。旁白是叙事利器，心声让读者身临其境。",
+          "## Narrative Voiceover Hint\nThis shot has no dialogue. Actively generate voiceover or narration. At least one line every 3-5s. Narration is a storytelling tool — inner thoughts immerse the reader."
+        ));
+    if (hintContent) {
+      parts.push(hintContent);
       parts.push("");
     }
   }
@@ -271,12 +279,12 @@ function buildConstraintLayer(
   if (input.activeModules?.includes("narration")) {
     const voiceRule = input.narrations?.length
     ? r("voice", L(
-      "【声音 — 预生成旁白已提供】\n17. 上方「旁白/画外音（已预生成）」中提供了叙事声音行。你必须将它们嵌入到 integrated_multimodal_description 的对应时间段中。\n18. 每 3-5 秒至少嵌入一句。禁止纯默片 shot。",
-      "【Voice — Pre-generated Narration Provided】\n17. The NARRATION section above provides voice lines. Embed them into the corresponding time segments.\n18. At least one spoken line every 3-5s. No pure silent shots."
+      "【声音 — 预生成旁白已提供】\n17. 上方「旁白/画外音（已预生成）」中提供了叙事声音行。你必须将它们嵌入到 integrated_multimodal_description 的对应时间段中。\n18. 每 3-5 秒至少嵌入一句（对白或旁白）。禁止纯默片 shot。",
+      "【Voice — Pre-generated Narration Provided】\n17. The NARRATION section above provides voice lines. Embed them into the corresponding time segments.\n18. At least one spoken line every 3-5s (dialogue or narration). No pure silent shots."
     ))
     : r("voice", L(
-      "【声音 — 主动补位】\n17. 如果本 shot 对话台本为空，必须主动生成画外音或旁白\n18. 每 3-5 秒至少一句声音。禁止纯默片 shot。",
-      "【Voice — Active Fill】\n17. If dialogue is empty, actively generate off-screen voiceover or narration.\n18. At least one spoken line every 3-5s. No pure silent shots."
+      "【声音 — 主动补位】\n17. 每 3-5 秒至少一句声音（对白或旁白）。禁止纯默片片段。\n18. 旁白是叙事利器，心声让读者身临其境。零空白规则。",
+      "【Voice — Active Fill】\n17. At least one spoken line every 3-5s (dialogue or narration). No pure silent segments.\n18. Narration is a storytelling tool. Inner thoughts immerse the reader. Zero-silence rule."
     ));
     text += voiceRule + "\n";
   }
