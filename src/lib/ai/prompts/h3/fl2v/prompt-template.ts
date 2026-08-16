@@ -108,12 +108,23 @@ function buildContentLayer(
     parts.push("");
   }
 
-  // ── 6. Pre-generated narration (if any) ──
+  // ── 6a. Pre-generated narration (if any) ──
   if (input.activeModules?.includes("narration") && input.narrations?.length) {
-    const narrSlots = getDefaultSlotContents("video_h3_fl2v_narration");
-    const injectTemplate = narrSlots?.content_inject ||
-      "## 旁白/画外音（已预生成）\n以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：\n{{NARRATION_LINES}}";
-    parts.push(injectTemplate.replace("{{NARRATION_LINES}}", input.narrations.join("\n")));
+    parts.push(L(
+      "## 旁白（已预生成）\n以下旁白根据剧本自动生成，必须嵌入对应时间段：",
+      "## Narration (Pre-generated)\nThe following narration was auto-generated from the script. Embed into the corresponding time segments:"
+    ));
+    parts.push(input.narrations.join("\n"));
+    parts.push("");
+  }
+
+  // ── 6b. Pre-generated inner monologues (if any) ──
+  if (input.activeModules?.includes("narration") && input.innerMonologues?.length) {
+    parts.push(L(
+      "## 内心独白（已预生成）\n以下独白根据剧本自动生成，必须嵌入对应时间段：",
+      "## Inner Monologue (Pre-generated)\nThe following monologue was auto-generated from the script. Embed into the corresponding time segments:"
+    ));
+    parts.push(input.innerMonologues.join("\n"));
     parts.push("");
   }
 

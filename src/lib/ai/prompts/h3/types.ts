@@ -109,6 +109,7 @@ export interface H3PromptInput {
   slotContents?: Record<string, string>;
   /** Pre-generated narration lines in H3 voiceover format (Phase 2) */
   narrations?: string[];
+  innerMonologues?: string[];
   /** Active optional modules (e.g. ["narration"]). Empty or missing = base only. */
   activeModules?: string[];
 }

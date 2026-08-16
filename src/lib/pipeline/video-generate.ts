@@ -16,6 +16,41 @@ import { getActiveAsset, insertAssetVersion, stripCharHint } from "@/lib/shot-as
 import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 import { getUploadDir } from "@/lib/env";
 
+// ── Voice Line utilities ───────────────────────────────
+
+interface VoiceLine {
+  text: string;
+  type: "narration" | "inner_monologue";
+  character?: string;
+  timeHint?: string;
+}
+
+function parseVoiceField(raw: string | null | undefined): VoiceLine[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function detectLanguageQuick(text: string): string {
+  const chineseChars = text.match(/[\u4e00-\u9fff]/g);
+  return chineseChars && chineseChars.length > text.length * 0.1 ? "Chinese" : "English";
+}
+
+function voiceLinesToH3(lines: VoiceLine[]): string[] {
+  return lines.map(v => {
+    const lang = detectLanguageQuick(v.text);
+    if (v.type === "narration") {
+      return `Narrator (S0) says in an off-screen voiceover: <d>[${lang}] ${v.text}</d> while the narrator's lips remain completely closed.`;
+    }
+    const name = v.character || "Unknown";
+    return `${name} says in an off-screen voiceover: <d>[${lang}] ${v.text}</d> while his lips remain completely closed.`;
+  });
+}
+
 async function getVersionedUploadDirFromPipeline(versionId: string | null | undefined): Promise<string> {
   if (!versionId) return getUploadDir();
   const [version] = await db
@@ -245,6 +280,8 @@ export async function handleVideoGenerate(task: Task) {
       languageMode: h3Lang,
       slotContents: videoSlots,
       activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
+      narrations: voiceLinesToH3(parseVoiceField(shot.narrations)),
+      innerMonologues: voiceLinesToH3(parseVoiceField(shot.innerMonologues)),
     }, textProvider, h3System);
     prompt = h3Output.sections.join("\n\n");
   } else {

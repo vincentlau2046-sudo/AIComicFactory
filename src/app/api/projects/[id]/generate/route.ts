@@ -1368,6 +1368,8 @@ async function handleShotSplitStream(
     musicCue?: string;
     characters?: string[];
     referenceImagePrompts?: string[];
+    narrations?: Array<{ text: string; type: string; character?: string; timeHint?: string }>;
+    innerMonologues?: Array<{ text: string; type: string; character?: string; timeHint?: string }>;
   };
 
   // Process chunks concurrently
@@ -1502,6 +1504,8 @@ async function handleShotSplitStream(
       depthOfField: shot.depthOfField || "medium",
       soundDesign: shot.soundDesign || "",
       musicCue: shot.musicCue || "",
+      narrations: JSON.stringify(shot.narrations ?? []),
+      innerMonologues: JSON.stringify(shot.innerMonologues ?? []),
       episodeId: episodeId ?? null,
     });
     // No automatic asset seeding — shot_assets rows are only created when
