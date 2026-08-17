@@ -12,7 +12,6 @@ import { AgentPicker } from "@/components/agent-picker";
 import { apiFetch } from "@/lib/api-fetch";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import { PromptEditButton } from "@/components/prompt-templates/prompt-edit-button";
-import { StyleBar } from "@/components/editor/style-bar";
 import { toast } from "sonner";
 
 export function ScriptEditor() {
@@ -304,15 +303,6 @@ export function ScriptEditor() {
           )}
         </div>
       </div>
-
-      {/* Style context bar */}
-      <StyleBar
-        projectId={project.id}
-        visualStyle={project.visualStyle}
-        visualStyleKey={project.visualStyleKey}
-        eraAesthetic={project.eraAesthetic}
-        moodDirection={project.moodDirection}
-      />
 
       {/* Idea input */}
       <div className="rounded-2xl border border-[--border-subtle] bg-white p-1.5">
