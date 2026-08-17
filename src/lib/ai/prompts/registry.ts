@@ -527,7 +527,7 @@ const CHAR_EXTRACT_ROLE_DEFINITION = `你是一位资深角色设计师、摄影
 
 🚨 **绝对铁律 3——剧本里明确描写的细节不得覆盖或简化**：如果剧本原文已经写了角色的具体外貌/服饰/武器，必须**原封不动**地纳入 description，不允许"优化"、"重新设计"或替换成更通用的说法。
 
-你的任务：从剧本中提取每一个需要在画面中出现的角色（无论是否有明确姓名），并生成专业级的视觉规格书，达到真实电影制作宝典的水准。
+你的任务：从剧本中提取**本集有实质性出场**的角色（参考下方的「在场 vs 被引用」规则），并生成专业级的视觉规格书，达到真实电影制作宝典的水准。
 
 重要：不仅要提取有名字的角色，还要提取以下类型的角色：
 - 以代称出现的角色（如"他"、"那个男人"、"老者"）——为其创造一个简短的标识名（如"遗照男人"、"神秘老者"）
@@ -614,6 +614,20 @@ const CHAR_EXTRACT_SCOPE_RULES = `═══ 角色分类规则 ═══
 - 经筛选后保留下来的角色，每一个都必须完整出现在 characters 数组里，不许遗漏
 - 如果剧本里已经有 "=== 2. 角色描述 === " 固定格式块（由 script_generate 生成的 角色/外貌/服饰/标志特征/气质姿态 五字段），**必须**把每一个角色原样提取出来，不得精炼、不得删减、不得改写角色名
 - 自检：生成完后，回头逐行扫描剧本，确认每个筛选规则保留的角色都在 characters 里`;
+
+const CHAR_EXTRACT_PRESENCE_RULES = `═══ 在场 vs 被引用（边界约束——最高优先级）═══
+
+你只能提取「在场」角色。严格区分：
+
+- **在场（Presence）**：角色在本单元中有实质性出场——有动作描写、有对白、在场景描述中物理存在。这些角色需要视觉规格。
+- **被引用（Reference）**：角色仅在本单元的叙述/对话/回忆/旁白中被提及名字，但不在当前单元的场景内。**忽略，不提取。**
+
+示例：
+- ✅ 在场："林晓月推门进来，抖了抖伞上的雨水" → 提取林晓月
+- ❌ 被引用："林晓月想起师傅说过的话" → 师傅不在场，不提取
+- ❌ 被引用："赵东明说：'上次那个姓李的呢？'" → 姓李的不在场，不提取
+
+自检：生成每个角色前，确认该角色在当前剧本中有**具体的场景位置**（"在房间里""站在桥上""从巷口走来"）——而非仅存在于他人的对话或回忆中。`;
 
 const CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS = `═══ 描述要求 ═══
 写一段密集、精确的段落，涵盖以下所有方面。该描述将被原封不动地传给图像生成器——以专业摄影指导向摄影师布置任务的口吻书写：
@@ -780,6 +794,7 @@ const characterExtractDef: PromptDefinition = {
     slot("style_detection", CHAR_EXTRACT_STYLE_DETECTION, true),
     slot("output_format", CHAR_EXTRACT_OUTPUT_FORMAT, false),
     slot("scope_rules", CHAR_EXTRACT_SCOPE_RULES, true),
+    slot("presence_rules", CHAR_EXTRACT_PRESENCE_RULES, true),
     slot(
       "description_requirements",
       CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS,
@@ -799,6 +814,8 @@ const characterExtractDef: PromptDefinition = {
       r("output_format"),
       "",
       r("scope_rules"),
+      "",
+      r("presence_rules"),
       "",
       r("description_requirements"),
       "",
