@@ -12,6 +12,7 @@ import { AgentPicker } from "@/components/agent-picker";
 import { apiFetch } from "@/lib/api-fetch";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import { PromptEditButton } from "@/components/prompt-templates/prompt-edit-button";
+import { StyleBar } from "@/components/editor/style-bar";
 import { toast } from "sonner";
 
 export function ScriptEditor() {
@@ -305,29 +306,13 @@ export function ScriptEditor() {
       </div>
 
       {/* Style context bar */}
-      {project?.visualStyle && (
-        <div className="rounded-2xl border border-[--border-subtle] bg-gradient-to-r from-primary/5 to-transparent p-4">
-          <div className="flex items-center gap-2 text-sm text-[--text-primary]">
-            <span className="text-base">🎨</span>
-            <span className="font-medium">{project.visualStyle?.slice(0, 40)}{(project.visualStyle?.length || 0) > 40 ? "..." : ""}</span>
-            {project.eraAesthetic && (
-              <>
-                <span className="text-[--text-muted]">·</span>
-                <span className="text-[--text-muted]">{project.eraAesthetic?.slice(0, 30)}</span>
-              </>
-            )}
-            {project.moodDirection && (
-              <>
-                <span className="text-[--text-muted]">·</span>
-                <span className="text-[--text-muted]">{project.moodDirection?.slice(0, 30)}</span>
-              </>
-            )}
-          </div>
-          <p className="mt-1 text-xs text-[--text-muted]">
-            {t("project.styleContextHint")}
-          </p>
-        </div>
-      )}
+      <StyleBar
+        projectId={project.id}
+        visualStyle={project.visualStyle}
+        visualStyleKey={project.visualStyleKey}
+        eraAesthetic={project.eraAesthetic}
+        moodDirection={project.moodDirection}
+      />
 
       {/* Idea input */}
       <div className="rounded-2xl border border-[--border-subtle] bg-white p-1.5">

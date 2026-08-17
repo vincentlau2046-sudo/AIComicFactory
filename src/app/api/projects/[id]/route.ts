@@ -148,9 +148,13 @@ export async function PATCH(
     worldSetting: string;
     targetDuration: number;
     bgmUrl: string;
+    visualStyle: string;
+    visualStyleKey: string;
+    eraAesthetic: string;
+    moodDirection: string;
   }>;
 
-  const { title, idea, script, outline, status, generationMode, useProjectPrompts, colorPalette, worldSetting, targetDuration, bgmUrl } = body;
+  const { title, idea, script, outline, status, generationMode, useProjectPrompts, colorPalette, worldSetting, targetDuration, bgmUrl, visualStyle, visualStyleKey, eraAesthetic, moodDirection } = body;
 
   const [updated] = await db
     .update(projects)
@@ -166,6 +170,10 @@ export async function PATCH(
       ...(worldSetting !== undefined && { worldSetting }),
       ...(targetDuration !== undefined && { targetDuration }),
       ...(bgmUrl !== undefined && { bgmUrl }),
+      ...(visualStyle !== undefined && { visualStyle }),
+      ...(visualStyleKey !== undefined && { visualStyleKey }),
+      ...(eraAesthetic !== undefined && { eraAesthetic }),
+      ...(moodDirection !== undefined && { moodDirection }),
       updatedAt: new Date(),
     })
     .where(eq(projects.id, id))
