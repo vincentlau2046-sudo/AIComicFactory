@@ -799,16 +799,12 @@ async function handleCharacterExtract(
     existingChars.filter((c) => !c.episodeId).map((c) => [c.name.toLowerCase().trim(), c])
   );
   const existingRegistry = existingChars
-    .filter((c) => c.episodeId && c.baseName)
-    .reduce((acc, c) => {
-      const existing = acc.find((r) => r.baseName === c.baseName);
-      if (existing) {
-        existing.episodes.push({ epIndex: existing.episodes.length + 1, visualHint: c.visualHint || "" });
-      } else if (c.baseName) {
-        acc.push({ baseName: c.baseName, episodes: [{ epIndex: 1, visualHint: c.visualHint || "" }] });
-      }
-      return acc;
-    }, [] as Array<{ baseName: string; episodes: Array<{ epIndex: number; visualHint: string }> }>);
+    .filter((c) => !c.episodeId && c.baseName)
+    .map((c) => ({
+      baseName: c.baseName!,
+      scope: c.scope as string,
+      visualHint: c.visualHint || undefined
+    }));
 
   // Clear old episode_characters links before re-creating
   let oldEpisodeCharIds: string[] = [];
