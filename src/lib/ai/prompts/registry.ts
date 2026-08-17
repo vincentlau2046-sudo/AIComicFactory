@@ -42,12 +42,12 @@ export interface PromptSlot {
 }
 
 export type PromptCategory =
-  | "import"
   | "script"
   | "character"
   | "shot"
   | "frame"
-  | "video";
+  | "video"
+  | "h3";
 
 export interface PromptDefinition {
   /** Machine-readable key, e.g. "script_generate" */
@@ -907,7 +907,7 @@ const projectAssessDef: PromptDefinition = {
   key: "project_assess",
   nameKey: "promptTemplates.prompts.projectAssess",
   descriptionKey: "promptTemplates.prompts.projectAssessDesc",
-  category: "import",
+  category: "script",
   slots: [
     slot("role_definition", PROJECT_ASSESS_SYSTEM, true),
     slot("dimensions", getAssessDimensions(), true),
@@ -927,7 +927,7 @@ const characterArcDef: PromptDefinition = {
   key: "character_arc",
   nameKey: "promptTemplates.prompts.characterArc",
   descriptionKey: "promptTemplates.prompts.characterArcDesc",
-  category: "import",
+  category: "character",
   slots: [
     slot("role_definition", CHARACTER_ARC_SYSTEM, true),
     slot("detection_rules", CHARACTER_ARC_DETECTION, true),
@@ -2094,7 +2094,7 @@ const videoH3PromptDef: PromptDefinition = {
   key: "video_h3_prompt",
   nameKey: "promptTemplates.prompts.videoH3Prompt",
   descriptionKey: "promptTemplates.prompts.videoH3PromptDesc",
-  category: "video",
+  category: "h3",
   slots: [
     slot("role_definition", VIDEO_H3_ROLE_DEFINITION, true),
     slot("process_steps", VIDEO_H3_PROCESS_STEPS, true),
@@ -2198,7 +2198,7 @@ const fl2vGuideDef: PromptDefinition = {
   key: "video_h3_fl2v_guide",
   nameKey: "promptTemplates.prompts.videoH3Fl2vGuide",
   descriptionKey: "promptTemplates.prompts.videoH3Fl2vGuideDesc",
-  category: "video",
+  category: "h3",
   slots: [
     slot("role", FL2V_GUIDE_ROLE, true),
     slot("task", FL2V_GUIDE_TASK, true),
@@ -2253,7 +2253,7 @@ const fl2vContentDef: PromptDefinition = {
   key: "video_h3_fl2v_content",
   nameKey: "promptTemplates.prompts.videoH3Fl2vContent",
   descriptionKey: "promptTemplates.prompts.videoH3Fl2vContentDesc",
-  category: "video",
+  category: "h3",
   slots: [
     slot("script_label", FL2V_CONTENT_SCRIPT_LABEL, false),
     slot("character_label", FL2V_CONTENT_CHAR_LABEL, true),
@@ -2326,7 +2326,7 @@ const fl2vConstraintsDef: PromptDefinition = {
   key: "video_h3_fl2v_constraints",
   nameKey: "promptTemplates.prompts.videoH3Fl2vConstraints",
   descriptionKey: "promptTemplates.prompts.videoH3Fl2vConstraintsDesc",
-  category: "video",
+  category: "h3",
   slots: [
     slot("time_structure", FL2V_CONSTRAINT_TIME_STRUCTURE, true),
     slot("action_beats", FL2V_CONSTRAINT_ACTION_BEATS, true),
@@ -2418,7 +2418,7 @@ const fl2vNarrationDef: PromptDefinition = {
   key: "video_h3_fl2v_narration",
   nameKey: "promptTemplates.prompts.videoH3Fl2vNarration",
   descriptionKey: "promptTemplates.prompts.videoH3Fl2vNarrationDesc",
-  category: "video",
+  category: "h3",
   slots: [
     slot("system", FL2V_NARRATION_SYSTEM, true),
     slot("user_template", FL2V_NARRATION_USER_TEMPLATE, true),
@@ -2459,7 +2459,7 @@ const r2vGuideDef: PromptDefinition = {
   key: "video_h3_r2v_guide",
   nameKey: "promptTemplates.prompts.videoH3R2vGuide",
   descriptionKey: "promptTemplates.prompts.videoH3R2vGuideDesc",
-  category: "video",
+  category: "h3",
   slots: [
     slot("role", R2V_GUIDE_ROLE, true),
     slot("process", R2V_GUIDE_PROCESS, true),
@@ -2479,7 +2479,7 @@ const t2vGuideDef: PromptDefinition = {
   key: "video_h3_t2v_guide",
   nameKey: "promptTemplates.prompts.videoH3T2vGuide",
   descriptionKey: "promptTemplates.prompts.videoH3T2vGuideDesc",
-  category: "video",
+  category: "h3",
   slots: [],
   buildFullPrompt() {
     throw new Error("T2V mode not implemented yet");

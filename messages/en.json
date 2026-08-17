@@ -376,7 +376,23 @@
       "shotSplitKeyframeAssets": "Shot · Keyframe Asset Prompts",
       "shotSplitKeyframeAssetsDesc": "Generate first/last frame image prompts from existing shot metadata",
       "shotSplitReferenceAssets": "Shot · Reference Image Prompts",
-      "shotSplitReferenceAssetsDesc": "Generate reference image prompts from existing shot metadata"
+      "shotSplitReferenceAssetsDesc": "Generate reference image prompts from existing shot metadata",
+      "projectAssess": "Project Assessment",
+      "projectAssessDesc": "Analyze script to determine visual style, era aesthetic, and mood direction",
+      "characterArc": "Character Arc",
+      "characterArcDesc": "Analyze cross-episode character phase changes and visual transitions",
+      "videoH3Fl2vGuide": "H3 FL2V · Guide",
+      "videoH3Fl2vGuideDesc": "FL2V Guide Layer",
+      "videoH3Fl2vContent": "H3 FL2V · Content",
+      "videoH3Fl2vContentDesc": "FL2V Content Layer",
+      "videoH3Fl2vConstraints": "H3 FL2V · Constraints",
+      "videoH3Fl2vConstraintsDesc": "FL2V Constraint Layer",
+      "videoH3Fl2vNarration": "H3 FL2V · Narration",
+      "videoH3Fl2vNarrationDesc": "FL2V Narration/monologue generation",
+      "videoH3R2vGuide": "H3 R2V · Guide",
+      "videoH3R2vGuideDesc": "R2V Reference Mode Guide",
+      "videoH3T2vGuide": "H3 T2V · Guide",
+      "videoH3T2vGuideDesc": "T2V Text Mode Guide"
     },
     "editor": {
       "slotMode": "Slots",
@@ -533,5 +549,8 @@
       "durationStrategy": "Duration Strategy",
       "durationStrategyDesc": "Description-granularity rules tiered by shot duration"
     }
+  },
+  "categories": {
+    "h3": "MiniMax H3"
   }
 }

@@ -43,6 +43,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   shot: "🎬",
   frame: "🖼️",
   video: "🎥",
+  h3: "🎞️",
 };
 
 /** Strip "promptTemplates." prefix from registry nameKeys since t() is already scoped */

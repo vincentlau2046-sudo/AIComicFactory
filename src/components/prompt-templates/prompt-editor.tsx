@@ -15,13 +15,14 @@ import { PresetDialog } from "./preset-dialog";
 import { useModelStore } from "@/stores/model-store";
 import { getModelMaxDuration } from "@/lib/ai/model-limits";
 
-const CATEGORIES = ["all", "script", "character", "storyboard"] as const;
+const CATEGORIES = ["all", "script", "character", "storyboard", "h3"] as const;
 
 // Map the UI category to actual registry categories
 const CATEGORY_MAP: Record<string, string[]> = {
   script: ["script"],
   character: ["character"],
   storyboard: ["shot", "frame", "video"],
+  h3: ["h3"],
 };
 
 /** Strip "promptTemplates." prefix from registry nameKeys since t() is already scoped */

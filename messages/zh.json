@@ -379,7 +379,23 @@
       "shotSplitKeyframeAssets": "分镜·首尾帧提示词",
       "shotSplitKeyframeAssetsDesc": "基于已有镜头元数据生成首帧/尾帧的图像提示词",
       "shotSplitReferenceAssets": "分镜·参考图提示词",
-      "shotSplitReferenceAssetsDesc": "基于已有镜头元数据生成参考图的图像提示词"
+      "shotSplitReferenceAssetsDesc": "基于已有镜头元数据生成参考图的图像提示词",
+      "projectAssess": "项目定位",
+      "projectAssessDesc": "分析剧本确定项目的视觉风格、时代美学和情绪方向",
+      "characterArc": "角色弧光",
+      "characterArcDesc": "分析角色的跨集阶段变化，生成视觉转变描述",
+      "videoH3Fl2vGuide": "H3 FL2V · 引导",
+      "videoH3Fl2vGuideDesc": "FL2V 模式的引导层 (Guide Layer)",
+      "videoH3Fl2vContent": "H3 FL2V · 内容",
+      "videoH3Fl2vContentDesc": "FL2V 模式的内容层 (Content Layer)",
+      "videoH3Fl2vConstraints": "H3 FL2V · 约束",
+      "videoH3Fl2vConstraintsDesc": "FL2V 模式的约束层 (Constraint Layer)",
+      "videoH3Fl2vNarration": "H3 FL2V · 旁白",
+      "videoH3Fl2vNarrationDesc": "FL2V 模式的旁白/独白生成提示",
+      "videoH3R2vGuide": "H3 R2V · 引导",
+      "videoH3R2vGuideDesc": "R2V 参考模式引导层",
+      "videoH3T2vGuide": "H3 T2V · 引导",
+      "videoH3T2vGuideDesc": "T2V 文本模式引导层"
     },
     "editor": {
       "slotMode": "插槽",
@@ -536,5 +552,8 @@
       "durationStrategy": "时长策略",
       "durationStrategyDesc": "按镜头时长分级的描述颗粒度规则"
     }
+  },
+  "categories": {
+    "h3": "MiniMax H3"
   }
 }
