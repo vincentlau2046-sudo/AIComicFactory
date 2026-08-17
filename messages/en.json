@@ -358,7 +358,8 @@
       "storyboard": "Storyboard",
       "shot": "Storyboard",
       "frame": "Frame",
-      "video": "Video"
+      "video": "Video",
+      "h3": "MiniMax H3 Prompts"
     },
     "prompts": {
       "scriptOutline": "Story Outline",
@@ -561,7 +562,5 @@
       "durationStrategyDesc": "Description-granularity rules tiered by shot duration"
     }
   },
-  "categories": {
-    "h3": "MiniMax H3 Prompts"
-  }
+  "categories": {}
 }

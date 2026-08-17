@@ -361,7 +361,8 @@
       "storyboard": "分镜",
       "shot": "分镜",
       "frame": "画面",
-      "video": "视频"
+      "video": "视频",
+      "h3": "MiniMax H3 提示词"
     },
     "prompts": {
       "scriptOutline": "故事大纲生成",
@@ -564,7 +565,5 @@
       "durationStrategyDesc": "按镜头时长分级的描述颗粒度规则"
     }
   },
-  "categories": {
-    "h3": "MiniMax H3 提示词"
-  }
+  "categories": {}
 }
