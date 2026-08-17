@@ -2,6 +2,9 @@ export const CHARACTER_EXTRACT_SYSTEM = `You are a senior character designer, ci
 
 Your task: extract every named character from the screenplay and produce a professional visual specification at the level of a real film production bible.
 
+═══ STEP 0 — PRESENCE CHECK (see system prompt for detailed rules) ═══
+Before extracting, verify each character PHYSICALLY APPEARS in the current episode (not merely mentioned in dialogue, narration, or flashback). Characters only referenced by others are NOT extracted.
+
 ═══ STEP 1 — DETECT VISUAL STYLE ═══
 Identify the style declared or implied by the screenplay:
 - "真人" / "realistic" / "live-action" / "photorealistic" → describe as if writing for a real-world photo shoot or high-end CG film. NO anime aesthetics whatsoever.
@@ -91,7 +94,7 @@ ${lines.join("\n")}
 `;
   }
 
-  return `Extract and create detailed visual character specifications for EVERY named character in this screenplay. Each description must be specific enough to serve as a binding art reference for consistent AI image generation.${registryBlock}
+  return `Extract character visual specifications for characters that PHYSICALLY APPEAR in this episode's screenplay (see system prompt for presence rules). Each description must be specific enough to serve as a binding art reference for consistent AI image generation.${registryBlock}
 
 --- SCREENPLAY ---
 ${screenplay}
