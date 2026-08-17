@@ -215,7 +215,7 @@ export async function handleVideoGenerate(task: Task) {
   let prompt: string;
   if (useH3Prompt) {
     // v0.2.0: H3 structured prompt (based on official MiniMax VIDEO_PROMPT_WRITING_GUIDE)
-    const { buildVideoPromptLLM: buildH3Builder } = await import("@/lib/ai/prompts/h3");
+    const { buildVideoPromptLLM: buildH3Builder, buildH3Input } = await import("@/lib/ai/prompts/h3");
     const generationMode: "keyframe" | "reference" =
       (episode?.generationMode ?? project?.generationMode ?? "keyframe") as "keyframe" | "reference";
 
@@ -244,45 +244,30 @@ export async function handleVideoGenerate(task: Task) {
     : shotList;
 
 
-    const h3Output = await buildH3Builder({
-      videoScript,
-      motionScript: shot.motionScript,
-      duration: effectiveDuration,
-      cameraDirection: shot.cameraDirection || "static",
-      generationMode,
-      characters: frameCharacters.map(c => ({
-        id: c.id, name: c.name,
-        description: c.description, visualHint: c.visualHint,
-        referenceImage: c.referenceImage, performanceStyle: c.performanceStyle,
-        scope: c.scope, heightCm: c.heightCm, bodyType: c.bodyType,
-      })),
+    const h3Input = await buildH3Input({
+      userId, projectId,
+      shot,
+      shotCharacters: frameCharacters,
       firstFrame: firstFrameAsset.fileUrl ? { fileUrl: firstFrameAsset.fileUrl, prompt: firstFrameAsset.prompt } : undefined,
       lastFrame: lastFrameAsset.fileUrl ? { fileUrl: lastFrameAsset.fileUrl, prompt: lastFrameAsset.prompt } : undefined,
-      dialogues: enrichedDialogues,
-      sceneDescription: shot.prompt || sceneDesc,
-      sceneLighting,
-      sceneColorPalette,
-      soundDesign: shot.soundDesign || undefined,
-      musicCue: shot.musicCue || undefined,
-      bgmUrl,
-      costumes: costumes.map(c => ({
-        name: c.name, description: c.description,
-        referenceImage: c.referenceImage, characterId: c.characterId,
-      })),
-      compositionGuide: shot.compositionGuide || undefined,
-      episodeDescription: episodeStructure || episodeDesc,
-      episodeKeywords,
-      episodeTitle: episode?.title || undefined,
-      projectIdea: project?.idea || undefined,
-      projectTitle: project?.title || undefined,
-      projectOutline: project?.outline || buildEpisodeOutline(allEpisodes),
-      projectWorldSetting: project?.worldSetting || undefined,
-      languageMode: h3Lang,
-      slotContents: videoSlots,
-      activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
-      narrations: voiceLinesToH3(parseVoiceField(shot.narrations)),
-      innerMonologues: voiceLinesToH3(parseVoiceField(shot.innerMonologues)),
-    }, textProvider, h3System);
+      extraFields: {
+        bgmUrl,
+        costumes: costumes.map(c => ({
+          name: c.name, description: c.description,
+          referenceImage: c.referenceImage, characterId: c.characterId,
+        })),
+        episodeDescription: episodeStructure || episodeDesc,
+        episodeTitle: episode?.title || undefined,
+        episodeKeywords,
+        projectIdea: project?.idea || undefined,
+        projectTitle: project?.title || undefined,
+        projectOutline: project?.outline || buildEpisodeOutline(allEpisodes),
+        projectWorldSetting: project?.worldSetting || undefined,
+        languageMode: h3Lang,
+        slotContents: videoSlots,
+      },
+    });
+    const h3Output = await buildH3Builder(h3Input, textProvider, h3System);
     prompt = h3Output.sections.join("\n\n");
   } else {
     // Legacy path: Seedance-style prompt (unchanged from v0.1.x)
