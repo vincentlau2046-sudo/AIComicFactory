@@ -1479,7 +1479,7 @@ async function handleShotSplitStream(
   }
 
   const characterDescriptions = shotCharacters
-    .map((c) => `${c.name}${c.visualHint ? `（${c.visualHint}）` : ""}: ${c.description}`)
+    .map((c) => `${c.name}${c.visualHint ? `（${c.visualHint}）` : ""}${c.scope === "main" ? "[主角]" : "[配角]"}: ${c.description}`)
     .join("\n");
 
   const characterVisualHints = shotCharacters
@@ -2099,7 +2099,7 @@ async function handleSingleVideoGenerate(
 
   const shotCharacters = await getEpisodeCharacters(projectId, shot.episodeId);
   const characterDescriptions = shotCharacters
-    .map((c) => `${c.name}${c.visualHint ? `（${c.visualHint}）` : ""}: ${c.description}`)
+    .map((c) => `${c.name}${c.visualHint ? `（${c.visualHint}）` : ""}${c.scope === "main" ? "[主角]" : "[配角]"}: ${c.description}`)
     .join("\n");
 
   const shotDialogues = await db
