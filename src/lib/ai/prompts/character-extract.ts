@@ -77,17 +77,18 @@ Respond ONLY with the JSON array. No markdown. No commentary.`;
 
 export function buildCharacterExtractPrompt(
   screenplay: string,
-  existingRegistry?: Array<{ baseName: string; scope?: string; visualHint?: string }>
+  existingRegistry?: Array<{ baseName: string; episodes: Array<{ epIndex: number; visualHint: string }> }>
 ): string {
   let registryBlock = "";
   if (existingRegistry && existingRegistry.length > 0) {
-    const lines = existingRegistry.map((c) =>
-      `- ${c.baseName}${c.visualHint ? `（${c.visualHint}）` : ""}${c.scope === "main" ? " [主角]" : " [配角]"}`
-    );
+    const lines = existingRegistry.map((c) => {
+      const epHints = c.episodes.map((e) => `EP${String(e.epIndex).padStart(2, "0")}=${e.visualHint}`).join(", ");
+      return `- ${c.baseName}: ${epHints}`;
+    });
     registryBlock = `
 
 === 现有角色注册表（请复用以下 baseName，不要创建同名新角色）===
-已在此项目中确认的角色。如果他们在当前剧本中有实质性出场（场景中物理存在），请使用相同的 baseName。
+这些角色已在之前的剧集中出现。如果他们在当前剧本中有出场，请使用相同的 baseName，并在 episodes 中给出该EP的 visualHint（考虑年龄推移/剧情状态变化）。
 
 ${lines.join("\n")}
 `;
