@@ -95,7 +95,14 @@
     "kanbanBatchGenerate": "Generate ({count})",
     "continueFromPrev": "Continue from previous",
     "continueFromPrevTooltip": "Use last frame of previous episode as first frame",
-    "prevEpisodeNoFrames": "Previous episode has no generated frames"
+    "prevEpisodeNoFrames": "Previous episode has no generated frames",
+    "styleContextHint": "Project style confirmed. Script generation will follow this direction.",
+    "structuredParse": "Structured Parse",
+    "parse": "Parse Screenplay",
+    "parseHint": "Parse the script into structured scene list for storyboard use. Requires one AI call.",
+    "sceneCount": "{count} scenes",
+    "dialogueCount": "{count} lines of dialogue",
+    "parsedInfo": "Parsed. Will be referenced by storyboard."
   },
   "character": {
     "name": "Character Name",
@@ -357,6 +364,8 @@
       "refVideoGenerateDesc": "Template sent directly to the video model in reference mode (not the video itself)",
       "refVideoPrompt": "Video Prompt AI Writer",
       "refVideoPromptDesc": "System prompt that drives the AI to write the reference-mode video prompt",
+      "videoH3Prompt": "H3 Video Prompt",
+      "videoH3PromptDesc": "Structured prompt template for MiniMax H3 video generation",
       "shotSplitKeyframeAssets": "Shot · Keyframe Asset Prompts",
       "shotSplitKeyframeAssetsDesc": "Generate first/last frame image prompts from existing shot metadata",
       "shotSplitReferenceAssets": "Shot · Reference Image Prompts",

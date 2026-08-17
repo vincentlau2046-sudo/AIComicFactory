@@ -46,6 +46,7 @@ export async function POST(
   const body = (await request.json()) as {
     text: string;
     modelConfig: { text: ProviderConfig | null };
+    styleContext?: { visualStyle: string; eraAesthetic: string };
   };
 
   if (!body.modelConfig?.text) {
@@ -77,7 +78,7 @@ export async function POST(
         const result = await generateText({
           model,
           system: importCharSystem,
-          prompt: buildImportCharacterExtractPrompt(chunk),
+          prompt: buildImportCharacterExtractPrompt(chunk, body.styleContext),
           providerOptions: jsonMode,
         });
 
@@ -95,7 +96,7 @@ export async function POST(
           const retry = await generateText({
             model,
             system: importCharSystem,
-            prompt: buildImportCharacterExtractPrompt(chunk) + "\n\nIMPORTANT: Return COMPLETE, VALID JSON.",
+            prompt: buildImportCharacterExtractPrompt(chunk, body.styleContext) + "\n\nIMPORTANT: Return COMPLETE, VALID JSON.",
             providerOptions: jsonMode,
           });
           const parsed = parseLLMJSON(retry.text);

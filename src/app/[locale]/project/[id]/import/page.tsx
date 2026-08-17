@@ -5,7 +5,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
   Upload, FileText, Users, Layers, Sparkles,
-  Loader2, Check, X, ArrowLeft, AlertCircle,
+  Loader2, Check, X, ArrowLeft, AlertCircle, Palette, GitBranch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,14 +43,15 @@ interface LogEntry {
   createdAt: string | number;
 }
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 const STEPS = [
   { num: 1 as Step, icon: FileText, label: "importStep.parse" },
-  { num: 2 as Step, icon: Users, label: "importStep.characters" },
-  { num: 3 as Step, icon: Layers, label: "importStep.split" },
-  { num: 4 as Step, icon: Sparkles, label: "importStep.generate" },
-  { num: 5 as Step, icon: Users, label: "importStep.perEpCharacter" },
+  { num: 2 as Step, icon: Palette, label: "importStep.assess" },
+  { num: 3 as Step, icon: Users, label: "importStep.characters" },
+  { num: 4 as Step, icon: Layers, label: "importStep.split" },
+  { num: 5 as Step, icon: GitBranch, label: "importStep.arc" },
+  { num: 6 as Step, icon: Sparkles, label: "importStep.generate" },
 ] as const;
 
 export default function ImportPage({
@@ -69,7 +70,7 @@ export default function ImportPage({
   // Pipeline state
   const [currentStep, setCurrentStep] = useState<Step | 0>(0);
   const [stepStatus, setStepStatus] = useState<Record<Step, "idle" | "running" | "done" | "error">>({
-    1: "idle", 2: "idle", 3: "idle", 4: "idle", 5: "idle",
+    1: "idle", 2: "idle", 3: "idle", 4: "idle", 5: "idle", 6: "idle",
   });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -82,16 +83,25 @@ export default function ImportPage({
   // Step 1 result
   const [fullText, setFullText] = useState("");
 
-  // Step 2 result
+  // Step 2 result: project assessment
+  const [projectAssess, setProjectAssess] = useState<{
+    visualStyle: string; eraAesthetic: string; moodDirection: string;
+    worldSetting: string; genre: string; targetAudience: string;
+  } | null>(null);
+
+  // Step 3 result: characters
   const [characters, setCharacters] = useState<ExtractedCharacter[]>([]);
   const [relationships, setRelationships] = useState<Array<{ characterA: string; characterB: string; relationType: string; description?: string }>>([]);
 
-  // Step 3 result
+  // Step 4 result: episodes
   const [episodes, setEpisodes] = useState<SplitEpisode[]>([]);
 
-  // Stage 5 result: per-EP characters with visual hints
-  const [perEpCharacters, setPerEpCharacters] = useState<Array<{ id: string; name: string; visualHint: string; episodeId: string; baseName: string }>>([]);
-  const [perEpEpisodes, setPerEpEpisodes] = useState<Array<{ id: string; title: string; sequence: number }>>([]);
+  // Step 5 result: character arcs
+  const [characterArcs, setCharacterArcs] = useState<Array<{
+    characterName: string; totalPhases: number;
+    phases: Array<{ phaseName: string; episodeRange: string; triggerEvent: string; visualChanges: Record<string, string>; statusChange: string }>;
+  }>>([]);
+  const [skippedChars, setSkippedChars] = useState<Array<{ characterName: string; reason: string }>>([]);
 
   // History mode
   const [historyMode, setHistoryMode] = useState(false);
@@ -110,7 +120,7 @@ export default function ImportPage({
           const doneSteps = data.filter((l: LogEntry) => l.status === "done").map((l: LogEntry) => l.step);
           const maxDone = Math.max(0, ...doneSteps) as Step | 0;
           setCurrentStep(maxDone);
-          for (let s = 1; s <= 4; s++) {
+          for (let s = 1; s <= 6; s++) {
             const stepLogs = data.filter((l: LogEntry) => l.step === s);
             if (stepLogs.some((l: LogEntry) => l.status === "error")) {
               setStepStatus((prev) => ({ ...prev, [s]: "error" }));
@@ -125,15 +135,26 @@ export default function ImportPage({
             setFullText(step1Meta.fullText);
           }
           const step2Meta = data.find((l: LogEntry) => l.step === 2 && l.status === "done")?.metadata;
-          if (step2Meta?.characters) {
-            setCharacters(step2Meta.characters);
-          }
-          if (step2Meta?.relationships) {
-            setRelationships(step2Meta.relationships);
+          if (step2Meta) {
+            setProjectAssess(step2Meta as typeof projectAssess);
           }
           const step3Meta = data.find((l: LogEntry) => l.step === 3 && l.status === "done")?.metadata;
-          if (step3Meta?.episodes) {
-            setEpisodes(step3Meta.episodes);
+          if (step3Meta?.characters) {
+            setCharacters(step3Meta.characters);
+          }
+          if (step3Meta?.relationships) {
+            setRelationships(step3Meta.relationships);
+          }
+          const step4Meta = data.find((l: LogEntry) => l.step === 4 && l.status === "done")?.metadata;
+          if (step4Meta?.episodes) {
+            setEpisodes(step4Meta.episodes);
+          }
+          const step5Meta = data.find((l: LogEntry) => l.step === 5 && l.status === "done")?.metadata;
+          if (step5Meta?.characterArcs) {
+            setCharacterArcs(step5Meta.characterArcs);
+          }
+          if (step5Meta?.skippedCharacters) {
+            setSkippedChars(step5Meta.skippedCharacters);
           }
         }
       } catch {
@@ -203,16 +224,47 @@ export default function ImportPage({
       return;
     }
 
-    // Step 2: Character extraction (auto-continue)
+    // Step 2: Project assessment
     setCurrentStep(2);
     setStepStatus((prev) => ({ ...prev, 2: "running" }));
-    addLog(2, "running", "开始角色提取...");
+    addLog(2, "running", "开始项目定位分析...");
+
+    let assess: typeof projectAssess = null;
+    try {
+      const assessRes = await apiFetch(`/api/projects/${projectId}/import/assess`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, modelConfig: getModelConfig() }),
+      });
+      if (!assessRes.ok) {
+        const errData = await assessRes.json();
+        throw new Error(errData.error || `HTTP ${assessRes.status}`);
+      }
+      assess = await assessRes.json();
+      setProjectAssess(assess);
+      addLog(2, "done", `项目定位完成: ${assess?.visualStyle?.slice(0, 30) || "..."}`);
+      setStepStatus((prev) => ({ ...prev, 2: "done" }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Assess failed";
+      addLog(2, "error", `项目定位失败: ${msg}`);
+      setStepStatus((prev) => ({ ...prev, 2: "error" }));
+      return;
+    }
+
+    // Step 3: Character extraction (auto-continue)
+    setCurrentStep(3);
+    setStepStatus((prev) => ({ ...prev, 3: "running" }));
+    addLog(3, "running", "开始角色提取...");
 
     try {
       const res = await apiFetch(`/api/projects/${projectId}/import/characters`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, modelConfig: getModelConfig() }),
+        body: JSON.stringify({
+          text,
+          modelConfig: getModelConfig(),
+          styleContext: assess ? { visualStyle: assess.visualStyle, eraAesthetic: assess.eraAesthetic } : undefined,
+        }),
       });
       if (!res.ok) {
         const errData = await res.json();
@@ -223,29 +275,33 @@ export default function ImportPage({
       setRelationships(data.relationships || []);
       const mainCount = data.characters.filter((c: ExtractedCharacter) => c.scope === "main").length;
       const guestCount = data.characters.length - mainCount;
-      addLog(2, "done", `提取完成: ${mainCount} 个主角, ${guestCount} 个配角`);
-      setStepStatus((prev) => ({ ...prev, 2: "done" }));
+      addLog(3, "done", `提取完成: ${mainCount} 个主角, ${guestCount} 个配角`);
+      setStepStatus((prev) => ({ ...prev, 3: "done" }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Extract failed";
-      addLog(2, "error", `角色提取失败: ${msg}`);
-      setStepStatus((prev) => ({ ...prev, 2: "error" }));
+      addLog(3, "error", `角色提取失败: ${msg}`);
+      setStepStatus((prev) => ({ ...prev, 3: "error" }));
       return;
     }
   }
 
-  // ── Step 2 only: Retry character extraction ──
+  // ── Step 3 only: Retry character extraction ──
   async function retryCharacterExtract() {
     if (!fullText) return;
     if (!textGuard()) return;
 
-    setStepStatus((prev) => ({ ...prev, 2: "running" }));
-    addLog(2, "running", "重试角色提取...");
+    setStepStatus((prev) => ({ ...prev, 3: "running" }));
+    addLog(3, "running", "重试角色提取...");
 
     try {
       const res = await apiFetch(`/api/projects/${projectId}/import/characters`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: fullText, modelConfig: getModelConfig() }),
+        body: JSON.stringify({
+          text: fullText,
+          modelConfig: getModelConfig(),
+          styleContext: projectAssess ? { visualStyle: projectAssess.visualStyle, eraAesthetic: projectAssess.eraAesthetic } : undefined,
+        }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -256,22 +312,22 @@ export default function ImportPage({
       setRelationships(data.relationships || []);
       const mainCount = data.characters.filter((c: ExtractedCharacter) => c.scope === "main").length;
       const guestCount = data.characters.length - mainCount;
-      addLog(2, "done", `提取完成: ${mainCount} 个主角, ${guestCount} 个配角`);
-      setStepStatus((prev) => ({ ...prev, 2: "done" }));
+      addLog(3, "done", `提取完成: ${mainCount} 个主角, ${guestCount} 个配角`);
+      setStepStatus((prev) => ({ ...prev, 3: "done" }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Extract failed";
-      addLog(2, "error", `角色提取失败: ${msg}`);
-      setStepStatus((prev) => ({ ...prev, 2: "error" }));
+      addLog(3, "error", `角色提取失败: ${msg}`);
+      setStepStatus((prev) => ({ ...prev, 3: "error" }));
     }
   }
 
-  // ── Step 3: Split (triggered by user after reviewing characters) ──
+  // ── Step 4: Split (triggered by user after reviewing characters) ──
   async function runSplit() {
     if (!textGuard()) return;
 
-    setCurrentStep(3);
-    setStepStatus((prev) => ({ ...prev, 3: "running" }));
-    addLog(3, "running", "开始自动分集...");
+    setCurrentStep(4);
+    setStepStatus((prev) => ({ ...prev, 4: "running" }));
+    addLog(4, "running", "开始自动分集...");
 
     try {
       const res = await apiFetch(`/api/projects/${projectId}/import/split`, {
@@ -281,6 +337,12 @@ export default function ImportPage({
           text: fullText,
           allCharacters: characters.map((c) => ({ name: c.name, scope: c.scope })),
           modelConfig: getModelConfig(),
+          styleContext: projectAssess ? {
+            visualStyle: projectAssess.visualStyle,
+            eraAesthetic: projectAssess.eraAesthetic,
+            moodDirection: projectAssess.moodDirection,
+            worldSetting: projectAssess.worldSetting,
+          } : undefined,
         }),
       });
       if (!res.ok) {
@@ -289,12 +351,12 @@ export default function ImportPage({
       }
       const data = await res.json();
       setEpisodes(data.episodes);
-      addLog(3, "done", `分集完成，共 ${data.episodes.length} 集`);
-      setStepStatus((prev) => ({ ...prev, 3: "done" }));
+      addLog(4, "done", `分集完成，共 ${data.episodes.length} 集`);
+      setStepStatus((prev) => ({ ...prev, 4: "done" }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Split failed";
-      addLog(3, "error", `分集失败: ${msg}`);
-      setStepStatus((prev) => ({ ...prev, 3: "error" }));
+      addLog(4, "error", `分集失败: ${msg}`);
+      setStepStatus((prev) => ({ ...prev, 4: "error" }));
     }
   }
 
@@ -312,6 +374,12 @@ export default function ImportPage({
           episodes,
           characters,
           relationships,
+          projectAssess: projectAssess ? {
+            visualStyle: projectAssess.visualStyle,
+            eraAesthetic: projectAssess.eraAesthetic,
+            moodDirection: projectAssess.moodDirection,
+          } : undefined,
+          characterArcs: characterArcs.length > 0 ? characterArcs : undefined,
         }),
       });
       if (!res.ok) {
@@ -319,28 +387,33 @@ export default function ImportPage({
         throw new Error(err.error || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      addLog(4, "done", `导入完成！创建了 ${data.characterCount} 个角色和 ${data.episodes.length} 集`);
-      setStepStatus((prev) => ({ ...prev, 4: "done" }));
-      // Automatically trigger Stage 5: per-EP character extraction
-      setTimeout(() => runPerEpCharacter(), 500);
+      addLog(6, "done", `导入完成！创建了 ${data.characterCount} 个角色和 ${data.episodes.length} 集`);
+      setStepStatus((prev) => ({ ...prev, 6: "done" }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Generate failed";
-      addLog(4, "error", `创建失败: ${msg}`);
-      setStepStatus((prev) => ({ ...prev, 4: "error" }));
+      addLog(6, "error", `创建失败: ${msg}`);
+      setStepStatus((prev) => ({ ...prev, 6: "error" }));
     }
   }
 
-  async function runPerEpCharacter() {
+  // ── Step 5: Character arcs (triggered by user after reviewing episodes) ──
+  async function runArc() {
+    if (!textGuard()) return;
+
     setCurrentStep(5);
     setStepStatus((prev) => ({ ...prev, 5: "running" }));
-    addLog(5, "running", "正在提取每集角色视觉变体...");
+    addLog(5, "running", "开始角色弧光设计...");
 
     try {
-      const res = await apiFetch(`/api/projects/${projectId}/generate`, {
+      const res = await apiFetch(`/api/projects/${projectId}/import/arc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "character_extract",
+          characters: characters.map((c) => ({ name: c.name, scope: c.scope, description: c.description })),
+          projectAssess: projectAssess ? {
+            visualStyle: projectAssess.visualStyle,
+            eraAesthetic: projectAssess.eraAesthetic,
+          } : { visualStyle: "", eraAesthetic: "" },
           modelConfig: getModelConfig(),
         }),
       });
@@ -348,44 +421,40 @@ export default function ImportPage({
         const err = await res.json();
         throw new Error(err.error || `HTTP ${res.status}`);
       }
-      // Fetch per-EP characters & episodes from DB for review
-      const [charsRes, epsRes] = await Promise.all([
-        apiFetch(`/api/projects/${projectId}/characters`),
-        apiFetch(`/api/projects/${projectId}/episodes`),
-      ]);
-      const charsData = await charsRes.json();
-      const epsData = await epsRes.json();
-      const epChars = charsData.filter((c: any) => c.episodeId); // instance rows only
-      setPerEpCharacters(epChars);
-      setPerEpEpisodes(epsData);
-      addLog(5, "done", `每集角色视觉标识提取完成，共 ${epChars.length} 个EP角色实例`);
+      const data = await res.json();
+      setCharacterArcs(data.characterArcs || []);
+      setSkippedChars(data.skippedCharacters || []);
+      addLog(5, "done", `弧光设计完成: ${data.characterArcs?.length || 0} 个角色`);
       setStepStatus((prev) => ({ ...prev, 5: "done" }));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Per-EP character extract failed";
-      addLog(5, "error", `提取失败: ${msg}`);
+      const msg = err instanceof Error ? err.message : "Arc failed";
+      addLog(5, "error", `弧光设计失败: ${msg}`);
       setStepStatus((prev) => ({ ...prev, 5: "error" }));
     }
   }
 
   // Retry handler for any failed step
   function retryStep() {
-    const failedStep = ([1, 2, 3, 4, 5] as Step[]).find((s) => stepStatus[s] === "error");
+    const failedStep = ([1, 2, 3, 4, 5, 6] as Step[]).find((s) => stepStatus[s] === "error");
     if (!failedStep) return;
     switch (failedStep) {
-      case 1: // Re-run full pipeline (need file again)
+      case 1:
         startPipeline();
         break;
       case 2:
-        retryCharacterExtract();
+        startPipeline();
         break;
       case 3:
-        runSplit();
+        retryCharacterExtract();
         break;
       case 4:
-        runGenerate();
+        runSplit();
         break;
       case 5:
-        runPerEpCharacter();
+        runArc();
+        break;
+      case 6:
+        runGenerate();
         break;
     }
   }
@@ -430,12 +499,14 @@ export default function ImportPage({
     return base;
   };
 
-  // Show characters review after step 2 done + step 3 idle
-  const showCharReview = stepStatus[2] === "done" && stepStatus[3] === "idle";
-  // Show episodes review after step 3 done + step 4 idle
-  const showEpReview = stepStatus[3] === "done" && stepStatus[4] === "idle";
-  // Stage 5 review: shown after per-EP character extraction completes
-  const showPerEpReview = stepStatus[5] === "done" && perEpCharacters.length > 0;
+  // Show project assess review after step 2 done + step 3 idle
+  const showAssessReview = stepStatus[2] === "done" && stepStatus[3] === "idle";
+  // Show characters review after step 3 done + step 4 idle
+  const showCharReview = stepStatus[3] === "done" && stepStatus[4] === "idle";
+  // Show episodes review after step 4 done + step 5 idle
+  const showEpReview = stepStatus[4] === "done" && stepStatus[5] === "idle";
+  // Show arc review after step 5 done + step 6 idle
+  const showArcReview = stepStatus[5] === "done" && stepStatus[6] === "idle";
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
@@ -483,7 +554,7 @@ export default function ImportPage({
           })}
         </div>
 
-        {/* Model selector for Steps 2/3/5 (all use text LLM) */}
+        {/* Model selector for text LLM steps (2/3/4/5) */}
         <div className="mt-4 border-t border-[--border-subtle] pt-3">
           <InlineModelPicker capability="text" />
         </div>
@@ -547,10 +618,53 @@ export default function ImportPage({
               <Sparkles className="mr-2 h-4 w-4" />
               {t("startImport")}
             </Button>
+
+            {/* Model selector */}
+            <div className="mt-4 rounded-xl border border-[--border-subtle] bg-white p-4">
+              <p className="mb-2 text-xs font-medium text-[--text-muted]">{t("importModelLabel") || "导入使用的 AI 模型"}</p>
+              <InlineModelPicker capability="text" />
+            </div>
           </div>
         )}
 
-        {/* Characters review (after step 2) */}
+        {/* Project assessment review (after step 2) */}
+        {showAssessReview && projectAssess && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-lg font-bold text-[--text-primary]">
+                {t("reviewAssess") || "项目定位确认"}
+              </h3>
+              <Button onClick={() => { setStepStatus((prev) => ({ ...prev, 3: "running" })); retryCharacterExtract(); }} className="rounded-xl">
+                {t("confirmAndExtract") || "确认定位并提取角色"}
+              </Button>
+            </div>
+            <p className="text-sm text-[--text-muted]">{t("reviewAssessHint") || "以下是AI分析的项目定位，请确认或返回修改。这些字段将影响后续所有创作。"}</p>
+            <div className="grid gap-3">
+              {[
+                { label: "视觉风格", value: projectAssess.visualStyle },
+                { label: "时代美学", value: projectAssess.eraAesthetic },
+                { label: "情绪基调", value: projectAssess.moodDirection },
+                { label: "世界观", value: projectAssess.worldSetting },
+                { label: "题材类型", value: projectAssess.genre },
+                { label: "目标受众", value: projectAssess.targetAudience },
+              ].filter(f => f.value).map((field, i) => (
+                <div key={i} className="rounded-xl border border-[--border-subtle] bg-white p-3">
+                  <div className="text-xs font-medium text-[--text-muted] mb-1">{field.label}</div>
+                  <Input
+                    value={field.value}
+                    onChange={(e) => {
+                      const key = ["visualStyle", "eraAesthetic", "moodDirection", "worldSetting", "genre", "targetAudience"][i];
+                      setProjectAssess((prev) => prev ? { ...prev, [key]: e.target.value } : null);
+                    }}
+                    className="text-sm border-0 bg-transparent p-0 h-auto shadow-none focus-visible:ring-0"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Characters review (after step 3) */}
         {showCharReview && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -625,8 +739,8 @@ export default function ImportPage({
               <h3 className="font-display text-lg font-bold text-[--text-primary]">
                 {t("reviewEpisodes")} ({episodes.length})
               </h3>
-              <Button onClick={runGenerate} className="rounded-xl">
-                {t("confirmAndGenerate")}
+              <Button onClick={runArc} className="rounded-xl">
+                {t("confirmAndArc") || "确认分集并设计弧光"}
               </Button>
             </div>
             <p className="text-sm text-[--text-muted]">{t("reviewEpisodesHint")}</p>
@@ -680,57 +794,44 @@ export default function ImportPage({
           </div>
         )}
 
-        {/* Stage 5 review: per-EP character visual hints */}
-        {showPerEpReview && (() => {
-          // Build episode name map from fetched episodes
-          const epNameMap = new Map(perEpEpisodes.map((ep) => [ep.id, `EP${String(ep.sequence).padStart(2, "0")} ${ep.title}`]));
-          // Group per-ep characters by episodeId
-          const byEp = new Map<string, typeof perEpCharacters>();
-          for (const c of perEpCharacters) {
-            const list = byEp.get(c.episodeId) || [];
-            list.push(c);
-            byEp.set(c.episodeId, list);
-          }
-          return (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display text-lg font-bold text-[--text-primary]">
-                  确认 per-EP 角色视觉标识 ({byEp.size} 集)
-                </h3>
-                <Button
-                  onClick={() => router.push(`/${locale}/project/${projectId}/episodes`)}
-                  className="rounded-xl"
-                >
-                  确认并进入项目
-                </Button>
-              </div>
-              <p className="text-sm text-[--text-muted]">每集角色的视觉标识（visualHint）已根据该集剧情自动生成。检查各 EP 角色外观是否一致。</p>
-              <div className="space-y-3">
-                {Array.from(byEp.entries()).map(([epId, chars]) => (
-                  <div key={epId} className="rounded-xl border border-[--border-subtle] bg-white p-4">
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
-                        {epNameMap.get(epId) || epId}
-                      </span>
-                      <span className="text-xs text-[--text-muted]">{chars.length} 个角色</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {chars.map((c) => (
-                        <div key={c.id} className="flex items-center gap-1.5 rounded-lg bg-[--surface] px-2.5 py-1.5">
-                          <span className="text-xs font-medium text-[--text-primary]">{c.baseName}</span>
-                          <span className="text-[11px] text-[--text-muted]">（{c.visualHint}）</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Arc review (after step 5) */}
+        {showArcReview && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-lg font-bold text-[--text-primary]">
+                {t("reviewArc") || "角色弧光确认"}
+              </h3>
+              <Button onClick={runGenerate} className="rounded-xl">
+                {t("confirmAndGenerate") || "确认并创建项目"}
+              </Button>
             </div>
-          );
-        })()}
+            <p className="text-sm text-[--text-muted]">
+              {t("reviewArcHint") || "以下主角在故事中有阶段性外观变化。确认后将写入项目数据库。"}
+            </p>
+            {characterArcs.length === 0 && skippedChars.length > 0 && (
+              <p className="text-sm text-[--text-muted]">所有主角外观无显著跨集变化，跳过弧光设计。</p>
+            )}
+            <div className="space-y-3">
+              {characterArcs.map((arc, i) => (
+                <div key={i} className="rounded-xl border border-[--border-subtle] bg-white p-4">
+                  <div className="mb-2 font-semibold text-sm">{arc.characterName} · {arc.totalPhases} 个阶段</div>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {arc.phases.map((p, j) => (
+                      <div key={j} className="shrink-0 rounded-lg border border-[--border-subtle] bg-[--surface] p-2 min-w-[160px]">
+                        <div className="text-xs font-semibold">{p.phaseName}</div>
+                        <div className="text-[11px] text-[--text-muted]">{p.episodeRange}</div>
+                        <div className="mt-1 text-[11px] text-[--text-muted]">{p.triggerEvent?.slice(0, 40)}...</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Logs panel */}
-        {(currentStep > 0 || historyMode) && !showCharReview && !showEpReview && !showPerEpReview && (() => {
+        {(currentStep > 0 || historyMode) && !showAssessReview && !showCharReview && !showEpReview && !showArcReview && (() => {
           const filteredLogs = selectedStep
             ? logs.filter((l) => l.step === selectedStep)
             : logs;

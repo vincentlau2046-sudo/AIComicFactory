@@ -4,7 +4,6 @@ import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
 import { parseLLMJSON } from "@/lib/ai/json-repair";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
-import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters, characterRelations, agentBindings, agents } from "@/lib/db/schema";
 import { callAgent, callAgentStream, validateAgentOutput, type AgentCategory } from "@/lib/ai/agent-caller";
 
 /** Wrap agent call + validation, returning user-friendly error response on failure */
@@ -28,7 +27,7 @@ async function callAndValidateAgent(
     return NextResponse.json({ error: message }, { status: 422 });
   }
 }
-import { eq, asc, and, lt, gt, desc, or, isNull, inArray } from "drizzle-orm";
+import { eq, asc, and, lt, gt, lte, gte, desc, or, isNull, isNotNull, inArray } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import path from "path";
 import { id as genId } from "@/lib/id";
@@ -48,9 +47,8 @@ import {
 import { buildSceneFramePrompt } from "@/lib/ai/prompts/scene-frame-generate";
 import { resolveImageProvider, resolveVideoProvider, resolveAIProvider } from "@/lib/ai/provider-factory";
 import { buildVideoPrompt, buildReferenceVideoPrompt } from "@/lib/ai/prompts/video-generate";
-import { assembleH3ShotContext } from "@/lib/pipeline/video-generate";
 import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-generate";
-import { buildCharacterTurnaroundPrompt } from "@/lib/ai/prompts/character-image";
+import { buildCharacterTurnaroundPrompt, buildCharacterFrontViewPrompt } from "@/lib/ai/prompts/character-image";
 import { assembleVideo } from "@/lib/video/ffmpeg";
 import { parseRefImages, serializeRefImages, appendToHistory, type RefImage } from "@/lib/ref-image-utils";
 import {
@@ -62,6 +60,8 @@ import {
   patchAsset,
   copyToUploads,
   stripCharHint,
+  buildCharMap,
+  resolveFrameCharacters,
 } from "@/lib/shot-asset-utils";
 import { buildRefImagePromptsRequest } from "@/lib/ai/prompts/ref-image-prompts";
 import { buildKeyframePromptsRequest } from "@/lib/ai/prompts/keyframe-prompts";
@@ -73,34 +73,8 @@ export const maxDuration = 300;
 
 
 /** Fetch characters linked to an episode via episode_characters, or all project characters if no episode. */
-async function getEpisodeCharacters(projectId: string, epId?: string | null) {
-  if (epId) {
-    // Priority 1: linked via episode_characters join table (instance rows, Type B)
-    const linkedIds = await db
-      .select({ characterId: episodeCharacters.characterId })
-      .from(episodeCharacters)
-      .where(eq(episodeCharacters.episodeId, epId));
-    if (linkedIds.length > 0) {
-      return db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)));
-    }
-    // Priority 2: direct lookup by episode_id on characters table (instance rows without join)
-    const directInstances = await db.select().from(characters).where(eq(characters.episodeId, epId));
-    if (directInstances.length > 0) {
-      return directInstances;
-    }
-    // Priority 3: fallback to project-level template rows (Type A, episode_id=null)
-    return db.select().from(characters).where(and(
-      eq(characters.projectId, projectId),
-      isNull(characters.episodeId)
-    ));
-  }
-  return db.select().from(characters).where(eq(characters.projectId, projectId));
-}
+import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 
-/**
- * Check if a character is visible on-screen by looking for their name
- * in the videoScript or startFrameDesc fields.
- */
 function isCharacterOnScreen(
   characterName: string,
   videoScript: string,
@@ -224,6 +198,10 @@ export async function POST(
     return handleSingleCharacterImage(payload, modelConfig);
   }
 
+  if (action === "single_phase_image") {
+    return handleSinglePhaseImage(projectId, payload, modelConfig);
+  }
+
   if (action === "batch_character_image") {
     return handleBatchCharacterImage(projectId, modelConfig, episodeId);
   }
@@ -234,6 +212,10 @@ export async function POST(
 
   if (action === "generate_keyframe_prompts") {
     return handleGenerateKeyframePrompts(projectId, userId, payload, modelConfig, episodeId);
+  }
+
+  if (action === "single_keyframe_prompts") {
+    return handleSingleKeyframePrompts(projectId, userId, payload, modelConfig, episodeId);
   }
 
   if (action === "single_shot_rewrite") {
@@ -329,13 +311,26 @@ async function handleScriptOutlineAction(
     return NextResponse.json({ error: "No idea provided" }, { status: 400 });
   }
 
+  // Fetch project style for outline guidance
+  let styleHint = "";
+  try {
+    const [proj] = await db
+      .select({ visualStyle: projects.visualStyle, eraAesthetic: projects.eraAesthetic, moodDirection: projects.moodDirection })
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    if (proj?.visualStyle) {
+      styleHint = `\n\n【项目定位】\n视觉风格: ${proj.visualStyle}\n时代美学: ${proj.eraAesthetic || "未指定"}\n情绪基调: ${proj.moodDirection || "未指定"}\n\n大纲的节拍设计和情感走向需与以上定位保持一致。`;
+    }
+  } catch { /* ignore — style fields may not exist yet */ }
+  const ideaPrompt = `创意构想：${idea}${styleHint}`;
+
   // === 智能体路由（流式）===
   const boundAgent = await findBoundAgent(projectId, "script_outline");
   if (boundAgent) {
     try {
       const agentStream = await callAgentStream(
         { platform: boundAgent.platform as "bailian" | "dify" | "coze", appId: boundAgent.appId, apiKey: boundAgent.apiKey },
-        `创意构想：${idea}`,
+        ideaPrompt,
       );
       // TransformStream: accumulate chunks, save to DB in flush (tied to response lifecycle)
       const decoder = new TextDecoder();
@@ -384,7 +379,7 @@ async function handleScriptOutlineAction(
   const result = streamText({
     model,
     system: outlineSystem,
-    prompt: `创意构想：${idea}`,
+    prompt: ideaPrompt,
     temperature: 0.7,
     onFinish: async ({ text }) => {
       try {
@@ -505,12 +500,88 @@ async function handleScriptGenerate(
     ? `\n\n【故事大纲 - 请严格按照以下大纲结构展开剧本】\n${outline}\n\n`
     : "";
 
-  // Fetch world setting from project
+  // Fetch world setting + style fields from project
   let worldSettingContext = "";
-  const [projForWorld] = await db.select({ worldSetting: projects.worldSetting }).from(projects).where(eq(projects.id, projectId));
-  if (projForWorld?.worldSetting) {
-    worldSettingContext = `\n\n【世界观设定】\n${projForWorld.worldSetting}\n\n剧本必须与此世界观设定保持一致。\n\n`;
+  let styleContext = "";
+  let characterContext = "";
+  const [projCtx] = await db
+    .select({
+      worldSetting: projects.worldSetting,
+      visualStyle: projects.visualStyle,
+      eraAesthetic: projects.eraAesthetic,
+      moodDirection: projects.moodDirection,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  if (projCtx?.worldSetting) {
+    worldSettingContext = `\n\n【世界观设定】\n${projCtx.worldSetting}\n\n剧本必须与此世界观设定保持一致。\n\n`;
   }
+  if (projCtx?.visualStyle) {
+    styleContext = [
+      `\n\n【项目风格圣经 — 已由制作团队确定，请严格遵循】`,
+      `视觉风格: ${projCtx.visualStyle}`,
+      `时代美学: ${projCtx.eraAesthetic || "未指定"}`,
+      `情绪基调: ${projCtx.moodDirection || "未指定"}`,
+      ``,
+      `§1 视觉风格块不再重新定义风格，只做本集的场景化细化和确认。`,
+      `§2 角色描述必须与以上时代美学一致（服装、道具、建筑风格）。`,
+      `§3 场景描写的氛围必须与以上情绪基调对齐。`,
+      ``,
+    ].join("\n");
+  }
+
+  // Inject characters DB data for §2 reference
+  try {
+    const projectCharacters = await db
+      .select({
+        name: characters.name,
+        baseName: characters.baseName,
+        description: characters.description,
+        scope: characters.scope,
+      })
+      .from(characters)
+      .where(and(eq(characters.projectId, projectId), isNull(characters.episodeId)));
+
+    if (projectCharacters.length > 0) {
+      // Read phase cards for the current EP
+      let phaseByBaseName = new Map<string, string>();
+      if (episodeId) {
+        const [ep] = await db.select({ sequence: episodes.sequence }).from(episodes).where(eq(episodes.id, episodeId));
+        if (ep?.sequence != null) {
+          const epPhases = await db
+            .select({ baseName: characters.baseName, phaseName: characters.phaseName })
+            .from(characters)
+            .where(and(
+              eq(characters.projectId, projectId),
+              isNotNull(characters.phaseName),
+              lte(characters.episodeStart, ep.sequence),
+              gte(characters.episodeEnd, ep.sequence)
+            ));
+          for (const p of epPhases) {
+            if (p.baseName && p.phaseName) phaseByBaseName.set(p.baseName, p.phaseName);
+          }
+        }
+      }
+
+      const list = projectCharacters.map(c => {
+        const phase = c.baseName ? phaseByBaseName.get(c.baseName) : undefined;
+        const label = c.scope === "main" ? "主角" : "配角";
+        const phaseTag = phase ? `【当前阶段: ${phase}】` : "";
+        return `- ${c.name}(${label})${phaseTag}: ${(c.description || "").slice(0, 80)}`;
+      }).join("\n");
+
+      characterContext = [
+        `\n\n【已设计的角色 — 请直接引用，不要重新创建】`,
+        list,
+        ``,
+        `§2 角色描述块改为引用以上角色。`,
+        `已提供角色当前的阶段信息（如有），请在描述中体现该阶段的服装和状态。`,
+        `对于没有阶段的角色，使用基准外观。`,
+        `不要创建新角色、不要改写已有角色的外貌基准。`,
+        ``,
+      ].join("\n");
+    }
+  } catch { /* ignore — characters table may not exist yet */ }
 
   const model = createLanguageModel(modelConfig.text);
   const scriptGenerateSystem = await resolvePrompt("script_generate", { userId, projectId });
@@ -518,7 +589,7 @@ async function handleScriptGenerate(
   const result = streamText({
     model,
     system: scriptGenerateSystem,
-    prompt: worldSettingContext + outlineContext + buildScriptGeneratePrompt(idea),
+    prompt: styleContext + characterContext + worldSettingContext + outlineContext + buildScriptGeneratePrompt(idea),
     temperature: 0.8,
     onFinish: async ({ text }) => {
       try {
@@ -576,16 +647,23 @@ async function handleScriptParseStream(
         { platform: boundAgent.platform as "bailian" | "dify" | "coze", appId: boundAgent.appId, apiKey: boundAgent.apiKey },
         script,
       );
+      const spDecoder = new TextDecoder();
+      let spScriptBuf = "";
       const spSaveTransform = new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) { controller.enqueue(chunk); },
+        transform(chunk, controller) {
+          spScriptBuf += spDecoder.decode(chunk, { stream: true });
+          controller.enqueue(chunk);
+        },
         async flush() {
+          const screenplay = spScriptBuf.trim();
+          if (!screenplay) return;
           try {
             if (episodeId) {
-              await db.update(episodes).set({ updatedAt: new Date() }).where(eq(episodes.id, episodeId));
+              await db.update(episodes).set({ screenplay, updatedAt: new Date() }).where(eq(episodes.id, episodeId));
             } else {
               await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId));
             }
-            console.log(`[ScriptParse Agent] Updated timestamp`);
+            console.log(`[ScriptParse Agent] Saved screenplay (${screenplay.length} chars)`);
           } catch (err) {
             console.error(`[ScriptParse Agent] DB update failed:`, err);
           }
@@ -622,11 +700,11 @@ async function handleScriptParseStream(
         const screenplay = extractJSON(text);
         JSON.parse(screenplay); // validate JSON
         if (episodeId) {
-          await db.update(episodes).set({ updatedAt: new Date() }).where(eq(episodes.id, episodeId));
+          await db.update(episodes).set({ screenplay, updatedAt: new Date() }).where(eq(episodes.id, episodeId));
         } else {
           await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId));
         }
-        console.log(`[ScriptParse] Parsed screenplay for ${episodeId || projectId}`);
+        console.log(`[ScriptParse] Saved screenplay for ${episodeId || projectId} (${screenplay.length} chars)`);
       } catch (err) {
         console.error("[ScriptParse] onFinish error:", err);
       }
@@ -759,6 +837,20 @@ async function handleCharacterExtract(
     }
   }
 
+  // Inject project style as authoritative context
+  let visualStyle: string | undefined;
+  if (episodeId) {
+    const [ep] = await db.select({ visualStyle: episodes.visualStyle }).from(episodes).where(eq(episodes.id, episodeId));
+    visualStyle = ep?.visualStyle || undefined;
+  }
+  if (!visualStyle) {
+    const [proj] = await db.select({ visualStyle: projects.visualStyle }).from(projects).where(eq(projects.id, projectId));
+    visualStyle = proj?.visualStyle || undefined;
+  }
+  if (visualStyle) {
+    script = `【项目视觉风格 — 已确定，禁止重新推断】\n${visualStyle}\n\n基于以上风格创作角色，不要推断风格。\n\n${script}`;
+  }
+
   let aiText: string;
   const boundAgent = await findBoundAgent(projectId, "character_extract");
   if (boundAgent) {
@@ -816,7 +908,7 @@ async function handleCharacterExtract(
 
   for (const raw of rawChars) {
     const baseName = raw.baseName || raw.name || "";
-    const episodes: Array<{ episodeIndex: number; visualHint?: string; description?: string }> =
+    const episodes: Array<{ episodeIndex: number; visualHint?: string; description?: string; t2iStructure?: Record<string, string> }> =
       raw.episodes || [{ episodeIndex: 1, visualHint: raw.visualHint, description: raw.description }];
 
     // S2: Create/update template row (Type A: episode_id=null)
@@ -841,14 +933,13 @@ async function handleCharacterExtract(
       console.log(`[CharacterExtract] Created template row "${baseName}" (${templateId})`);
       createdCount++;
     } else {
-      // Update template description from first EP's data
-      await db.update(characters)
-        .set({
-          description: episodes[0]?.description || raw.description || "",
-          scope: (raw.scope === "guest" ? "guest" : "main") as "main" | "guest",
-        })
-        .where(eq(characters.id, templateId));
-      console.log(`[CharacterExtract] Reused template "${baseName}" (${templateId})`);
+      // Reuse template — keep C phase description, only upgrade scope if needed
+      if (raw.scope === "main") {
+        await db.update(characters)
+          .set({ scope: "main" })
+          .where(eq(characters.id, templateId));
+      }
+      console.log(`[CharacterExtract] Reused template "${baseName}" (keep C phase description)`);
       reusedCount++;
     }
 
@@ -860,6 +951,9 @@ async function handleCharacterExtract(
         continue;
       }
 
+      // Serialize t2iStructure to JSON string for storage
+      const t2iStructure = epVar.t2iStructure ? JSON.stringify(epVar.t2iStructure) : null;
+
       // Check if instance row already exists for this baseName + episode
       const [existingInstance] = await db.select()
         .from(characters)
@@ -868,11 +962,34 @@ async function handleCharacterExtract(
           eq(characters.episodeId, ep.id)
         ));
 
+      // Look up phase card for this character in the current EP
+      let instancePhaseName = "";
+      if (ep) {
+        const epSeq = ep.sequence ?? (epByIndex.size > 0 ? Array.from(epByIndex.keys()).find(k => epByIndex.get(k)?.id === ep.id) ?? 0 : 0);
+        if (epSeq > 0) {
+          const [phaseCard] = await db
+            .select({ phaseName: characters.phaseName })
+            .from(characters)
+            .where(and(
+              eq(characters.projectId, projectId),
+              eq(characters.baseName, baseName),
+              isNotNull(characters.phaseName),
+              lte(characters.episodeStart, epSeq),
+              gte(characters.episodeEnd, epSeq)
+            ));
+          instancePhaseName = phaseCard?.phaseName || "";
+        }
+      }
+      const instanceLabel = instancePhaseName || epVar.visualHint || "";
+
       if (existingInstance) {
         await db.update(characters)
           .set({
             visualHint: epVar.visualHint || "",
             description: epVar.description || "",
+            t2iStructure,
+            phaseName: instancePhaseName || epVar.phaseName || undefined,
+            name: instanceLabel ? `${baseName}（${instanceLabel}）` : baseName,
           })
           .where(eq(characters.id, existingInstance.id));
         linkedCharIds.add(existingInstance.id);
@@ -882,9 +999,11 @@ async function handleCharacterExtract(
           id: instId,
           projectId,
           baseName,
-          name: `${baseName}（${epVar.visualHint || ""}）`,
+          name: instanceLabel ? `${baseName}（${instanceLabel}）` : baseName,
           description: epVar.description || "",
+          t2iStructure,
           visualHint: epVar.visualHint || "",
+          phaseName: instancePhaseName || epVar.phaseName || undefined,
           heightCm: raw.heightCm || 0,
           bodyType: raw.bodyType || "average",
           performanceStyle: raw.performanceStyle || "",
@@ -1017,15 +1136,7 @@ async function handleSingleCharacterImage(
 
   const ai = resolveImageProvider(modelConfig);
 
-  // Build front-view prompt from template system (matching pipeline/character-image.ts)
-  // T2I prompt: character description IS the prompt (templates are for LLM, not direct injection)
-  const prompt = [
-    `角色正面参考图。全身站立正面视图，纯白背景。`,
-    ``,
-    `${character.description || character.name}`,
-    ``,
-    `全身比例正确，从头顶到脚底完整展示，禁止半身图。`,
-  ].join("\n");
+  const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name);
 
   try {
     const rawImagePath = await ai.generateImage(prompt, {
@@ -1037,6 +1148,7 @@ async function handleSingleCharacterImage(
         character_name: character.name,
         character_desc: character.description || character.name,
         character_prompt: prompt,
+        seed: Math.floor(Math.random() * 1000000),
       },
     });
 
@@ -1090,6 +1202,64 @@ async function handleSingleCharacterImage(
   }
 }
 
+// --- single_phase_image: generate reference image for a character phase card ---
+
+async function handleSinglePhaseImage(
+  projectId: string,
+  payload?: Record<string, unknown>,
+  const phaseId = payload?.phaseId as string;
+  if (!phaseId) {
+    return NextResponse.json({ error: "No phaseId provided" }, { status: 400 });
+  }
+
+  if (!modelConfig?.image) {
+    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
+  }
+
+  const [phase] = await db
+    .select()
+    .from(characters)
+    .where(and(eq(characters.id, phaseId), isNotNull(characters.phaseName)));
+  if (!phase) {
+    return NextResponse.json({ error: "Phase not found" }, { status: 404 });
+  }
+
+  const baseDescription = phase.description || "";
+
+  const ai = resolveImageProvider(modelConfig);
+  const prompt = buildCharacterFrontViewPrompt(phase.t2iStructure ?? null, baseDescription || phase.phaseName);
+  try {
+    const rawImagePath = await ai.generateImage(prompt, {
+      size: "2560x1440",
+      aspectRatio: "16:9",
+      quality: "hd",
+      pipeline: "phase-image",
+      pipelineParams: {
+        phase_name: phase.phaseName,
+        base_name: phase.baseName || "",
+        phase_prompt: prompt,
+        seed: Math.floor(Math.random() * 1000000),
+      },
+    });
+
+    const imagePath = copyToUploads(rawImagePath, 'character_reference');
+
+    // Append to history
+    let history: string[] = [];
+    try { history = JSON.parse(phase.referenceImageHistory || "[]"); } catch {}
+    if (phase.referenceImage && !history.includes(phase.referenceImage)) {
+      history.push(phase.referenceImage);
+    }
+
+      .set({ referenceImage: imagePath, referenceImageHistory: JSON.stringify(history) })
+
+    return NextResponse.json({ phaseId, imagePath, status: "ok" });
+  } catch (err) {
+    console.error(`[SinglePhaseImage] Error for phase ${phase.phaseName}:`, err);
+    return NextResponse.json({ phaseId, status: "error", error: extractErrorMessage(err) }, { status: 500 });
+  }
+}
+
 // --- batch_character_image: generate turnaround images for all characters ---
 
 async function handleBatchCharacterImage(
@@ -1127,7 +1297,7 @@ async function handleBatchCharacterImage(
   const results = await Promise.all(
     needImages.map(async (character) => {
       try {
-        const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
+        const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name);
         const rawImagePath = await ai.generateImage(prompt, {
           size: "2560x1440",
           aspectRatio: "16:9",
@@ -1136,6 +1306,8 @@ async function handleBatchCharacterImage(
           pipelineParams: {
             character_name: character.name,
             character_desc: character.description || character.name,
+            character_prompt: prompt,
+            seed: Math.floor(Math.random() * 1000000),
           },
         });
 
@@ -1389,6 +1561,8 @@ async function handleShotSplitStream(
     musicCue?: string;
     characters?: string[];
     referenceImagePrompts?: string[];
+    narrations?: Array<{ text: string; type: string; character?: string; timeHint?: string }>;
+    innerMonologues?: Array<{ text: string; type: string; character?: string; timeHint?: string }>;
   };
 
   // Process chunks concurrently
@@ -1523,6 +1697,8 @@ async function handleShotSplitStream(
       depthOfField: shot.depthOfField || "medium",
       soundDesign: shot.soundDesign || "",
       musicCue: shot.musicCue || "",
+      narrations: JSON.stringify(shot.narrations ?? []),
+      innerMonologues: JSON.stringify(shot.innerMonologues ?? []),
       episodeId: episodeId ?? null,
     });
     // No automatic asset seeding — shot_assets rows are only created when
@@ -1542,104 +1718,6 @@ async function handleShotSplitStream(
           text: dialogue.text,
           sequence: i,
         });
-      }
-    }
-  }
-
-  // Auto-create missing guest characters from shot scene descriptions
-  if (episodeId) {
-    // Blacklist: generic crowd/scene terms that are not real characters
-    const CROWD_BLACKLIST = new Set([
-      "士兵", "路人", "百姓", "尸体", "群演", "太监", "宫女", "侍女",
-      "小贩", "商贩", "乞丐", "僧侣", "道士", "骑士", "守卫", "门卫",
-      "仆从", "丫鬟", "家丁", "侍卫", "随从", "使者", "信使", "难民",
-    ]);
-    // Hint quality check: must contain at least one concrete visual descriptor
-    // (body part, color, texture, clothing), not just transient states
-    const VISUAL_HINT_PATTERN = /[体型体态态面相面容脸眼眉鼻嘴唇发须胡服饰衣袍甲冠色肤]/;
-
-    const charPattern = /([\u4e00-\u9fa5a-zA-Z]{1,6})[（(]([^）)]{1,10})[）)]/g;
-    const foundChars = new Map<string, { hint: string; contexts: string[]; shotCount: number }>();
-    for (const shot of allShots) {
-      const desc = shot.sceneDescription || "";
-      const sentences = desc.split(/[。！？；]+/).filter((s) => s.trim());
-      let match;
-      while ((match = charPattern.exec(desc)) !== null) {
-        const base = match[1];
-        const hint = match[2];
-        // Filter 1: skip blacklisted crowd terms
-        if (CROWD_BLACKLIST.has(base)) continue;
-        // Filter 2: skip hints that are only transient states, not visual descriptors
-        if (!VISUAL_HINT_PATTERN.test(hint)) continue;
-
-        if (!foundChars.has(base)) foundChars.set(base, { hint, contexts: [], shotCount: 0 });
-        const entry = foundChars.get(base)!;
-        entry.shotCount++;
-        // Collect unique sentences containing this character
-        for (const s of sentences) {
-          if (s.includes(match[0]) && !entry.contexts.includes(s.trim())) {
-            entry.contexts.push(s.trim());
-          }
-        }
-      }
-    }
-
-    // Filter 3: must appear in at least 2 shots to be a real character
-    const qualifyingChars = [...foundChars.entries()].filter(([, v]) => v.shotCount >= 2);
-
-    const existingNames = new Set(shotCharacters.map((c) => c.name));
-    const existingBaseNames = new Set(shotCharacters.map((c) => stripCharHint(c.name)));
-    const missingEntries = qualifyingChars.filter(([base]) =>
-      !existingNames.has(base) && !existingBaseNames.has(base)
-    );
-    if (missingEntries.length > 0) {
-      console.log(`[ShotSplit] Generating ${missingEntries.length} guest characters via LLM: ${missingEntries.map(([n]) => n).join(", ")}`);
-
-      // Fetch EP context for the prompt
-      const [ep] = await db.select({
-        title: episodes.title, description: episodes.description, idea: episodes.idea
-      }).from(episodes).where(eq(episodes.id, episodeId));
-
-      // Build bulk prompt for all missing characters
-      let bulkPrompt = `${ep?.title || ""}\n构思: ${ep?.idea || "（无）"}\n描述: ${ep?.description || "（无）"}\n\n=== 需要补充外观描述的角色（均为本集客串角色，scope="guest"）===\n`;
-      for (const [base, { hint, contexts }] of missingEntries) {
-        bulkPrompt += `\n角色名: ${base}\n已有外观线索: ${hint}\n出场场景:\n`;
-        for (const ctx of contexts.slice(0, 3)) {
-          bulkPrompt += `  - ${ctx}\n`;
-        }
-      }
-      bulkPrompt += "\n请为以上每个角色生成完整的 visualHint（2-4字）和 description（单段密集角色外观描写，含体态/面部/发型/服装/标志特征）。返回 JSON 数组。";
-
-      try {
-        if (!modelConfig?.text) {
-          console.warn("[ShotSplit] No text model — skipping guest character generation");
-        } else {
-          const model = createLanguageModel(modelConfig.text);
-          const charSystem = await resolvePrompt("character_extract", { userId, projectId }).catch(() => undefined);
-          const { text } = await generateText({
-            model,
-            system: charSystem || "你是角色设计师，生成角色视觉描述。仅返回JSON。",
-            prompt: bulkPrompt,
-          });
-          const parsed = parseLLMJSON(text);
-          const chars: Array<{ name: string; visualHint?: string; description: string }> = Array.isArray(parsed) ? parsed : (parsed.characters || []);
-          for (const c of chars) {
-            const charId = genId();
-            await db.insert(characters).values({
-              id: charId, projectId,
-              baseName: c.name, name: c.name,
-              description: c.description || "",
-              visualHint: c.visualHint || "",
-              scope: "guest", episodeId,
-            });
-            await db.insert(episodeCharacters).values({
-              id: genId(), episodeId, characterId: charId,
-            });
-            console.log(`[ShotSplit] Created guest character: ${c.name}`);
-          }
-        }
-      } catch (err) {
-        console.error("[ShotSplit] Guest character generation failed:", err);
       }
     }
   }
@@ -1800,8 +1878,6 @@ IMPORTANT: Keep the same scene, characters, and narrative intent. Only rephrase 
   }
 }
 
-// --- batch_frame_generate: sequential frame generation with continuity chain ---
-
 async function handleBatchFrameGenerate(
   projectId: string,
   userId: string,
@@ -1810,10 +1886,7 @@ async function handleBatchFrameGenerate(
   episodeId?: string
 ) {
   if (!modelConfig?.image) {
-    return NextResponse.json(
-      { error: "No image model configured" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
   }
 
   let batchVersionId = payload?.versionId as string | undefined;
@@ -1829,166 +1902,44 @@ async function handleBatchFrameGenerate(
     if (!latestVer?.id) return NextResponse.json({ error: "No version found. Run shot split first." }, { status: 400 });
     batchVersionId = latestVer.id;
   }
-  const imageOpts = { size: ratioToSize(payload?.ratio as string), aspectRatio: (payload?.ratio as string) || "16:9" };
+
   const shotWhereConditions = [eq(shots.projectId, projectId)];
   if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
   if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
-  const allShots = await db
-    .select()
-    .from(shots)
-    .where(and(...shotWhereConditions))
-    .orderBy(asc(shots.sequence));
+  const allShots = await db.select().from(shots).where(and(...shotWhereConditions)).orderBy(asc(shots.sequence));
 
-  if (allShots.length === 0) {
-    return NextResponse.json({ results: [], message: "No shots found" });
-  }
   const allShotsLegacy = await loadShotLegacyViewsBatch(allShots.map((s) => s.id));
-
-  const versionedUploadDir = batchVersionId
-    ? await getVersionedUploadDir(batchVersionId)
-    : getUploadDir();
-
-  // Fetch only characters linked to this episode
-  let frameCharacters: typeof characters.$inferSelect[];
-  if (episodeId) {
-    const linkedIds = await db
-      .select({ characterId: episodeCharacters.characterId })
-      .from(episodeCharacters)
-      .where(eq(episodeCharacters.episodeId, episodeId));
-    frameCharacters = linkedIds.length > 0
-      ? await db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)))
-      : [];
-  } else {
-    frameCharacters = await db.select().from(characters).where(eq(characters.projectId, projectId));
-  }
-
-  const characterDescriptions = frameCharacters
-    .map((c) => `${c.name}: ${c.description}`)
-    .join("\n");
-
-  const charsWithImages = frameCharacters.filter((c) => c.referenceImage);
-
-  const ai = resolveImageProvider(modelConfig, versionedUploadDir);
-  const results: Array<{ shotId: string; sequence: number; status: string; firstFrame?: string; lastFrame?: string; error?: string }> = [];
-
   const overwrite = payload?.overwrite === true;
   const needProcess = allShots.filter((s) => {
     const v = allShotsLegacy.get(s.id);
     return overwrite || !v?.firstFrame || !v?.lastFrame;
   });
-  const skipCount = allShots.length - needProcess.length;
 
-  console.log(`[BatchFrameGenerate] Total: ${allShots.length} shots, need: ${needProcess.length}, skip: ${skipCount}, characters: ${frameCharacters.length}`);
-
-  const frameFirstSlots = await resolveSlotContents("frame_generate_first", { userId, projectId });
-  const frameLastSlots = await resolveSlotContents("frame_generate_last", { userId, projectId });
-
-  // ── Sequential per-shot generation ──
-  // Process shots one at a time so each completion is immediately
-  // persisted to DB. If the process is interrupted, previously
-  // completed shots remain saved and can be skipped on retry.
-  const total = allShots.length;
-  let doneCount = 0;
-  console.log(`[BatchFrameGenerate] Starting sequential generation: 0/${total}`);
-
-  for (const shot of allShots) {
-    const shotLegacy = allShotsLegacy.get(shot.id);
-
-    if (!overwrite && shotLegacy?.firstFrame && shotLegacy?.lastFrame) {
-      doneCount++;
-      console.log(`[BatchFrameGenerate] ⊙ shot ${shot.sequence} skipped (${doneCount}/${total})`);
-      results.push({ shotId: shot.id, sequence: shot.sequence, status: "skipped" });
-      continue;
-    }
-
-    const startTime = Date.now();
-    try {
-      await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
-
-      const ffAssetExisting = await getActiveAsset(shot.id, "first_frame", 0);
-      const lfAssetExisting = await getActiveAsset(shot.id, "last_frame", 0);
-      const shotCharNameSet = new Set<string>([
-        ...(ffAssetExisting?.characters ?? []).map(stripCharHint),
-        ...(lfAssetExisting?.characters ?? []).map(stripCharHint),
-      ]);
-      const filteredChars = shotCharNameSet.size > 0
-        ? charsWithImages.filter((c) => shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || ""))
-        : [];
-      const shotCharRefImages = filteredChars.map((c) => c.referenceImage!);
-      const shotCharRefLabels = filteredChars.map((c) => c.name);
-      const shotCharsForPersist = filteredChars.length > 0 ? filteredChars.map((c) => c.name) : undefined;
-
-      const ffAsset = await getLatestCompletedAsset(shot.id, "first_frame")
-        || await getActiveAsset(shot.id, "first_frame", 0);
-      const lfAsset = await getLatestCompletedAsset(shot.id, "last_frame")
-        || await getActiveAsset(shot.id, "last_frame", 0);
-      const startFrameText = ffAsset?.prompt || shotLegacy?.startFrameDesc || shot.prompt || "";
-      const endFrameText = lfAsset?.prompt || shotLegacy?.endFrameDesc || shot.prompt || "";
-
-      const firstPrompt = buildFirstFramePrompt({
-        sceneDescription: shot.prompt || "",
-        startFrameDesc: startFrameText,
-        characterDescriptions: "",
-        slotContents: frameFirstSlots,
-      });
-      const firstFramePath = await ai.generateImage(firstPrompt, {
-        ...imageOpts,
-        quality: "hd",
-        referenceImages: shotCharRefImages,
-        referenceLabels: shotCharRefLabels,
-        scenePrompt: shot.prompt || "",
-      });
-
-      const lastPrompt = buildLastFramePrompt({
-        sceneDescription: shot.prompt || "",
-        endFrameDesc: endFrameText,
-        characterDescriptions: "",
-        firstFramePath,
-        slotContents: frameLastSlots,
-      });
-      const lastFramePath = await ai.generateImage(lastPrompt, {
-        ...imageOpts,
-        quality: "hd",
-        referenceImages: shotCharRefImages,
-        referenceLabels: shotCharRefLabels,
-        scenePrompt: shot.prompt || "",
-      });
-
-      // Persist immediately — survives process interruption
-      await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
-
-      if (ffAssetExisting) await patchAsset(ffAssetExisting.id, { fileUrl: firstFramePath, status: "completed" });
-      else
-        await insertAssetVersion({
-          shotId: shot.id, type: "first_frame", sequenceInType: 0,
-          prompt: shotLegacy?.startFrameDesc ?? "", fileUrl: firstFramePath, status: "completed", characters: shotCharsForPersist,
-        });
-      if (lfAssetExisting) await patchAsset(lfAssetExisting.id, { fileUrl: lastFramePath, status: "completed" });
-      else
-        await insertAssetVersion({
-          shotId: shot.id, type: "last_frame", sequenceInType: 0,
-          prompt: shotLegacy?.endFrameDesc ?? "", fileUrl: lastFramePath, status: "completed", characters: shotCharsForPersist,
-        });
-
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      doneCount++;
-      console.log(`[BatchFrameGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
-
-      results.push({ shotId: shot.id, sequence: shot.sequence, status: "ok", firstFrame: firstFramePath, lastFrame: lastFramePath });
-    } catch (err) {
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      doneCount++;
-      console.error(`[BatchFrameGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
-      await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
-      results.push({ shotId: shot.id, sequence: shot.sequence, status: "error", error: extractErrorMessage(err) });
-    }
+  if (needProcess.length === 0) {
+    return NextResponse.json({ enqueued: 0, taskIds: [], totalShots: allShots.length, message: "All shots already have frames" });
   }
 
-  const okCount = results.filter((r) => r.status === "ok").length;
-  const errCount = results.filter((r) => r.status === "error").length;
-  console.log(`[BatchFrameGenerate] Done: ${okCount} ok, ${errCount} errors, ${skipCount} skipped`);
+  // Dispatch each shot as a background task via the task queue.
+  // The pipeline handler (frame_generate) generates both frames with per-frame
+  // atomic persistence. Survives process restarts and ComfyUI timeouts.
+  const taskIds: string[] = [];
+  for (const shot of needProcess) {
+    const task = await enqueueTask({
+      type: "frame_generate",
+      projectId,
+      payload: {
+        shotId: shot.id,
+        projectId,
+        userId,
+        modelConfig,
+        ratio: payload?.ratio,
+      },
+    });
+    taskIds.push(task.id);
+  }
 
-  return NextResponse.json({ results });
+  console.log(`[BatchFrameGenerate] Enqueued ${taskIds.length} frame_generate tasks`);
+  return NextResponse.json({ enqueued: taskIds.length, taskIds, totalShots: allShots.length });
 }
 
 // --- single_frame_generate: synchronous frame generation for one shot ---
@@ -2016,10 +1967,10 @@ async function handleSingleFrameGenerate(
   // Read prompts from shot_assets — they were generated by the dedicated
   // "生成首尾帧提示词" step. Each shot is independent: no continuity chain.
   // Use latest completed asset regardless of is_active.
-  const ffAsset = await getLatestCompletedAsset(shotId, "first_frame")
-    || await getActiveAsset(shotId, "first_frame", 0);
-  const lfAsset = await getLatestCompletedAsset(shotId, "last_frame")
-    || await getActiveAsset(shotId, "last_frame", 0);
+  const ffAsset = await getActiveAsset(shotId, "first_frame", 0)
+    || await getLatestCompletedAsset(shotId, "first_frame");
+  const lfAsset = await getActiveAsset(shotId, "last_frame", 0)
+    || await getLatestCompletedAsset(shotId, "last_frame");
   const startFramePromptText = ffAsset?.prompt || shot.prompt || "";
   const endFramePromptText = lfAsset?.prompt || shot.prompt || "";
 
@@ -2027,16 +1978,19 @@ async function handleSingleFrameGenerate(
   const shotEpisodeId = episodeId || shot.episodeId;
   const projectCharacters = await getEpisodeCharacters(projectId, shotEpisodeId);
 
-  // Per-shot character filter: only inject refs for characters declared
-  // on the first_frame / last_frame asset metadata for this shot.
-  const shotCharNameSet = new Set<string>([
-    ...(ffAsset?.characters ?? []).map(stripCharHint),
-    ...(lfAsset?.characters ?? []).map(stripCharHint),
-  ]);
-  const filteredChars = shotCharNameSet.size > 0
-    ? projectCharacters.filter((c) => c.referenceImage && (shotCharNameSet.has(stripCharHint(c.name)) || shotCharNameSet.has((c as any).baseName || "")))
-    : [];
-  const shotCharRefImages = filteredChars.map((c) => c.referenceImage as string);
+  // Per-frame character refs — resolve first_frame and last_frame independently.
+  // Same shared logic as the pipeline handler (handleFrameGenerate).
+  const charsWithRefs = projectCharacters.filter((c: any) => !!c.referenceImage);
+  const charMap = buildCharMap(charsWithRefs);
+
+  const ffChars = resolveFrameCharacters(ffAsset, charMap);
+  const lfChars = resolveFrameCharacters(lfAsset, charMap);
+  const ffRefImages = ffChars.map((c: any) => c.referenceImage);
+  const ffRefLabels = ffChars.map((c: any) => (c.baseName as string) || stripCharHint(c.name));
+  const lfRefImages = lfChars.map((c: any) => c.referenceImage);
+  const lfRefLabels = lfChars.map((c: any) => (c.baseName as string) || stripCharHint(c.name));
+
+  console.log(`[SingleFrameGen] Shot ${shot.sequence} FF: chars=${JSON.stringify(ffAsset?.characters)} labels=${JSON.stringify(ffRefLabels)} refs=${ffRefImages.length} refPaths=${JSON.stringify(ffRefImages.map((p: string) => p.split('/').pop()))}`);
 
   const ai = resolveImageProvider(modelConfig, versionedUploadDir);
   const imageOpts = { size: ratioToSize(payload?.ratio as string), aspectRatio: (payload?.ratio as string) || "16:9" };
@@ -2053,12 +2007,16 @@ async function handleSingleFrameGenerate(
       characterDescriptions: "",
       slotContents: frameFirstSlots,
     });
-    const firstFramePath = await ai.generateImage(firstPrompt, {
-      ...imageOpts,
-      quality: "hd",
-      referenceImages: shotCharRefImages,
-      scenePrompt: shot.prompt || "",
-    });
+    let firstFramePath: string;
+    if (ffRefImages.length === 0) {
+      firstFramePath = await ai.generateImage(firstPrompt, { ...imageOpts, quality: "hd" });
+    } else {
+      firstFramePath = await ai.generateImage(firstPrompt, {
+        ...imageOpts, quality: "hd",
+        referenceImages: ffRefImages, referenceLabels: ffRefLabels,
+        scenePrompt: shot.prompt || "",
+      });
+    }
 
     const lastPrompt = buildLastFramePrompt({
       sceneDescription: shot.prompt || "",
@@ -2067,12 +2025,16 @@ async function handleSingleFrameGenerate(
       firstFramePath,
       slotContents: frameLastSlots,
     });
-    const lastFramePath = await ai.generateImage(lastPrompt, {
-      ...imageOpts,
-      quality: "hd",
-      referenceImages: shotCharRefImages,
-      scenePrompt: shot.prompt || "",
-    });
+    let lastFramePath: string;
+    if (lfRefImages.length === 0) {
+      lastFramePath = await ai.generateImage(lastPrompt, { ...imageOpts, quality: "hd" });
+    } else {
+      lastFramePath = await ai.generateImage(lastPrompt, {
+        ...imageOpts, quality: "hd",
+        referenceImages: lfRefImages, referenceLabels: lfRefLabels,
+        scenePrompt: shot.prompt || "",
+      });
+    }
 
     await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shotId));
 
@@ -2132,10 +2094,7 @@ async function handleSingleVideoGenerate(
 
   const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
 
-  const shotCharacters = await db
-    .select()
-    .from(characters)
-    .where(eq(characters.projectId, shot.projectId));
+  const shotCharacters = await getEpisodeCharacters(projectId, shot.episodeId);
   const characterDescriptions = shotCharacters
     .map((c) => `${c.name}${c.visualHint ? `（${c.visualHint}）` : ""}: ${c.description}`)
     .join("\n");
@@ -2201,6 +2160,7 @@ async function handleSingleVideoGenerate(
         languageMode: h3Lang,
         dialogues: undefined,
             // TODO: load per-shot dialogues for batch H3
+        activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
       }, textProvider, h3System);
       videoPrompt = h3Output.sections.join("\n\n");
     } else {
@@ -2245,8 +2205,6 @@ async function handleSingleVideoGenerate(
   }
 }
 
-// --- batch_video_generate: sequential video generation for all eligible shots ---
-
 async function handleBatchVideoGenerate(
   projectId: string,
   userId: string,
@@ -2271,136 +2229,42 @@ async function handleBatchVideoGenerate(
     if (!latestVer?.id) return NextResponse.json({ error: "No version found. Run shot split first." }, { status: 400 });
     batchVersionId = latestVer.id;
   }
+
   const shotWhereConditions = [eq(shots.projectId, projectId)];
   if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
   if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
-  const allShots = await db
-    .select()
-    .from(shots)
-    .where(and(...shotWhereConditions))
-    .orderBy(asc(shots.sequence));
+  const allShots = await db.select().from(shots).where(and(...shotWhereConditions)).orderBy(asc(shots.sequence));
 
-  const versionedUploadDir = batchVersionId
-    ? await getVersionedUploadDir(batchVersionId)
-    : getUploadDir();
-
-  const overwrite = payload?.overwrite === true;
   const allShotsLegacy = await loadShotLegacyViewsBatch(allShots.map((s) => s.id));
+  const overwrite = payload?.overwrite === true;
   const eligible = allShots.filter((s) => {
     const v = allShotsLegacy.get(s.id);
     return v?.firstFrame && v?.lastFrame && (overwrite || !v?.videoUrl);
   });
+
   if (eligible.length === 0) {
-    return NextResponse.json({ results: [], message: "No eligible shots" });
+    return NextResponse.json({ enqueued: 0, taskIds: [], totalShots: allShots.length, message: "No eligible shots for video generation" });
   }
 
-  const videoProvider = resolveVideoProvider(modelConfig, versionedUploadDir);
-  const ratio = (payload?.ratio as string) || "16:9";
-  const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
-  const videoSlots = await resolveSlotContents("video_generate", { userId, projectId });
-
-  // ── Sequential per-shot generation ──
-  // Process shots one at a time with immediate DB persistence.
-  const total = eligible.length;
-  let doneCount = 0;
-  console.log(`[BatchVideoGenerate] Starting sequential generation: 0/${total}`);
-
-  const results: Array<{ shotId: string; sequence: number; status: string; videoUrl?: string; error?: string }> = [];
-
+  // Dispatch each shot as a background task via the task queue.
+  const taskIds: string[] = [];
   for (const shot of eligible) {
-    const startTime = Date.now();
-    try {
-      await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
-
-      const ctx = await assembleH3ShotContext(shot.id);
-      const { projectCharacters, episode, project,
-        enrichedDialogues, sceneDesc, sceneLighting, sceneColorPalette,
-        costumes, bgmUrl, episodeDesc, episodeKeywords } = ctx;
-
-      const shotLegacy = allShotsLegacy.get(shot.id);
-      const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
-      const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
-
-      const textProvider = resolveAIProvider(modelConfig);
-      const useH3VG = process.env.H3_PROMPT_MODE !== "seedance";
-      let videoPrompt: string;
-      if (shot.videoPrompt) {
-        videoPrompt = shot.videoPrompt;
-      } else if (useH3VG) {
-        const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
-        const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
-        const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "auto";
-
-        const h3Output = await buildH3({
-          videoScript,
-          motionScript: shot.motionScript,
-          duration: effectiveDuration,
-          cameraDirection: shot.cameraDirection || "static",
-          generationMode: (episode?.generationMode ?? project?.generationMode ?? "keyframe") as "keyframe" | "reference",
-          characters: projectCharacters.map(c => ({ id: c.id, name: c.name, description: c.description, visualHint: c.visualHint, referenceImage: c.referenceImage, performanceStyle: c.performanceStyle, scope: c.scope, heightCm: c.heightCm, bodyType: c.bodyType })),
-          firstFrame: { fileUrl: shotLegacy?.firstFrame || "", prompt: shotLegacy?.startFrameDesc },
-          lastFrame: { fileUrl: shotLegacy?.lastFrame || "", prompt: shotLegacy?.endFrameDesc },
-          dialogues: enrichedDialogues,
-          sceneDescription: sceneDesc,
-          sceneLighting,
-          sceneColorPalette,
-          soundDesign: shot.soundDesign || undefined,
-          musicCue: shot.musicCue || undefined,
-          bgmUrl,
-          costumes: costumes.map(c => ({ name: c.name, description: c.description, referenceImage: c.referenceImage, characterId: c.characterId })),
-          compositionGuide: shot.compositionGuide || undefined,
-          episodeDescription: episodeDesc,
-          episodeKeywords,
-          episodeTitle: episode?.title || undefined,
-          projectIdea: project?.idea || undefined,
-          projectTitle: project?.title || undefined,
-          projectOutline: project?.outline || undefined,
-          projectWorldSetting: project?.worldSetting || undefined,
-          languageMode: h3Lang,
-        }, textProvider, h3System);
-        videoPrompt = h3Output.sections.join("\n\n");
-      } else {
-        videoPrompt = buildVideoPrompt({
-          videoScript,
-          cameraDirection: shot.cameraDirection || "static",
-          motionScript: shot.motionScript,
-          startFrameDesc: shotLegacy?.startFrameDesc ?? undefined,
-          endFrameDesc: shotLegacy?.endFrameDesc ?? undefined,
-          duration: effectiveDuration,
-          characters: projectCharacters,
-          slotContents: videoSlots,
-        });
-      }
-
-      const genResult = await videoProvider.generateVideo({
-        firstFrame: shotLegacy!.firstFrame!,
-        lastFrame: shotLegacy!.lastFrame!,
-        prompt: videoPrompt,
-        duration: effectiveDuration,
-        ratio,
-      });
-
-      await insertAssetVersion({
-        shotId: shot.id, type: "keyframe_video", sequenceInType: 0,
-        prompt: videoPrompt, fileUrl: genResult.filePath, status: "completed",
-      });
-      await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
-
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      doneCount++;
-      console.log(`[BatchVideoGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
-
-      results.push({ shotId: shot.id, sequence: shot.sequence, status: "ok", videoUrl: genResult.filePath });
-    } catch (err) {
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      doneCount++;
-      console.error(`[BatchVideoGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
-      await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
-      results.push({ shotId: shot.id, sequence: shot.sequence, status: "error", error: extractErrorMessage(err) });
-    }
+    const task = await enqueueTask({
+      type: "video_generate",
+      projectId,
+      payload: {
+        shotId: shot.id,
+        projectId,
+        userId,
+        modelConfig,
+        ratio: payload?.ratio,
+      },
+    });
+    taskIds.push(task.id);
   }
 
-  return NextResponse.json({ results });
+  console.log(`[BatchVideoGenerate] Enqueued ${taskIds.length} video_generate tasks`);
+  return NextResponse.json({ enqueued: taskIds.length, taskIds, totalShots: allShots.length });
 }
 
 // --- single_scene_frame: generate Toonflow-style scene reference frame only ---
@@ -2608,10 +2472,7 @@ async function handleSingleReferenceVideo(
 
   const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
 
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(eq(characters.projectId, shot.projectId));
+  const projectCharacters = await getEpisodeCharacters(projectId, shot.episodeId);
 
   // Collect the union of character names declared on this shot's
   // reference assets — this is the precise set of characters the AI said
@@ -3189,7 +3050,7 @@ async function handleSingleVideoPrompt(
   console.log(`[SingleVideoPrompt] shot.sequence=${shot.sequence}, mode=${genMode}, frames=${visionFrames.length}`);
   // Allow text-only prompt when no frames available (non-vision models)
 
-  const shotCharacters = await db.select().from(characters).where(eq(characters.projectId, shot.projectId));
+  const shotCharacters = await getEpisodeCharacters(projectId, shot.episodeId);
 
   // ── H3 prompt: build from structured data ──
   const textProvider = resolveAIProvider(modelConfig);
@@ -3223,6 +3084,7 @@ async function handleSingleVideoPrompt(
       soundDesign: shot.soundDesign || undefined,
       musicCue: shot.musicCue || undefined,
       languageMode: h3Lang,
+      activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
     }, textProvider, h3System);
     const h3Text = h3Output.sections.join("\n\n");
     await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shotId));
@@ -3390,6 +3252,7 @@ async function handleBatchVideoPrompt(
           languageMode: h3Lang,
           dialogues: undefined,
           // TODO: load per-shot dialogues for batch H3
+          activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
         }, textProvider, h3System);
         const h3Text = h3Output.sections.join("\n\n");
         await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shot.id));
@@ -3993,6 +3856,165 @@ async function handleSingleShotRefImageGenerateAll(
 // --- generate_keyframe_prompts: synchronous batch — AI generates first/last
 // frame prompts for all shots in one call, writes them into shot_assets ---
 
+// --- single_keyframe_prompts: regenerate keyframe prompts for one shot ---
+
+async function handleSingleKeyframePrompts(
+  projectId: string,
+  userId: string,
+  payload?: Record<string, unknown>,
+  modelConfig?: ModelConfig,
+  episodeId?: string
+) {
+  const shotId = payload?.shotId as string;
+  if (!shotId) {
+    return NextResponse.json({ error: "No shotId provided" }, { status: 400 });
+  }
+  if (!modelConfig?.text) {
+    return NextResponse.json({ error: "No text model configured" }, { status: 400 });
+  }
+
+  const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
+  if (!shot) {
+    return NextResponse.json({ error: "Shot not found" }, { status: 404 });
+  }
+
+  const projectCharacters = await getEpisodeCharacters(projectId, episodeId);
+
+  // Pull visual style meta from script (same logic as batch handler)
+  const scriptSource = episodeId
+    ? await db.select({ script: episodes.script }).from(episodes).where(eq(episodes.id, episodeId))
+    : await db.select({ script: projects.script }).from(projects).where(eq(projects.id, projectId));
+  const script = scriptSource[0]?.script || "";
+
+  const pickField = (label: string): string => {
+    const re = new RegExp(`${label}[：:]\\s*(.+?)(?:\\n|$)`);
+    const m = script.match(re);
+    return m?.[1]?.trim() || "";
+  };
+  const visualStyle = [
+    pickField("视觉风格") || pickField("Visual Style"),
+    pickField("色彩基调") && `色彩基调：${pickField("色彩基调")}`,
+    pickField("时代美学") && `时代美学：${pickField("时代美学")}`,
+    pickField("氛围情绪") && `氛围情绪：${pickField("氛围情绪")}`,
+    pickField("画幅比例") && `画幅比例：${pickField("画幅比例")}`,
+  ].filter(Boolean).join("；");
+
+  // Character relations (same as batch handler)
+  const kfRelations = await db
+    .select()
+    .from(characterRelations)
+    .where(eq(characterRelations.projectId, projectId));
+  let kfRelationsText = "";
+  if (kfRelations.length > 0) {
+    kfRelationsText = "\n\n## 角色关系（必须用于决定站位、眼神、肢体对抗、画面张力）\n";
+    for (const rel of kfRelations) {
+      const charA = projectCharacters.find((c) => c.id === rel.characterAId);
+      const charB = projectCharacters.find((c) => c.id === rel.characterBId);
+      if (charA && charB) {
+        kfRelationsText += `- ${charA.name} ↔ ${charB.name}：${rel.relationType}${rel.description ? `（${rel.description}）` : ""}\n`;
+      }
+    }
+    kfRelationsText += `\n**关系驱动构图规则（最高优先级）**：\n- **敌对 / 对立 / 仇人**：两人必须都是**活人角色同屏对峙**，直接对视、肢体对抗、武器对准彼此。严禁把任一方画成背景的雕像/神像/虚影/浮雕/壁画。\n- **友好 / 盟友**：并肩站位、相互掩护、眼神交流。\n- **爱慕 / 亲密**：靠近、牵手、拥抱、温柔对视。\n- **父女 / 师徒**：长辈在前或侧，晚辈跟随。\n- 凡是出现在 characters 列表里的角色，在首尾帧画面里都必须是真实的活人，不允许以雕像/虚影形式出场。\n`;
+  }
+
+  const textProvider = resolveAIProvider(modelConfig);
+  const keyframeSystemPrompt = await resolvePrompt("shot_split_keyframe_assets", {
+    userId,
+    projectId,
+  });
+
+  try {
+    // Load dialogues for narrative context
+    const shotDialogues = await db.select().from(dialogues).where(eq(dialogues.shotId, shotId));
+    const dialogueText = shotDialogues.map(d => {
+      const c = projectCharacters.find(pc => pc.id === d.characterId);
+      return `${c?.baseName || c?.name || "?"}: ${d.text}`;
+    }).join(" ");
+
+    const basePromptRequest = buildKeyframePromptsRequest(
+      [{
+        sequence: shot.sequence,
+        prompt: shot.prompt || "",
+        videoScript: shot.videoScript,
+        dialogues: dialogueText || undefined,
+        motionScript: shot.motionScript,
+        cameraDirection: shot.cameraDirection,
+      }],
+      projectCharacters.map((c) => ({
+        name: c.baseName || stripCharHint(c.name),
+        description: c.description,
+        visualHint: c.visualHint,
+      })),
+      visualStyle
+    );
+    const promptRequest = kfRelationsText
+      ? basePromptRequest + kfRelationsText
+      : basePromptRequest;
+
+    const result = await textProvider.generateText(promptRequest, {
+      systemPrompt: keyframeSystemPrompt,
+      temperature: 0.5,
+    });
+
+    console.log(`[SingleKeyframePrompts] Shot ${shot.sequence} raw response (first 800): ${result.slice(0, 800)}`);
+
+    const jsonMatch = result.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      throw new Error(`Shot ${shot.sequence}: invalid JSON response`);
+    }
+    const parsed = JSON.parse(jsonMatch[0]) as Array<{
+      shotSequence: number;
+      firstFrameCharacters?: string[];
+      lastFrameCharacters?: string[];
+      characters?: string[];
+      prompts: string[];
+    }>;
+    const entry = parsed.find((e) => e.shotSequence === shot.sequence) || parsed[0];
+    if (!entry || !Array.isArray(entry.prompts) || entry.prompts.length < 2) {
+      throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
+    }
+
+    // Per-frame character resolution with backward compat
+    // Safety: strip visualHint and dedup — LLM may output hint names despite prompt rules
+    const cleanChars = (arr: string[]): string[] =>
+      [...new Set(arr.map((n: string) => stripCharHint(n)))];
+    const firstFrameChars = cleanChars(
+      Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters
+      : Array.isArray(entry.characters) ? entry.characters : []
+    );
+    const lastFrameChars = cleanChars(
+      Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters
+      : Array.isArray(entry.characters) ? entry.characters : []
+    );
+
+    for (const [idx, type] of (["first_frame", "last_frame"] as const).entries()) {
+      const charsForType = idx === 0 ? firstFrameChars : lastFrameChars;
+      const existing = await getActiveAsset(shotId, type, 0);
+      if (existing) {
+        await patchAsset(existing.id, {
+          prompt: entry.prompts[idx],
+          characters: charsForType,
+        });
+      } else {
+        await insertAssetVersion({
+          shotId,
+          type,
+          sequenceInType: 0,
+          prompt: entry.prompts[idx],
+          status: "pending",
+          characters: charsForType,
+        });
+      }
+    }
+
+    console.log(`[SingleKeyframePrompts] ✓ shot ${shot.sequence}`);
+    return NextResponse.json({ shotId, firstFramePrompt: entry.prompts[0], lastFramePrompt: entry.prompts[1], status: "ok" });
+  } catch (err) {
+    console.error(`[SingleKeyframePrompts] ✗ shot ${shot.id}:`, err);
+    return NextResponse.json({ shotId, status: "error", error: extractErrorMessage(err) }, { status: 500 });
+  }
+}
+
 async function handleGenerateKeyframePrompts(
   projectId: string,
   userId: string,
@@ -4021,7 +4043,7 @@ async function handleGenerateKeyframePrompts(
         cameraDirection: s.cameraDirection,
         duration: s.duration,
       })),
-      characters: kpAgentChars.map((c) => ({ name: c.name, description: c.description, visualHint: c.visualHint })),
+      characters: kpAgentChars.map((c) => ({ name: c.baseName || stripCharHint(c.name), description: c.description, visualHint: c.visualHint })),
     }, null, 2);
 
     const agentResult = await callAndValidateAgent(kpBoundAgent, "keyframe_prompts", kpPrompt);
@@ -4042,14 +4064,19 @@ async function handleGenerateKeyframePrompts(
 
         const startFrame = (entry.startFrame || (entry.prompts as string[])?.[0] || "") as string;
         const endFrame = (entry.endFrame || (entry.prompts as string[])?.[1] || "") as string;
-        const chars = Array.isArray(entry.characters) ? entry.characters as string[] : [];
+        const rawChars = Array.isArray(entry.characters) ? entry.characters as string[] : [];
+        const chars = [...new Set(rawChars.map((n: string) => stripCharHint(n)))];
+        const rawFirst = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters as string[] : chars;
+        const rawLast = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters as string[] : chars;
+        const firstChars = [...new Set(rawFirst.map((n: string) => stripCharHint(n)))];
+        const lastChars = [...new Set(rawLast.map((n: string) => stripCharHint(n)))];
 
         if (startFrame) {
-          await insertAssetVersion({ shotId: shot.id, type: "first_frame", sequenceInType: 0, prompt: startFrame, status: "pending", characters: chars });
+          await insertAssetVersion({ shotId: shot.id, type: "first_frame", sequenceInType: 0, prompt: startFrame, status: "pending", characters: firstChars });
           savedCount++;
         }
         if (endFrame) {
-          await insertAssetVersion({ shotId: shot.id, type: "last_frame", sequenceInType: 0, prompt: endFrame, status: "pending", characters: chars });
+          await insertAssetVersion({ shotId: shot.id, type: "last_frame", sequenceInType: 0, prompt: endFrame, status: "pending", characters: lastChars });
           savedCount++;
         }
       }
@@ -4158,6 +4185,17 @@ async function handleGenerateKeyframePrompts(
     projectId,
   });
 
+  // Pre-load dialogues for all shots (provides narrative context to keyframe LLM)
+  const allDialogues = await db.select().from(dialogues)
+    .where(inArray(dialogues.shotId, allShots.map(s => s.id)));
+  const dialoguesByShot = new Map<string, string>();
+  for (const d of allDialogues) {
+    const existing = dialoguesByShot.get(d.shotId) || "";
+    const char = projectCharacters.find(c => c.id === d.characterId);
+    const name = char?.baseName || char?.name || "Unknown";
+    dialoguesByShot.set(d.shotId, existing + `${name}: ${d.text} `);
+  }
+
   // Sequential per-shot generation: one LLM call at a time with immediate DB writes.
   const total = allShots.length;
   let doneCount = 0;
@@ -4170,11 +4208,13 @@ async function handleGenerateKeyframePrompts(
         [{
           sequence: shot.sequence,
           prompt: shot.prompt || "",
+          videoScript: shot.videoScript,
+          dialogues: dialoguesByShot.get(shot.id),
           motionScript: shot.motionScript,
           cameraDirection: shot.cameraDirection,
         }],
         projectCharacters.map((c) => ({
-          name: c.name,
+          name: c.baseName || stripCharHint(c.name),
           description: c.description,
           visualHint: c.visualHint,
         })),
@@ -4197,6 +4237,8 @@ async function handleGenerateKeyframePrompts(
       }
       const parsed = JSON.parse(jsonMatch[0]) as Array<{
         shotSequence: number;
+        firstFrameCharacters?: string[];
+        lastFrameCharacters?: string[];
         characters?: string[];
         prompts: string[];
       }>;
@@ -4205,14 +4247,21 @@ async function handleGenerateKeyframePrompts(
         throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
       }
 
-      const charsForShot = Array.isArray(entry.characters) ? entry.characters : [];
+      const rc = (arr: string[]): string[] => [...new Set(arr.map((n: string) => stripCharHint(n)))];
+      const rawFF = Array.isArray(entry.firstFrameCharacters) ? entry.firstFrameCharacters
+        : Array.isArray(entry.lastFrameCharacters) ? undefined 
+        : Array.isArray(entry.characters) ? entry.characters : [];
+      const rawLF = Array.isArray(entry.lastFrameCharacters) ? entry.lastFrameCharacters
+        : Array.isArray(entry.characters) ? entry.characters : [];
+      const firstFrameChars = rawFF ? rc(rawFF as string[]) : undefined;
+      const lastFrameChars = rc(rawLF as string[]);
       await insertAssetVersion({
         shotId: shot.id,
         type: "first_frame",
         sequenceInType: 0,
         prompt: entry.prompts[0],
         status: "pending",
-        characters: charsForShot,
+        characters: firstFrameChars,
       });
       await insertAssetVersion({
         shotId: shot.id,
@@ -4220,7 +4269,7 @@ async function handleGenerateKeyframePrompts(
         sequenceInType: 0,
         prompt: entry.prompts[1],
         status: "pending",
-        characters: charsForShot,
+        characters: lastFrameChars,
       });
       doneCount++;
       updatedCount++;

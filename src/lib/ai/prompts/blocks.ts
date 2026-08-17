@@ -31,6 +31,10 @@ export function languageRuleBlock(defaultLang?: string): string {
  * frame_generate_first, and scene_frame_generate. Single source of truth to
  * prevent style drift across the pipeline (角色图/参考图/首帧图).
  */
+/**
+ * @deprecated Use {@link import("./style-registry").buildStyleMappingBlock} instead.
+ * Kept for backward compatibility; no longer referenced by any Registry slot.
+ */
 export function themeStyleMappingBlock(): string {
   return `**主题 → 画风自动映射表**（全流水线共用，确保角色图/参考图/首帧图画风一致）：
 - 仙侠/修真/玄幻 → 3D 国漫渲染风格、中国仙侠概念设计，细腻材质与体积光

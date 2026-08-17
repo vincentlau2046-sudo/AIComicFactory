@@ -96,7 +96,14 @@
     "kanbanBatchGenerate": "批量生成 ({count})",
     "continueFromPrev": "续上集",
     "continueFromPrevTooltip": "使用上一集最后一帧作为本集首帧",
-    "prevEpisodeNoFrames": "上一集尚未生成帧，无法续接"
+    "prevEpisodeNoFrames": "上一集尚未生成帧，无法续接",
+    "styleContextHint": "项目定位已确定，生成剧本时将自动遵循以上风格。",
+    "structuredParse": "剧本结构化",
+    "parse": "结构化解析",
+    "parseHint": "将剧本解析为结构化场景列表，供分镜拆解使用。需要调用一次 AI。",
+    "sceneCount": "{count} 个场景",
+    "dialogueCount": "{count} 句对白",
+    "parsedInfo": "已解析，S1 分镜将自动引用"
   },
   "character": {
     "name": "角色名",
@@ -141,6 +148,8 @@
     "lastFrame": "尾帧",
     "cameraDirection": "镜头方向",
     "rewriteText": "重新生成文本",
+    "generateKeyframePrompts": "生成首尾帧提示词",
+    "regenerateKeyframePrompts": "重新生成首尾帧提示词",
     "aiOptimize": "AI 优化",
     "aiOptimizeInstruction": "优化指令",
     "aiOptimizeOriginal": "原始内容",
@@ -358,6 +367,8 @@
       "refVideoGenerateDesc": "参考图模式下，直接发给视频模型的提示词模板（不是生成视频本身）",
       "refVideoPrompt": "视频提示词 AI 生成器",
       "refVideoPromptDesc": "由 AI 根据分镜+参考图撰写视频提示词的 system prompt",
+      "videoH3Prompt": "H3 视频提示词",
+      "videoH3PromptDesc": "MiniMax H3 视频生成的结构化提示词模板",
       "shotSplitKeyframeAssets": "分镜·首尾帧提示词",
       "shotSplitKeyframeAssetsDesc": "基于已有镜头元数据生成首帧/尾帧的图像提示词",
       "shotSplitReferenceAssets": "分镜·参考图提示词",

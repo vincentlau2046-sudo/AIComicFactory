@@ -17,6 +17,10 @@ export const projects = sqliteTable("projects", {
   useProjectPrompts: integer("use_project_prompts").notNull().default(0),
   colorPalette: text("color_palette").default(""),
   worldSetting: text("world_setting").default(""),
+  visualStyle: text("visual_style").default(""),
+  visualStyleKey: text("visual_style_key").default(""),
+  eraAesthetic: text("era_aesthetic").default(""),
+  moodDirection: text("mood_direction").default(""),
   targetDuration: integer("target_duration").default(0),
   bgmUrl: text("bgm_url").default(""),
   createdAt: integer("created_at", { mode: "timestamp" })
@@ -47,6 +51,10 @@ export const episodes = sqliteTable("episodes", {
     .default("keyframe"),
   description: text("description").default(""),
   keywords: text("keywords").default(""),
+  visualStyle: text("visual_style").default(""),
+  eraAesthetic: text("era_aesthetic").default(""),
+  moodDirection: text("mood_direction").default(""),
+  screenplay: text("screenplay").default(""),
   scriptHash: text("script_hash").default(""),
   colorPalette: text("color_palette").default(""),
   targetDuration: integer("target_duration").default(0),
@@ -76,6 +84,11 @@ export const characters = sqliteTable("characters", {
   heightCm: integer("height_cm").default(0),
   bodyType: text("body_type").default("average"),
   isStale: integer("is_stale").notNull().default(0),
+  t2iStructure: text("t2i_structure"),
+  phaseName: text("phase_name"),
+  episodeStart: integer("episode_start"),
+  episodeEnd: integer("episode_end"),
+  visualChanges: text("visual_changes"),
   episodeId: text("episode_id").references(() => episodes.id, {
     onDelete: "cascade",
   }),
@@ -90,14 +103,6 @@ export const episodeCharacters = sqliteTable("episode_characters", {
     .notNull()
     .references(() => characters.id, { onDelete: "cascade" }),
 });
-
-export const storyboardVersions = sqliteTable("storyboard_versions", {
-  id: text("id").primaryKey(),
-  projectId: text("project_id")
-    .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  label: text("label").notNull(),
-  versionNum: integer("version_num").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -204,6 +209,8 @@ export const shots = sqliteTable("shots", {
   soundDesign: text("sound_design").default(""),
   musicCue: text("music_cue").default(""),
   costumeOverrides: text("costume_overrides").default(""),
+  narrations: text("narrations").default("[]"),
+  innerMonologues: text("inner_monologues").default("[]"),
   isStale: integer("is_stale").notNull().default(0),
   status: text("status", {
     enum: ["pending", "generating", "completed", "failed"],

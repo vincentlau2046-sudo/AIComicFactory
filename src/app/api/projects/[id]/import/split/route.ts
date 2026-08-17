@@ -101,6 +101,7 @@ export async function POST(
     text: string;
     allCharacters: CharacterSummary[];
     modelConfig: { text: ProviderConfig | null };
+    styleContext?: { visualStyle?: string; eraAesthetic?: string; moodDirection?: string; worldSetting?: string };
   };
 
   if (!body.modelConfig?.text) {
@@ -124,6 +125,12 @@ export async function POST(
       ? `\n\nAll extracted characters (assign each to ONLY the episodes where they actually appear): ${allNames.join(', ')}`
       : ''
 
+  // Build style context for prompt
+  const sc = body.styleContext;
+  const styleBlock = sc?.visualStyle || sc?.worldSetting
+    ? `\n\n【项目定位】\n${sc.visualStyle ? `视觉风格: ${sc.visualStyle}\n` : ``}${sc.eraAesthetic ? `时代美学: ${sc.eraAesthetic}\n` : ``}${sc.moodDirection ? `情绪基调: ${sc.moodDirection}\n` : ``}${sc.worldSetting ? `世界观: ${sc.worldSetting}\n` : ``}分集时请保持与以上定位一致。`
+    : '';
+
   let allEpisodes: SplitEpisode[];
   try {
     const chunkResults = await Promise.all(
@@ -134,7 +141,7 @@ export async function POST(
         )
 
         const prompt = buildScriptSplitPrompt(
-          chunk + charContext,
+          chunk + charContext + styleBlock,
           { chunkIndex: idx, totalChunks: chunks.length, episodeOffset: 0 },
         )
 

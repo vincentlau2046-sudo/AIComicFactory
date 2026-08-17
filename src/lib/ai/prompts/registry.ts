@@ -7,9 +7,24 @@ import {
   languageRuleBlock,
   referenceImageBlock,
   artStyleBlock,
-  themeStyleMappingBlock,
   physicsRealismBlock,
 } from "./blocks";
+import {
+  PROJECT_ASSESS_SYSTEM,
+  PROJECT_ASSESS_OUTPUT,
+  PROJECT_ASSESS_LANGUAGE,
+  getAssessDimensions,
+} from "./project-assess";
+import {
+  CHARACTER_ARC_SYSTEM,
+  CHARACTER_ARC_DETECTION,
+  CHARACTER_ARC_PHASE_RULES,
+  CHARACTER_ARC_OUTPUT,
+  CHARACTER_ARC_LANGUAGE,
+} from "./character-arc";
+import {
+  buildStyleMappingBlock,
+} from "./style-registry";
 
 // ── Types ────────────────────────────────────────────────
 
@@ -542,7 +557,16 @@ const CHAR_EXTRACT_OUTPUT_FORMAT = `═══ 输出格式 ═══
         {
           "episodeIndex": 1,
           "visualHint": "该集2-4字视觉标识符（如 青衣杏眼、古铜方脸明黄衮服）",
-          "description": "该集的完整视觉规格（含年龄/服饰/状态变化）——单段落"
+          "description": "该集的完整视觉规格（含年龄/服饰/状态变化）——单段落",
+          "t2iStructure": {
+            "age": "年龄描述（如 25岁，精瘦结实 或 71岁，体弱衰老，皱纹深刻）",
+            "subject": "主体：性别+身高+体型关键词（中文），如 男，162cm，精瘦，微佝偻，步履缓慢",
+            "body": "体态细节：骨骼标志物、姿势、肌肉/脂肪状态（中文）",
+            "face": "面部细节：脸型骨架、五官、皮肤质感、表情（中文）",
+            "hair": "发型细节：颜色、长度、质地、样式（中文）",
+            "clothing": "服装细节：款式+合身度+材质+颜色。必须从上装、下装、鞋履三个维度完整描述。缺少鞋履/赤脚信息会导致 T2I 生成半身像而不是全身像（中文）",
+            "lighting": "光影：光位+质感+对体型的效果（中文）"
+          }
         }
       ]
     }
@@ -569,11 +593,26 @@ const CHAR_EXTRACT_SCOPE_RULES = `═══ 角色分类规则 ═══
 - "guest"：短暂出现的次要/辅助角色——路人、只出场一次的龙套、不重要的背景角色
 拿不准时，优先选"main"。有实质对白、剧情影响、或需要视觉呈现（哪怕只是照片/遗像）的角色就是"main"。
 
-═══ 角色全量覆盖（硬约束）═══
-- 剧本中**每一个有名字的角色都必须出现在 characters 数组里**，不许遗漏，不许合并
-- 包括：只出场一次但有名字的配角、以回忆/照片/遗像出现的角色、画外音/旁白中提到的具名角色
-- 如果剧本里已经有 "=== 2. 角色描述 ===" 固定格式块（由 script_generate 生成的 角色/外貌/服饰/标志特征/气质姿态 五字段），**必须**把每一个角色原样提取出来，不得精炼、不得删减、不得改写角色名
-- 自检：生成完后，回头逐行扫描剧本，确认每个用引号或冒号引出台词的角色、每个场景描述里点名出现的人物都在 characters 里`;
+═══ 角色筛选规则（先筛选，再生成描述——最高优先级）═══
+
+第一步：排除以下角色（满足任意一条就跳过，不要生成）
+
+1. 【背影/不可见角色】剧本中只从背面/侧面/远处/模糊描述，没有正面视觉信息
+   → 无法生成正面角色设定图 → 不要提取。如："老住持的背影摆了摆手"
+2. 【单场景一句台词】角色仅在 1 个场景出现，且对白仅 1 句纯功能性
+   （驱赶/拒绝/指路/简单回应，说完就消失。如 "走走走"、"庙里没粮了，你走吧"）
+3. 【零互动背景板】角色无台词、无与主角的眼神/肢体互动，仅在场景中作为氛围元素
+   （如宴席上吃东西的宾客、集市走过的路人——这些是场景，不是角色）
+
+第二步：对保留下来的角色，生成完整视觉描述
+- 保留有名字的角色、有实质对白推动剧情的角色、与主角有互动的角色
+- 合并同类角色（如"路人甲"和"路人乙"合并为"路人"，只提取一次）
+- 自检：删掉这个角色，剧本叙事有损失吗？答案为"没有"的说明是功能角色，不应提取
+
+═══ 角色全量覆盖 ═══
+- 经筛选后保留下来的角色，每一个都必须完整出现在 characters 数组里，不许遗漏
+- 如果剧本里已经有 "=== 2. 角色描述 === " 固定格式块（由 script_generate 生成的 角色/外貌/服饰/标志特征/气质姿态 五字段），**必须**把每一个角色原样提取出来，不得精炼、不得删减、不得改写角色名
+- 自检：生成完后，回头逐行扫描剧本，确认每个筛选规则保留的角色都在 characters 里`;
 
 const CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS = `═══ 描述要求 ═══
 写一段密集、精确的段落，涵盖以下所有方面。该描述将被原封不动地传给图像生成器——以专业摄影指导向摄影师布置任务的口吻书写：
@@ -581,6 +620,26 @@ const CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS = `═══ 描述要求 ═══
 0. 风格标签：以画风开头（如"写实真人电影风格，85mm镜头——"或"日系动漫风格——"），锚定下游渲染器。
 
 1. 体态与气质：性别、表观年龄、身高感（高挑/娇小/中等）、体型（精瘦/纤细/健壮/敦实）、自然姿态和举止。
+
+⚠️ 体型必须用轮廓、阴影和肢体比例传达——禁止任何骨骼/器官可见描述
+
+【Qwen 2512 T2I 陷阱】该模型按字面理解所有词。"肋骨可见"会画真实白骨，
+"骨头凸起"会画骨头穿透皮肤，"身体穿透"会产生透明人体。以下词禁止出现：
+  危险词清单（禁止 — Qwen 字面渲染为白骨/器官/透明体）:
+    骨骼凸起、骨头可见、肋骨可见/显露、骨骼穿透、骨节分明、骨架轮廓、
+    骨头一根根、血管可见、内脏可见、透过皮肤、骨骼透过衣料
+  安全词清单（可用 — Qwen 渲染为阴影/轮廓/比例）:
+    凹陷、深陷、阴影浓重、轮廓分明、纤薄、单薄、空荡、细窄、瘦长、
+    极细的、窄如、如线般细
+
+• 瘦（精瘦/纤细/瘦削/皮包骨）：用阴影深度和肢体比例传达消瘦感。
+  注意区分"骨架形状"和"皮肉状态"："圆脸骨架"（头骨圆润但皮肉绷紧贴骨、颧骨处阴影浓重）≠"圆润的脸"（软组织饱满）。
+  正确：✅ "颈部与锁骨处皮肤深陷形成阴影，手臂细长如枯枝，手腕极细如线，太阳穴阴影浓重"
+  错误：❌ "肩胛骨在衣料下明显凸起，肋骨一根根隐约可见，手腕骨节突出，锁骨凸出皮肤"
+• 胖（圆润/丰满/敦实）：必须描述脂肪分布——双下巴程度、腰腹赘肉层数、手指短粗有肉窝。
+  反例：❌ "身材圆润" → ✅ "腰腹赘肉三层堆叠，双下巴垂至领口，手指粗短，手背有肉窝"
+• 健壮（肌肉发达/魁梧）：必须描述肌肉群——三角肌隆起、胸肌/背阔肌厚度、前臂青筋可见程度。
+  反例：❌ "身形健壮" → ✅ "三角肌与胸肌明显隆起，前臂青筋毕露，肩宽近55cm"
 
 2. 面部——以特写镜头的方式描写：
    - 骨骼结构：脸型、颧骨、下颌线（锐利/柔和/棱角分明）、眉骨
@@ -592,12 +651,17 @@ const CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS = `═══ 描述要求 ═══
 
 3. 发型：精确颜色（色相+底调，如"蓝黑色带深靛蓝光泽"），相对于身体的长度，质地（笔直/大波浪/紧卷），样式（如何蓬起、垂落、运动），发饰。
 
-4. 服装——主要造型（完整穿搭分解）：
+4. 服装——主要造型（完整穿搭分解，含合身度——反衬体型的关键视觉语言）：
    - 上装：款式、剪裁、材质（如"修身石灰色羊毛中山领外套"），颜色
    - 下装：裤/裙类型、材质、颜色
    - 鞋履：款式、材质
    - 外套/铠甲：如有，逐层描写
    - 配饰：首饰（金属、宝石、风格）、腰带、包袋、手套、帽子——务必具体
+   - **合身度（必须描述衣服与身体的互动关系，不只是衣服本身）**：
+     • 瘦弱身体 + 衣服："衣服在肩部空荡下垂"、"袖口宽松到手能轻易缩入"、"腰身处布料因撑不起而堆积大量皱褶"、"衣摆拖沓"
+     • 壮硕身体 + 衣服："衣服被肌肉撑得紧绷"、"袖口勒出肱二头肌轮廓"、"胸前纽扣绷紧欲裂"
+     • 正常体型："合身剪裁，肩线刚好落在肩峰"
+   **禁止只写衣服本身而不写它与身体的关系**——这是T2I无法自动推断的最强视觉信号
 
 5. 武器与装备（如有）：
    - 近战武器：刃长、刃型、护手样式、握柄缠绕材质、表面处理（烤蓝/抛光/雕刻），携带方式
@@ -609,8 +673,21 @@ const CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS = `═══ 描述要求 ═══
 
 7. 角色色彩调色板：列出3-5个定义此角色视觉身份的主色（如"深红、磨旧金、炭黑"）。
 
+8. 光影策略（光线雕塑体型——强制末尾一句）：
+description结尾必须写光位、质感、以及光线如何强调/柔化体型特征：
+• 瘦弱/病态/老年角色：侧逆光或侧光 → "左侧逆光，色温偏冷，光线锐利投射出锁骨凹陷深阴影与颧骨下缘暗面，皮肤皱纹被强化"
+• 健壮角色：正面柔光或低角度光 → "正面柔光箱，光线均匀包裹三角肌与胸肌轮廓，阴影柔和"
+• 威严/反派角色：顶光或底光 → "正上方顶光，眉骨投下深阴影遮挡眼窝，下颌线被锐利光线勾勒"
+• 禁止模糊词："光影柔和"、"光线自然" ← 必须具体到光位和效果
+
 【示例】
-赛博朋克风格，35mm广角镜头低角度——男，约30岁，190cm精瘦高挑身形，站立姿态，双脚与肩同宽微微前后错开，重心偏右腿，脊背微弓前倾，左手插在夹克口袋，右手自然垂在身侧。棱角分明的长脸，颧骨高耸投下锐利阴影，下颌线锋利笔直，眉骨突出。狭长上挑的丹凤眼，左眼瞳色自然灰绿、右眼为机械义眼散发幽蓝冷光，睫毛稀疏。高挺鹰钩鼻，鼻尖略下弯，鼻翼窄。薄唇苍白，唇角自然下垂。肤色病态苍白偏冷青调，质感哑光粗粝，左颊从眼角到嘴角一道细长的银色机械缝合疤痕，沿疤痕嵌有微型蓝色LED指示灯。阴郁危险的暗夜猎手气质。头发铂银白色带荧光紫挑染，右侧剃至3mm露出头皮上的电路纹身，左侧长发遮住半边脸垂至下巴，发梢参差不齐。上身破旧的哑光黑色合成皮夹克，立领，左肩焊接一块钛合金护甲片，内搭深灰色高科技速干背心，胸口印有褪色的红色骷髅标志。下身黑色工装机能裤，膝盖处缝有凯夫拉补丁，裤腿束入小腿处。脚穿磨损严重的黑色高帮军靴，鞋底加厚，鞋舌外翻。左前臂从手肘到手腕整段替换为钛合金机械义肢，关节处露出液压管线和微型齿轮，指尖是碳纤维材质。右手无名指戴一枚氧化发黑的钨钢戒指。腰后别一把折叠式等离子短刀，刀柄缠绕磨旧的红色伞绳。角色色彩调色板：哑光黑、铂银白、荧光紫、幽蓝冷光、锈红。`;
+赛博朋克风格，35mm广角镜头低角度——男，约30岁，190cm精瘦高挑身形，站立姿态，双脚与肩同宽微微前后错开，重心偏右腿，脊背微弓前倾，左手插在夹克口袋，右手自然垂在身侧。棱角分明的长脸，颧骨高耸投下锐利阴影，下颌线锋利笔直，眉骨突出。狭长上挑的丹凤眼，左眼瞳色自然灰绿、右眼为机械义眼散发幽蓝冷光，睫毛稀疏。高挺鹰钩鼻，鼻尖略下弯，鼻翼窄。薄唇苍白，唇角自然下垂。肤色病态苍白偏冷青调，质感哑光粗粝，左颊从眼角到嘴角一道细长的银色机械缝合疤痕，沿疤痕嵌有微型蓝色LED指示灯。阴郁危险的暗夜猎手气质。头发铂银白色带荧光紫挑染，右侧剃至3mm露出头皮上的电路纹身，左侧长发遮住半边脸垂至下巴，发梢参差不齐。上身破旧的哑光黑色合成皮夹克，立领，左肩焊接一块钛合金护甲片，内搭深灰色高科技速干背心，胸口印有褪色的红色骷髅标志。下身黑色工装机能裤，膝盖处缝有凯夫拉补丁，裤腿束入小腿处。脚穿磨损严重的黑色高帮军靴，鞋底加厚，鞋舌外翻。左前臂从手肘到手腕整段替换为钛合金机械义肢，关节处露出液压管线和微型齿轮，指尖是碳纤维材质。右手无名指戴一枚氧化发黑的钨钢戒指。腰后别一把折叠式等离子短刀，刀柄缠绕磨旧的红色伞绳。角色色彩调色板：哑光黑、铂银白、荧光紫、幽蓝冷光、锈红。
+
+【补充示例——极端瘦弱（重要：用于对照，不要当成内容照抄）】
+写实电影摄影，85mm镜头——女，中年，约155cm，身形极度瘦削单薄，站立姿态，双脚并拢，双臂自然垂于身侧。因消瘦而颧骨突出、太阳穴凹陷的圆脸骨架，皮肤深黄粗糙，质感如风干果实，嘴唇干裂起皮。眼神温顺略带疲惫。黑色长发用粗麻绳在脑后松垮地扎成低马尾。身穿宽大不合身的土褐色粗布长衣，因身体太瘦，布料在肩部空荡下垂，衣摆堆积大量皱褶，打满灰白色粗线补丁。双手骨节分明，手指细长如枯枝。色彩调色板：土褐、深黄、灰白。左侧逆光，色温偏冷，锐利光线强化颧骨凹陷阴影与锁骨窝深暗面，质感粗糙，颗粒感明显。
+
+【补充示例——极端肥胖】
+写实电影摄影，50mm镜头——男，老年，约160cm，身形肥硕臃肿，站立姿态，双脚分开与肩同宽，双臂因腰侧赘肉而微微外展。因脂肪填充而圆润饱满的方脸，双下巴垂至领口，法令纹被脂肪撑平，皮肤油亮暗黄。稀疏灰白短发。身穿过于紧绷的深灰色棉布马褂，胸前三颗纽扣绷紧欲裂，布料在肚腩处被撑出横向张力纹，腋下因紧绷而露出内衬。手指粗短，手背有肉窝。色彩调色板：暗黄、深灰、灰白。正面柔光，光线平铺削弱阴影，凸显体积感而非骨骼感。`;
 
 const CHAR_EXTRACT_WRITING_RULES = `═══ 书写规则 ═══
 - 单段连续描写——description字段内不要使用项目符号或换行
@@ -630,12 +707,49 @@ const CHAR_EXTRACT_WRITING_RULES = `═══ 书写规则 ═══
 - **双臂与手部**：自然垂于身侧 / 一手持武器一手自然下垂——禁止"双手紧握胸前""双手抱膝""双手撑地"等戏剧化动作
 - **表情**：平静中性或微表情——禁止"惊恐仰望""大笑""痛哭"等强情绪表情
 - **禁止抽象气质词**：不要只写"怯生生"、"高冷"、"优雅"——但要在中性站姿的前提下，用姿态的细节传递气质（例如"双肩微微前缩、头微低"传递怯懦；"挺直背脊、双手负后"传递高傲）
+- **禁止抽象体型词**：不要只写"纤细"、"圆润"、"健壮"作为体型描述——这些是审美判断，不是视觉指令。T2I无法稳定渲染"纤细"，必须用具体的骨骼/脂肪标志物替代：
+  反例：❌ "身形纤细" → ✅ "身形极度瘦削，手臂细长如枯枝，手腕极细如线，锁骨处皮肤深陷形成阴影"
+  反例：❌ "身材圆润" → ✅ "腰腹赘肉三层，双下巴垂至领口，手指粗短有肉窝"
+  反例：❌ "身形健壮" → ✅ "三角肌与胸肌明显隆起，前臂青筋毕露，肩宽近55cm"
 
 【标志性姿势/动作——写到 performanceStyle 字段】
 角色在戏中的标志性动作（例如"蹲着攥住铁箍仰望"、"环抱双臂冷笑"、"拔剑出鞘"）**不要写到 description 里**，而是写到 performanceStyle 字段，例如：
 - performanceStyle: "常见动作是蹲下身子缩成一团，双手紧紧攥住随身的铁箍放在胸前仰望说话者；动作幅度小、频繁低头、说话声音细若蚊蝇"
 
 这样下游分镜生成时 LLM 能自动把这些标志性动作用到具体镜头的 motionScript 里，而角色设定图本身保持中性站立，可复用、可一致。
+
+═══ t2iStructure 结构化字段书写规则（T2I专用，值用中文，7个字段缺一不可）═══
+
+t2iStructure 是直接传给 Qwen Image 2512 生成角色设定图的prompt。标签名沿用英文（[age]/[subject]等是Qwen训练集中的高频结构），
+但字段值必须使用中文——避免英文体型词映射到西方人脸特征。
+
+【age】年龄锚定（Per-EP变体核心——同一角色不同EP年龄不同）:
+  - 少年/青年: 显式年龄范围 + 发育特征（如 "17岁，正在发育，体型偏瘦"）
+  - 中年: 年龄范围 + 初老信号（如 "45岁，鬓角初白，法令纹加深"）
+  - 老年: 年龄范围 + 衰老信号（如 "71岁，体弱衰老，满脸深皱纹，佝偻，白发稀疏"）
+  - 不变角色: 写表观年龄 + "外观不变"（如 "外表30岁，外观不变"）
+
+【subject】主体：性别、身高（cm）、体型关键词。格式: "性别，身高cm，体型描述词"
+  例: "男，162cm，精瘦，微佝偻，步履缓慢"
+
+【body】体态细节：用阴影、比例和轮廓传达体型。禁止字面骨骼/器官描述（Qwen 2512 按字面渲染为白骨/透明体）
+  可用的安全词: 凹陷、阴影、极细如线、窄瘦、单薄、空荡
+  禁止的危险词: 凸起、可见、突出、穿透、一根根、骨架轮廓
+  例: "窄肩，颈部皮肤松弛形成深陷纹路，驼背，手腕极细如线"
+
+【face】面部：脸型骨架+五官+皮肤质感+表情。区分骨架和软组织，如 "圆脸骨架但因消瘦而颧骨突出，太阳穴凹陷"
+  例: "额头深刻横纹，眼角鱼尾纹，脸颊凹陷，老年斑，眉毛稀疏花白"
+
+【hair】发型：颜色、长度、质地、样式
+  例: "白发稀疏，发际线后退，胡须稀薄花白"
+
+【clothing】服装：款式+合身度+材质+颜色。关键：衣服与身体的关系（松垮/紧绷/合身）
+  例: "褪色明黄龙袍，金线绣纹，因年老体瘦而略显宽大，玉带，布料在肩部空荡下垂"
+
+【lighting】光影：光位+质感+对体型的效果
+  例: "正面暖光，阴影柔和，突出皮肤纹理和岁月痕迹"
+
+每个字段1-2句中文，禁止散文长段落。不要包含色彩调色板（已在 description 中）。
 
 【姿态分层语法示例——仅演示结构，不要当成内容照抄；真实角色请严格按剧本内容改写】
 
@@ -769,6 +883,47 @@ const importCharacterExtractDef: PromptDefinition = {
   },
 };
 
+// ─── 5.5. project_assess ───────────────────────────────
+
+const projectAssessDef: PromptDefinition = {
+  key: "project_assess",
+  nameKey: "promptTemplates.prompts.projectAssess",
+  descriptionKey: "promptTemplates.prompts.projectAssessDesc",
+  category: "import",
+  slots: [
+    slot("role_definition", PROJECT_ASSESS_SYSTEM, true),
+    slot("dimensions", getAssessDimensions(), true),
+    slot("output_format", PROJECT_ASSESS_OUTPUT, false),
+    slot("language_rules", PROJECT_ASSESS_LANGUAGE, false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition"), "", r("dimensions"), "", r("output_format"), "", r("language_rules")].join("\n");
+  },
+};
+
+// ─── 5.6. character_arc ────────────────────────────────
+
+const characterArcDef: PromptDefinition = {
+  key: "character_arc",
+  nameKey: "promptTemplates.prompts.characterArc",
+  descriptionKey: "promptTemplates.prompts.characterArcDesc",
+  category: "import",
+  slots: [
+    slot("role_definition", CHARACTER_ARC_SYSTEM, true),
+    slot("detection_rules", CHARACTER_ARC_DETECTION, true),
+    slot("phase_rules", CHARACTER_ARC_PHASE_RULES, true),
+    slot("output_format", CHARACTER_ARC_OUTPUT, false),
+    slot("language_rules", CHARACTER_ARC_LANGUAGE, false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition"), "", r("detection_rules"), "", r("phase_rules"), "", r("output_format"), "", r("language_rules")].join("\n");
+  },
+};
+
 // ─── 6. character_image ─────────────────────────────────
 
 const CHAR_IMAGE_STYLE_MATCHING = `=== 关键：画风匹配（最高优先级）===
@@ -779,7 +934,7 @@ const CHAR_IMAGE_STYLE_MATCHING = `=== 关键：画风匹配（最高优先级�
 - 如果描述暗示其他风格 → 忠实遵循该风格
 - 如果完全未提及风格 → 根据角色的背景和类型推断最合适的风格
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 **写作语言**：使用自然中文散文描述每个部分，不要权重语法 "（xx：1.99）"，不要结构化标签 "Scene:" "Style:"——Seedance/即梦 系图像模型对自然语言理解最强。`;
 
@@ -787,9 +942,21 @@ const CHAR_IMAGE_FACE_DETAIL = `=== 面部——高精度 ===
 以适合所选画风的高精度渲染面部：
 - 清晰一致的面部特征：骨骼结构、眼型、鼻型、嘴型——全部匹配描述中的外貌
 - 眼睛：富有表现力、细节丰富、有高光反射和深度感——根据画风调整（动漫用动漫风格眼睛，写实用精细虹膜细节）
-- 头发：清晰的发量、颜色和动态感，使用适合画风的渲染方式（写实用单根发丝，动漫用大块发束配高光条）
+- 头部/发型：严格遵从角色描述中关于头发或光头的具体状态。若描述写"光头"则不得画头发，若写了颜色/发型/长度则精准匹配，使用适合画风的渲染方式（写实用单根发丝，动漫用大块发束配高光条）
 - 皮肤：符合画风的渲染——动漫用平滑赛璐珞着色，写实用毛孔级细节
 - 整体：面部应具有辨识度和记忆点，有强烈的视觉特征`;
+
+const CHAR_IMAGE_FRONT_VIEW_LAYOUT = `=== 正面视图布局（角色设定集第一步——正面参考图）===
+必须生成全身站立正面视图：
+- 从头顶到脚底完整展示，包含鞋/靴底部细节
+- 双臂自然放松垂于身侧，双脚与肩同宽自然站立
+- 纯白背景无纹理
+- 这是四视图流程的基础参考——后续侧面/背面将基于此图通过图像编辑生成，因此必须包含完整的全身服装与姿态
+
+技术约束：
+- 画面比例必须为竖幅全身（建议 9:16 或更窄），确保从发顶到鞋底的完整展示
+- 脚底与画面底部之间至少保留 5% 的白色边距，防止裁剪
+- 禁止半身图、腰部截图、膝盖截图——必须是头顶到脚底的完整站立全身`;
 
 const CHAR_IMAGE_FOUR_VIEW_LAYOUT = `=== 四视图布局（必须严格遵守——这是角色设定集的核心输出形式）===
 **强制输出四视图**：最终画面必须包含四个独立视角，从左到右水平排列在一张纯白画布上。**不要输出单视角肖像、不要只画两三个视角、不要把角色放在场景里**——这是一张专业的角色设定参考图（character turnaround sheet / 三视图 / 四视图）。
@@ -835,6 +1002,7 @@ const characterImageDef: PromptDefinition = {
   slots: [
     slot("style_matching", CHAR_IMAGE_STYLE_MATCHING, true),
     slot("face_detail", CHAR_IMAGE_FACE_DETAIL, true),
+    slot("front_view_layout", CHAR_IMAGE_FRONT_VIEW_LAYOUT, true),
     slot("four_view_layout", CHAR_IMAGE_FOUR_VIEW_LAYOUT, true),
     slot("lighting_rendering", CHAR_IMAGE_LIGHTING_RENDERING, true),
     slot("consistency_rules", CHAR_IMAGE_CONSISTENCY_RULES, true),
@@ -932,16 +1100,33 @@ const SHOT_SPLIT_FIDELITY_RULES = `=== 剧本保真度（最高优先级——�
 ❌ 错误的精炼："林晓月推门出去，雨中露出苦笑。"（丢了：吱呀门声、摸信的动作、自嘲的情绪转折、远处的吆喝声、信本身这个象征物）
 ✅ 正确的展开：拆成 1-2 个镜头，motionScript 里明确"推开吱呀作响的木门→雨帘中愣住→右手探入风衣口袋摸到那封未寄出的信→指尖停顿片刻→嘴角牵起一丝自嘲的弧度"，sceneDescription 里写"深夜雨巷，远处飘来馄饨摊老人沙哑的吆喝声"，信作为关键道具出现在 startFrame 或 endFrame 的构图里。
 
-【对白覆盖原则——每个镜头都要有声音】
-- **每个镜头都必须有 dialogues**。视频没有台词就像哑巴戏，观众会走神。
-- 如果剧本中该段有明确台词，直接使用。
-- 如果剧本中没有明确台词，你必须根据剧情和角色性格**补充合理的台词**，包括但不限于：
-  * 角色的即兴反应语（"什么？！"、"不可能..."、"终于来了"）
-  * 内心独白（设置 offscreen: true，如旁白）
-  * 角色之间的简短对话（"你看到了吗？"、"小心！"）
-  * 环境相关的自言自语（"这里好冷"、"有人来了"）
-- 唯一例外：纯空镜建立镜头（无角色出现），此时应补充旁白或画外音。
-- 每条台词保持简短有力，1-2 句即可，不要写长篇大论。
+【声音叙事规则——对白/旁白/独白按镜头功能分流】
+
+一、声音类型（选择正确的字段输出，不要混用）:
+  • 角色对白 → dialogues[]（角色间的对话）
+  • 第三人称旁白 → narrations[]（解说背景/推进剧情/揭示内心冲突）
+  • 角色内心独白 → innerMonologues[]（第一人称，口语化，贴合角色性格）
+
+二、按镜头功能分级:
+
+  ▶ 必须有声音的镜头（默认规则）:
+    - 有角色出场的镜头 → 对白/旁白/独白 任选
+    - 推动剧情转折的镜头 → 旁白推进叙事
+    - 情感高潮/内心挣扎 → 内心独白揭示心理
+
+  ▶ 可选静默的镜头（LLM 自主判断——画面已说了一切就不加声音）:
+    - 纯环境建立镜头（无角色，只展示空间/氛围）
+      → 环境音 + 画面 = 有效叙事。不用旁白再解释一遍"这是一个破庙"。
+    - 动作高潮镜头（快速打斗/追逐/爆炸）
+      → 动作节奏优先。声音让位于画面冲击力。
+    - 过渡镜头（时间跳跃/场景切换）
+      → 1-2 秒静默 + 转场音效 = 有效叙事。
+
+  ▶ 写作原则:
+    - 旁白: 第三人称叙事，1-3 句，解说背景/推进剧情/揭示内心冲突
+    - 内心独白: 第一人称，口语化，1-2 句，贴合角色性格和情绪
+    - 对白: 简短有力，1-2 句
+    - 铁律: 画面已传达的信息，不要用声音重复解释
 
 【镜头数量原则】
 - 宁多勿少。如果一段剧本信息密度大，拆成 3-5 个镜头是正常的。
@@ -979,7 +1164,13 @@ const SHOT_SPLIT_OUTPUT_FORMAT_TEMPLATE = `输出 JSON 数组（只输出共享�
       { "character": "精确角色名", "text": "台词原文（逐字保留，含语气词和标点）" }
     ],
     "cameraDirection": "static / dolly in / pan left / push in / orbit left / ... 英文关键词",
-    "characters": ["镜头中出现的角色名（与角色列表精确一致）"]
+    "characters": ["镜头中出现的角色名（与角色列表精确一致）"],
+    "narrations": [
+      { "text": "第三人称旁白文本", "type": "narration", "timeHint": "0-3s" }
+    ],
+    "innerMonologues": [
+      { "text": "角色内心独白文本", "type": "inner_monologue", "character": "精确角色名", "timeHint": "6-9s" }
+    ]
   }
 ]`;
 
@@ -1224,44 +1415,149 @@ const SHOT_KEYFRAME_ASSETS_ROLE = `你是一位资深的电影摄影师和分镜
 
 const SHOT_KEYFRAME_ASSETS_RULES = `${physicsRealismBlock()}
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 【角色一致性锚定】
-- 每次提到角色，必须用 "角色名（视觉标识）" 格式，视觉标识从下方提供的角色列表中**逐字复用**，禁止改写
-- 多角色同框时，每个角色都带自己的视觉标识括号
+- 只写 baseName（如 "朱元璋"、"刘德"），禁止带 visualHint 括号——EP 内 baseName 唯一
+- 外观（服装/体型/发型/肤色/武器）全由参考图（character_ref）提供——prompt 中禁止重复描述
+- prompt 只描述 shot 级瞬态：姿态/表情/动作/视线/手部位置
+- 多角色同框时，每个角色换行写，都只用 baseName
 
-【提示词写作格式——Seedance / 即梦风格】
-使用自然中文散文。禁止权重语法 "（xx：1.99）"，禁止结构化标签。
-每个 startFrame / endFrame 是 2-4 句流畅散文，按以下顺序组织：
-1. 主体身份与姿态：角色名（视觉标识）+ 明确的身体姿态（站/坐/跪/蹲/趴）+ 双脚位置 + 身体朝向
-2. 动作与表情：具体肢体动作、手部位置、视线方向、面部表情
-3. 构图与镜头：景别（全景/中景/近景/特写）+ 角度（平视/仰拍/俯拍）+ 焦段
-4. 环境光影：光源方向与质感、色温、色彩基调、关键环境细节、氛围
+【提示词写作格式——Qwen Image 结构化格式】
 
-【首帧与尾帧的关系】
-- **共享环境**：背景、光线、色温、地点完全一致——只有角色姿态/位置/表情变化
-- **首帧**：motionScript 第一段开始前的瞬间——角色处于起始位置，开场表情
-- **尾帧**：motionScript 最后一段结束后的瞬间——角色完成动作，停在稳定姿态（不能是模糊运动中态）
-- 尾帧是一张静态照片（still photograph），不是动画的中间帧。从 motionScript 中推断动作完成后的最终状态，然后以一张静态照片的语言来描述：角色已完成动作、位置已固定、表情已收束。禁止"正在"/"向前行走"/"踏出一步"/"缓缓"等过程性动作描述。禁止镜头运动。尾帧只输出动作完成后那一刻的凝固画面。
-- **不要包含对白文字**`;
+首尾帧 prompt 直接传给 Qwen Image 2512（MMDiT 架构，前置标签权重最高）。
+每个 startFrame / endFrame 使用以下标签，按固定顺序排列，每标签 1-2 句中文：
 
-const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一个对象。**prompts 数组必须恰好有 2 个元素：第 0 个是首帧、第 1 个是尾帧**。**characters 数组必须只包含此镜头画面中实际出现的角色**（不是项目里所有角色），名字必须与角色列表中完全一致：
+[shot] 景别 + 角度 + 焦段
+  如: "全景，平视，35mm 广角"
+
+[subject] 或 [scene] —— 根据镜头中是否有角色，选择其一:
+  ▶ 有角色（characters 数组非空）→ 使用 [subject]:
+    只写 baseName + 每 shot 变化的瞬态信息:
+      baseName + 身体姿态 + 双脚位置 + 身体朝向 + 面部表情 + 视线方向 + 手部位置 +
+      （可选）临时道具 + 衣物临时状态（如袖口撕裂、衣摆被风吹起）
+    多角色时每个角色换行写，只用 baseName，不要 visualHint
+    ⚠️ 禁止写体型/服装/发型/肤色——参考图已锚定，文字重复导致 T2I 信号冲突
+  ▶ 无角色（characters 数组为空，纯环境镜头）→ 使用 [scene]:
+    场景主体描述 + 关键视觉元素
+
+【多角色场景精简规则——含 2+ 角色时强制生效】
+  ● [subject] 每个角色只写：baseName + 身体姿态 + 面部表情 + 视线方向
+    （不写双脚位置/手部位置/手持物/衣物临时状态——参考图已提供）
+  ● [camera] 不指定前景物体（不写堆叠木柴、摊位、货摊等）
+  ● [environment] 缩减到 1 句：地点 + 1 个氛围词
+  ● [color] 缩减到 1-2 个主导色
+  ● 每帧 firstFrameCharacters / lastFrameCharacters 数组长度 ≤3（参考图 slot 限制），
+    超过 3 个角色时选最重要的 3 个，其余在 [subject] 文字描述
+
+[camera] 构图说明 + 前景/中景/背景层次 + 景深
+  如: "低地平线构图，人物居中偏下，天空占画面 2/3，深景深"
+
+[environment] 场景地点 + 背景元素 + 氛围细节
+  ▶ 纯场景镜头（用了 [scene] 标签）→ 省略此标签，避免与 [scene] 重复
+
+[lighting] 光源方向 + 光质（硬/柔/漫射）+ 色温 + 对场景氛围的影响
+  如: "正午顶光直射，硬光质，暖黄色温，高对比度"
+  注意: 不要描述光对面容/身体的效果——那是 [subject] 域
+
+[color] 2-3 个主导色 + 整体氛围色调
+  如: "焦黄、土褐、枯草色，干燥荒芜氛围"
+
+【首帧与尾帧的关系——强制约束】
+● [environment] 必须完全一致——同一 shot 在同一地点完成
+● [lighting] / [color] 按以下判定:
+
+  保持不变（首帧=尾帧）:
+    单一场景 + 时间无流逝 + 角色未穿越不同光照区
+    例: 正午荒野全程、室内固定灯光下
+
+  必须变化（首帧≠尾帧）:
+    a. 时间流逝: 黄昏→夜间、清晨→正午、下午→傍晚
+    b. 空间穿越: 室内→室外、走廊→大厅、树荫下→阳光下
+    c. 天气变化: 晴→阴、风雨来临
+    d. 光源事件: 烛火熄灭、闪电闪逝、灯亮/灯灭
+
+  判断流程:
+    ① 先读 motionScript —— 有明确光变词 → 必须变
+    ② 再读 sceneDescription —— 有隐含光变场景（如室内→室外）→ 应该变
+    ③ 两者都没有 → 保持一致
+● [shot] / [subject] / [camera] 可以不同（首帧初始→尾帧结束）
+
+● 尾帧静态约束（铁律）:
+  尾帧是一张静态照片，不是动画中间帧。
+  禁止过程性动词: 正在、缓缓、逐渐、慢慢、还在、继续、微微起伏、略微变化、
+  刚要、即将、正准备 —— 全部替换为完成态描述。
+  禁止镜头运动描述（镜头运动是视频阶段的事，不是静态帧）。
+  示例: ❌ "身体处于轻微起伏的呼吸状态"
+         ✅ "身体静止，呼吸平稳，额头汗珠已蒸发留下浅印"
+
+● 首帧独立约束:
+  首帧必须可独立成立——即使不看尾帧也能理解画面。
+  禁止 "正要"、"准备"、"即将开始" 等尚未发生的动作。
+
+● 禁止对白文字——对白属于 videoScript，不属于静态帧描述
+
+═══════════════════════════════
+完整示例 (有角色)
+═══════════════════════════════
+
+首帧:
+[shot] 全景，平视，35mm 广角
+[subject] 朱元璋 正面站立，双脚与肩同宽，右手牵牛绳，目光平视前方，面无表情
+[camera] 低地平线构图，人物居中偏下，天空占画面 2/3，深景深
+[environment] 焦黄色凤阳荒野，干裂土层延伸至地平线，几棵枯树立在远处，热浪蒸腾
+[lighting] 正午顶光直射，硬光质，高对比度，暖黄色温，人物脚下阴影短而深
+[color] 焦黄、土褐、枯草色，干燥荒芜氛围
+
+尾帧:
+[shot] 特写，俯拍，85mm 长焦
+[subject] 朱元璋 蹲姿静止，低头凝视地面蚂蚁，双臂垂于膝前，手指轻触干土，眼神卑微空洞
+[camera] 面部居中偏上，蚂蚁在右下角，浅景深虚化背景
+[environment] 焦黄色凤阳荒野，干裂土层延伸至地平线，几棵枯树立在远处，热浪蒸腾
+[lighting] 正午顶光直射，硬光质，高对比度，暖黄色温，人物脚下阴影短而深
+[color] 焦黄、土褐、枯草色，干燥荒芜氛围
+
+═══════════════════════════════
+完整示例 (无角色，纯场景)
+═══════════════════════════════
+
+首帧:
+[shot] 全景，俯拍，35mm 广角
+[scene] 焦黄色凤阳荒野，干裂土层延伸至地平线，枯树如干瘪手指插在土中，树影极短
+[camera] 高角度俯拍，地平线在画面上 1/3，深景深
+[lighting] 正午烈日顶光，刺眼白光，地面热浪变形感，高对比度
+[color] 焦褐、灰白，荒芜压迫感
+
+尾帧:
+[shot] 中景，平视，50mm 标准
+[scene] 画面聚焦一棵枯树根部，树根旁地面有细小裂纹，裂纹边几只蚂蚁在爬行
+[camera] 低角度，树根在画面左侧 1/3，右侧留白，浅景深
+[lighting] 正午烈日顶光，刺眼白光，地面热浪变形感，高对比度
+[color] 焦褐、灰白，荒芜压迫感`;
+
+const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一个对象。**prompts 数组必须恰好有 2 个元素：第 0 个是首帧、第 1 个是尾帧**。
+
+**首尾帧角色分离**：firstFrameCharacters 和 lastFrameCharacters 必须**分别列出各自帧画面中实际出现的角色**。不同帧可能只有部分角色同时出现，必须分开列出。
 [
   {
     "shotSequence": 1,
-    "characters": ["此镜头中实际出现的角色名1", "角色名2"],
+    "firstFrameCharacters": ["首帧出现的角色1", "角色2"],
+    "lastFrameCharacters": ["尾帧出现的角色1"],
     "prompts": [
-      "首帧的完整图像生成提示词（中文散文）",
-      "尾帧的完整图像生成提示词（中文散文）"
+      "首帧的结构化标签文本",
+      "尾帧的结构化标签文本"
     ]
   }
 ]
 仅输出有效 JSON，不要 markdown 代码块，不要前言。
 
-**characters 字段判定规则**：
-- 仅列出在该镜头的 motionScript / videoScript / sceneDescription 中**视觉上出现**的角色
-- 仅旁白/画外音对白的角色，如果画面中没出现，不要列入
-- 空数组 [] 是合法的（纯环境镜头/空镜头）`;
+**firstFrameCharacters / lastFrameCharacters 判定规则**：
+- 分别列出各自帧画面中视觉上出现的角色（纯 MDN name，不带 visualHint 括号）
+- 若某角色仅在一帧出现（如首帧多人同屏、尾帧单角色特写），只放在对应帧的数组中
+- 仅旁白/画外音的角色不要列入
+- **每帧最多 3 个角色**（ComfyUI 参考图 slot 限制）。超过 3 个时选最重要的 3 个
+- **数组顺序必须等于 [subject] 标签中角色的描述顺序**（Picture N 按数组 index 分配，顺序错会导致参考图对调）
+- 空数组 [] 是合法的（纯环境镜头）；`
 
 const shotKeyframeAssetsDef: PromptDefinition = {
   key: "shot_split_keyframe_assets",
@@ -1290,7 +1586,7 @@ const FIRST_FRAME_STYLE_MATCHING = `=== 关键：画风匹配（最高优先级�
 - 如果附有参考图，参考图的视觉风格就是真理——精确匹配
 - 输出的画风必须与角色设定图一致
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 ${artStyleBlock()}
 
@@ -1418,7 +1714,7 @@ const SCENE_FRAME_REFERENCE_RULES = `=== 无人物强制约束（最高优先级
 - 允许：空的环境、建筑、道具、自然景观、天气、光线、大气粒子
 - 角色一致性由后续视频生成阶段的多图参考机制保证，与本步骤完全解耦
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 ${physicsRealismBlock()}`;
 
@@ -1488,7 +1784,7 @@ const sceneFrameGenerateDef: PromptDefinition = {
 
 const VIDEO_INTERPOLATION_HEADER = `用自然中文散文描述从首帧到尾帧之间发生的动态过程。不要使用结构化标签（"Scene:"、"Action:"），不要权重语法（"（xx：1.5）"）。把镜头当一段电影画面来写，语言要让模型"看见"。
 
-写作要点（Seedance 2.0 风格）：
+写作要点（MiniMax H3风格）：
 - 主体动作：具体的肢体运动——握紧、倾身、回头、抬手、脚步变缓、呼吸停顿；写速度与力度。
 - 环境反应：世界对主体的回应——衣摆翻飞、落叶扬起、光斑掠过墙面、水面扩散的涟漪。
 - 镜头运动：使用具体词——"镜头缓慢推近"/"低角度广角缓缓上摇"/"环绕摇镜快切"/"固定机位"/"希区柯克变焦"；不要"优雅地""柔和地"这种空词。
@@ -1588,10 +1884,7 @@ const refVideoGenerateDef: PromptDefinition = {
 };
 
 // ─── 12. ref_video_prompt ───────────────────────────────
-// Seedance 2.0 reference-mode video prompt writer. Receives an ordered
-// list of reference images (character refs + scene refs). Outputs a prompt
-// that uses Seedance `@图片N` reference syntax with character names in
-// parentheses on every reference.
+// MiniMax H3 reference-mode video prompt writer.
 
 const REF_VIDEO_PROMPT_ROLE_DEFINITION = `你是一位视频提示词撰写专家，兼容 H3 / Seedance 等视频生成模型。你会收到一组**有序**的参考图并据此撰写提示词：
   - 前 N 张是角色参考图（每张绑定一个角色名）
@@ -1604,7 +1897,7 @@ const REF_VIDEO_PROMPT_ROLE_DEFINITION = `你是一位视频提示词撰写专�
   Handheld = 手持跟拍 | Crane = 升降 | Slither = 滑轨横移
   Static = 固定机位 | Dolly Zoom = 希区柯克变焦`;
 
-const REF_VIDEO_PROMPT_MOTION_RULES = `## 核心语法（Seedance @ 引用——官方即梦格式）
+const REF_VIDEO_PROMPT_MOTION_RULES = `## 核心语法（MiniMax H3 @ 引用格式）
 
 1. **所有角色和场景必须用 \`@图片N\` 形式引用**。顺序严格对应收到的参考图顺序——前 N 张是角色，后 M 张是场景。
 
@@ -1631,7 +1924,17 @@ const REF_VIDEO_PROMPT_MOTION_RULES = `## 核心语法（Seedance @ 引用——
 | 4-5s | 2 个 | 40-70 字 | |
 | 6-8s | 3 个 | 60-100 字 |
 | 9-12s | 4-5 个 | 100-160 字 |
-| 13-15s | 5-6 个 | 150-220 字 |
+| 13-15s | 5-6 个 | 150-220 字 | 完整小叙事弧，含情绪起伏 |
+
+**示例对比**：
+
+❌ 慢节奏（8s 只有 1 个动作）：
+"固定特写，她修长的手指敲击金属桌面，发出清脆声响。"
+→ 问题：8 秒只看手指敲桌子，画面呆滞
+
+✅ 正确节奏（8s，3 个节拍）：
+"固定特写下，她涂着黑色指甲油的手指先缓慢抚过冰冷桌面划痕，随即食指与中指交替敲击金属面，震起微尘——第三下敲击后手指骤然停住，五指收拢握拳，指节泛白。"
+→ 抚摸 → 敲击 → 握拳，三个阶段填满 8 秒
 
 **时间线保留规则（新增）**：
 - 如果输入的「剧本动作」包含"0-3秒/4-6秒/7-9秒"等时间标记，**必须**在输出的散文中保留这些秒段信息
@@ -1792,6 +2095,379 @@ const videoH3PromptDef: PromptDefinition = {
   },
 };
 
+// ─── 14a. video_h3_fl2v_guide ──────────────────────────
+// FL2V Guide Layer — system prompt for FL2V mode.
+
+const FL2V_GUIDE_ROLE = `## 角色
+你是一位导演/编剧。
+
+你的剧组已经拍好了首尾帧定帧照（<Picture 1> = 开场，<Picture 2> = 收场）。
+接下来需要你写出两帧之间那段戏的导演阐述——运镜、表演、声音——
+交给 MiniMax H3 FL2VA 引擎去执行。引擎会忠实地实现两帧之间的过渡，
+控制的精度取决于你的描述有多具体。`;
+
+const FL2V_GUIDE_TASK = `## 任务
+你的工作就是描述"过渡"。两帧之间发生了什么，你就写什么。
+
+首尾帧已经定死了角色的外形、场景的全貌、光的方向和色调。
+不要在描述里重复这些——图片比你写得准。你要写的是图片里看不见的东西：
+
+- 摄影机是怎么推/拉/摇/移的，才能在几秒内从首帧走到尾帧？
+- 角色的身体发生了什么？从哪个姿态变成哪个姿态？力度多大？节奏多快？
+- 光有没有变化？是因为时辰推移还是进入室内/遮了云？有变化才写，没变化不说。
+- 这场戏需要什么声音？角色在说话就说台词，需要旁白就写旁白，
+  氛围镜头就让风声和脚步声填满，不用硬加语言。
+
+一句话：画面已有的事，你省略。画面没有的事，你创造。`;
+
+const FL2V_GUIDE_PROCESS = `## 流程
+
+首先，看两帧。
+  首帧里角色站在哪？什么姿态？什么情绪？尾帧又是什么？
+  这两帧之间的"差距"就是你这场戏的发挥空间。
+  差距越大，运镜和表演就越要讲究。差距小，可以让微表情和细节撑起来。
+
+然后，想这场戏的功能。
+  它在整个故事里是干什么的？开篇造气氛？推进冲突？收束情绪？
+  这个功能决定了节奏和力度——开篇要稳，冲突要烈，收束要缓。
+
+其次，分配 speaker ID。
+  不是所有角色都要说话。只给真正出声的人 (S1/S2/...)。
+  旁白如果只是氛围解说，用 Narrator (S0) 就可以了。
+
+接着，写运镜和表演。
+  按时间分段写，每段主次分明：运镜引导观众注意 → 角色表演推进叙事。
+  每个时间段的首句建议写运镜动作，然后展开角色的具体表演。
+
+最后，定声音。
+  有台词——润色进对应的表演段，不加旁白。
+  无台词但这场戏需要叙事解说——写旁白。
+  无台词且氛围/动作/转场——环境音就好。好的镜头靠画面说话。
+  适当的时候加入画外音或内心独白——好的导演知道什么时候需要声音。`;
+
+const FL2V_GUIDE_PRINCIPLES = `## 关键原则
+
+1. 视觉为先。
+   FL2V 的根能力是两帧之间的视觉插值。
+   运镜是你的主武器，角色表演是你的子弹。
+   画面能表达的情绪，不要用声音再解释一遍。
+
+2. 动作是语言。
+   "他握紧绳子，指节发白，喉结滚动" > "他很紧张"。
+   "她将信折了三折，指尖停在封蜡上" > "她下定决心"。
+   每一个情绪都要找到一个物理对应物。找不到？继续找。
+
+3. 声音叙事。
+   对白是角色在说话，旁白是故事在呼吸。每 3-5 秒至少一句（对白或旁白），零空白规则。
+   极偶尔的静默瞬间有冲击力（屏息、震惊），但绝大多数时候，
+   环境音 + 动作音效 + 人声交织——而不是无声。
+   对白扛叙事推进，旁白扛氛围和内心世界。
+
+4. 对话有骨头。
+   如果给了你台词，说明这场戏需要语言。
+   你可以润色——调整节奏，增强力度——但不能替换台词的魂。
+   "你来了"改成"你终究还是来了"是润色；改成"我等了你十年"是重写。
+
+5. 因果有逻辑。
+   "先迈出左脚→身体重心前倾→拳头砸在桌面" 的三步因果
+   比"他走到桌前砸了一拳"的一次性动作，引擎执行得更稳。
+   事是连着发生的，在描述里也是这样。`;
+
+const FL2V_GUIDE_OUTPUT = `## 输出
+仅输出 H3 格式内容。无前言、无 markdown、无注释。`;
+
+const fl2vGuideDef: PromptDefinition = {
+  key: "video_h3_fl2v_guide",
+  nameKey: "promptTemplates.prompts.videoH3Fl2vGuide",
+  descriptionKey: "promptTemplates.prompts.videoH3Fl2vGuideDesc",
+  category: "video",
+  slots: [
+    slot("role", FL2V_GUIDE_ROLE, true),
+    slot("task", FL2V_GUIDE_TASK, true),
+    slot("process", FL2V_GUIDE_PROCESS, true),
+    slot("principles", FL2V_GUIDE_PRINCIPLES, true),
+    slot("output", FL2V_GUIDE_OUTPUT, false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role"), "", r("task"), "", r("process"), "", r("principles"), "", r("output")].join("\n");
+  },
+};
+
+// ─── 14b. video_h3_fl2v_content ────────────────────────
+// FL2V Content Layer labels — static labels with {{PLACEHOLDERS}} injected at runtime.
+
+const FL2V_CONTENT_SCRIPT_LABEL = `## 镜头动作（从首帧到尾帧的时间线）
+{{VIDEO_SCRIPT}}`;
+
+const FL2V_CONTENT_CHAR_LABEL = `## 角色
+（这些角色已出现在首尾帧中。仅描述他们的动作和对话，不要描述外貌。）
+分配说话人 ID（按出场顺序：S1, S2, ...）：
+{{CHARACTER_LIST}}`;
+
+const FL2V_CONTENT_DIALOGUE_LABEL = `## 对话台本（必须在视频中呈现！）
+{{DIALOGUE_LIST}}`;
+
+const FL2V_CONTENT_FRAME_LABEL = `## 帧锚点（关键帧图片）
+以下是实际用作首/末帧锚点的图片。你只需了解角色的位置和构图——不要描述环境/光线/物件细节（图片已提供）。
+{{FRAME_ANCHORS}}`;
+
+const FL2V_CONTENT_EPISODE_LABEL = `## 故事与分集
+{{EPISODE_CONTEXT}}`;
+
+const FL2V_CONTENT_AUDIO_LABEL = `## 音频
+{{AUDIO_CONTEXT}}`;
+
+const FL2V_CONTENT_NARRATION_HINT = `## 声音策略
+根据这场戏的特性来选择：
+
+→ 有台词 — 直接润色嵌入，不额外加旁白。台词就够了，再多就是过度解释。
+→ 无台词但需要叙事推进（历史背景铺垫/角色内心冲突/关键信息传达）——用旁白或内心独白。
+→ 无台词且是氛围/动作/转场 — 靠环境音 + 镜头运动。静默是有效的叙事。
+
+如需旁白或内心独白，格式：
+  Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.
+  角色名 (S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed.
+  ⚠️ 内容严格基于当前镜头和剧集背景，禁止引入无关历史事件或身份。`;
+
+const fl2vContentDef: PromptDefinition = {
+  key: "video_h3_fl2v_content",
+  nameKey: "promptTemplates.prompts.videoH3Fl2vContent",
+  descriptionKey: "promptTemplates.prompts.videoH3Fl2vContentDesc",
+  category: "video",
+  slots: [
+    slot("script_label", FL2V_CONTENT_SCRIPT_LABEL, false),
+    slot("character_label", FL2V_CONTENT_CHAR_LABEL, true),
+    slot("dialogue_label", FL2V_CONTENT_DIALOGUE_LABEL, false),
+    slot("frame_label", FL2V_CONTENT_FRAME_LABEL, true),
+    slot("episode_label", FL2V_CONTENT_EPISODE_LABEL, false),
+    slot("audio_label", FL2V_CONTENT_AUDIO_LABEL, false),
+    slot("narration_hint", FL2V_CONTENT_NARRATION_HINT, true),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [
+      r("script_label"), "", r("character_label"), "",
+      r("dialogue_label"), "", r("frame_label"), "",
+      r("episode_label"), "", r("audio_label"), "",
+      r("narration_hint"),
+    ].join("\n");
+  },
+};
+
+// ─── 14c. video_h3_fl2v_constraints ─────────────────────
+// FL2V constraint rules — all hard rules for FL2V prompt output.
+
+const FL2V_CONSTRAINT_TIME_STRUCTURE = `【时间结构 — 强制执行】
+1. 必须按 {{SEGMENT_COUNT}} 个时间段拆分（不要创建 [Shot 2]）
+2. 每个时间段必须有独立的视觉变化和运镜动作`;
+
+const FL2V_CONSTRAINT_ACTION_BEATS = `【动作节拍 — 强制执行】
+3. 每 2-3 秒安排一个微动作节点——即使静态镜头也要加入：呼吸节奏、衣物飘动、光线变化、水面波动、镜头微调
+4. 用「先...随即...然后...最终...」串联微动作，禁止把全部动作写成同时发生`;
+
+const FL2V_CONSTRAINT_CAMERA = `【运镜 — 第一优先级】
+7. 每个时间段首句必须是运镜动作：
+   格式："镜头 [运动类型] [幅度] [速度]"
+   例："镜头极缓慢推近，小幅度。"
+   运镜写完后，才写角色动作。
+8. 运镜必须含幅度+速度修饰
+9. 主运镜方向：{{CAMERA_DIRECTION}}`;
+
+const FL2V_CONSTRAINT_DIALOGUE = `【对白 — 强制执行】
+5. 对白格式：(S1)说：<d>[中文] 原文台词</d>
+   画外音格式（H3 官方标准）：角色名 (S1) says in an off-screen voiceover: <d>[Chinese] text</d> while his lips remain completely closed.
+6. 对白必须嵌入对应时间段——先描述角色动作，再写对白行`;
+
+const FL2V_CONSTRAINT_FORMAT = `【格式】
+10. 角色已在帧中——仅描述动作和移动，禁止描述外貌
+11. 禁止 markdown、代码块、注释——纯 H3 格式输出
+12. 禁止逐字复制剧本——转换为丰富的影视级散文`;
+
+const FL2V_CONSTRAINT_NO_ENV = `【环境 — FL2V 专属规则】
+13. 首尾帧图片已提供全部环境/光线/物件。禁止在 prompt 中描述：
+    - 静态场景元素（建筑、家具、自然景物）
+    - 静态光线条件（光位/色温/质感）
+    - 静态物件细节（道具、装饰、纹理）
+14. 只描述环境变化：火焰忽明忽暗 ✅ / 云遮月导致光线暗下 ✅ /
+    破庙内篝火舞蹈映照土墙 ❌ / 暖橘光从左低角照亮 ❌`;
+
+const FL2V_CONSTRAINT_BODY_VOCAB = `【身体动作 — 白名单】
+15. 使用具体物理动词：转头、抬眼、垂眼、握紧、松开、抬手、放手、
+    迈步、后退、前倾、后仰、起身、坐下、跪地、站起、转体、眯眼、眨眼
+16. 禁止抽象词："陷入沉思"→"眼帘低垂，眉心微蹙"
+    禁止模糊词："神情变化"→"眉头从紧锁渐转为舒展"`;
+
+const FL2V_CONSTRAINT_VOICE = `【声音 — 主动补位】
+17. 每 3-5 秒至少一句声音（对白或旁白）。禁止纯默片片段。
+18. 旁白是叙事利器，心声让读者身临其境。零空白规则。`;
+
+const fl2vConstraintsDef: PromptDefinition = {
+  key: "video_h3_fl2v_constraints",
+  nameKey: "promptTemplates.prompts.videoH3Fl2vConstraints",
+  descriptionKey: "promptTemplates.prompts.videoH3Fl2vConstraintsDesc",
+  category: "video",
+  slots: [
+    slot("time_structure", FL2V_CONSTRAINT_TIME_STRUCTURE, true),
+    slot("action_beats", FL2V_CONSTRAINT_ACTION_BEATS, true),
+    slot("camera", FL2V_CONSTRAINT_CAMERA, true),
+    slot("dialogue", FL2V_CONSTRAINT_DIALOGUE, true),
+    slot("format", FL2V_CONSTRAINT_FORMAT, true),
+    slot("no_env", FL2V_CONSTRAINT_NO_ENV, true),
+    slot("body_vocab", FL2V_CONSTRAINT_BODY_VOCAB, true),
+    slot("voice", FL2V_CONSTRAINT_VOICE, true),
+  ],
+  buildFullPrompt(sc, params?) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    let text = [
+      "## 约束规则",
+      "",
+      r("time_structure"),
+      "",
+      r("action_beats"),
+      "",
+      r("dialogue"),
+      "",
+      r("camera"),
+      "",
+      r("format"),
+      "",
+      r("no_env"),
+      "",
+      r("body_vocab"),
+      "",
+      r("voice"),
+    ].join("\n");
+    text = text.replace(/\{\{SEGMENT_COUNT\}\}/g, String(params?.segmentCount ?? 3));
+    text = text.replace(/\{\{CAMERA_DIRECTION\}\}/g, String(params?.cameraDirection ?? "static"));
+    return text;
+  },
+};
+
+// ─── 14d. video_h3_fl2v_narration ──────────────────────
+// FL2V narration generator prompts — system + user message template.
+
+const FL2V_NARRATION_SYSTEM = `你是一位历史剧旁白编剧。给定一个镜头（Shot）的上下文，为它撰写一段叙事声音。
+
+输入：
+- 镜头视频脚本（videoScript）
+- 剧集背景（episode description）
+- 出场角色列表
+
+输出要求：
+- 生成 1-3 句声音内容
+- 类型：旁白（第三人称叙述者 S0）或内心独白（角色 offscreen voiceover S1/S2）
+- 旁白应解说背景、推进叙事、揭示内心冲突
+- 内心独白应自然、口语化，符合角色性格和当前情绪
+- ⚠️ 内容约束（最高优先级）：严格仅使用下方提供的剧集背景和镜头脚本。禁止使用你对角色的任何历史知识或预训练记忆。角色在**当前镜头**的身份由剧集背景和镜头脚本决定，不是由历史事实决定
+- 语言：中文
+
+输出格式（MiniMax H3 官方标准——必须严格遵守）:
+  旁白:    Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.
+  内心独白: 角色名 (S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed.
+  注意: <d> 标签内必须包含 [Chinese] 语言标识。每句后必须跟 while ... lips remain completely closed。
+
+仅输出声音行，不要前言/解释/markdown。`;
+
+const FL2V_NARRATION_USER_TEMPLATE = `## 镜头视频脚本
+{{VIDEO_SCRIPT}}
+
+## 剧集背景
+{{EPISODE_CONTEXT}}
+
+## 出场角色
+{{CHARACTER_LIST}}
+
+## 要求
+{{REQUIREMENTS}}`;
+
+const FL2V_NARRATION_REQUIREMENTS = `- 时长: {{DURATION}}s
+- 类型: 旁白（S0 第三人称叙述者）或 内心独白（角色 offscreen voiceover）
+- 旁白解说背景、推进叙事、揭示内心冲突
+- 内心独白自然口语化，符合角色性格
+- 生成 1-3 句
+- ⚠️ 仅使用上方提供的剧集背景和镜头脚本。禁止提与当前镜头无关的身份/事件/场景（如镜头是放牛就不得提皇帝/太子/登基/战争）
+- 格式（H3 官方标准）: Narrator (S0) says in an off-screen voiceover: <d>[Chinese] 文本</d> while the narrator's lips remain completely closed.`;
+
+const FL2V_CONTENT_NARRATION_INJECT = `## 旁白/画外音（已预生成）
+以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：
+{{NARRATION_LINES}}`;
+
+const fl2vNarrationDef: PromptDefinition = {
+  key: "video_h3_fl2v_narration",
+  nameKey: "promptTemplates.prompts.videoH3Fl2vNarration",
+  descriptionKey: "promptTemplates.prompts.videoH3Fl2vNarrationDesc",
+  category: "video",
+  slots: [
+    slot("system", FL2V_NARRATION_SYSTEM, true),
+    slot("user_template", FL2V_NARRATION_USER_TEMPLATE, true),
+    slot("user_requirements", FL2V_NARRATION_REQUIREMENTS, true),
+    slot("content_inject", FL2V_CONTENT_NARRATION_INJECT, true),
+  ],
+  buildFullPrompt(sc) {
+    return resolve(sc, this.slots, "system");
+  },
+};
+
+// ─── 14e. video_h3_r2v_guide ────────────────────────────
+// R2V Guide Layer — migrated from legacy video_h3_prompt for R2V mode.
+
+const R2V_GUIDE_ROLE = `## ROLE
+You are an expert prompt engineer for MiniMax H3 (Ref2VA mode), a video generation model that produces synchronized video+audio from structured text prompts with reference assets.
+
+## TASK
+Transform the provided context data into a H3-compatible 6-section Ref2VA prompt. The output will be sent directly to MiniMax H3 for video generation.`;
+
+const R2V_GUIDE_PROCESS = `## PROCESS
+1. Read the provided reference assets (images, video, audio)
+2. Build subject definitions for each character and scene element
+3. Analyze retention levels for each subject and reference
+4. Generate detailed_description reusing the base prompt format
+5. Compose overall_soundscape and non_diegetic_music sections`;
+
+const R2V_GUIDE_OUTPUT = `## OUTPUT
+6-section structured Ref2VA prompt:
+- subject_definitions
+- summary
+- retention_analysis
+- detailed_description
+- overall_soundscape
+- non_diegetic_music`;
+
+const r2vGuideDef: PromptDefinition = {
+  key: "video_h3_r2v_guide",
+  nameKey: "promptTemplates.prompts.videoH3R2vGuide",
+  descriptionKey: "promptTemplates.prompts.videoH3R2vGuideDesc",
+  category: "video",
+  slots: [
+    slot("role", R2V_GUIDE_ROLE, true),
+    slot("process", R2V_GUIDE_PROCESS, true),
+    slot("output", R2V_GUIDE_OUTPUT, true),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role"), "", r("process"), "", r("output")].join("\n");
+  },
+};
+
+// ─── 14f. video_h3_t2v_guide ────────────────────────────
+// T2V Guide Layer — placeholder for future Text-to-Video mode.
+
+const t2vGuideDef: PromptDefinition = {
+  key: "video_h3_t2v_guide",
+  nameKey: "promptTemplates.prompts.videoH3T2vGuide",
+  descriptionKey: "promptTemplates.prompts.videoH3T2vGuideDesc",
+  category: "video",
+  slots: [],
+  buildFullPrompt() {
+    throw new Error("T2V mode not implemented yet");
+  },
+};
+
 
 const SCRIPT_OUTLINE_ROLE = `你是一位屡获殊荣的编剧。根据用户的创意构想，生成一份简洁的故事大纲。`;
 
@@ -1900,7 +2576,7 @@ ${physicsRealismBlock()}
 - 禁止抽象情感词当主语（改为具体视觉描述）
 - 禁止画面里出现任何人物、身体部位、正在被穿着的衣物
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 【正确示例 1 —— 默认单场景（对话/站立/特写/蓄力/挥拳等单一地点动作）】
 {
@@ -1998,6 +2674,8 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   scriptSplitDef,
   characterExtractDef,
   importCharacterExtractDef,
+  projectAssessDef,
+  characterArcDef,
   characterImageDef,
   shotSplitDef,
   shotKeyframeAssetsDef,
@@ -2008,7 +2686,13 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   videoGenerateDef,
   refVideoGenerateDef,
   refVideoPromptDef,
-    videoH3PromptDef,
+  videoH3PromptDef,
+  fl2vGuideDef,
+  fl2vContentDef,
+  fl2vConstraintsDef,
+  fl2vNarrationDef,
+  r2vGuideDef,
+  t2vGuideDef,
 ];
 
 export const PROMPT_REGISTRY_MAP: Record<string, PromptDefinition> =

@@ -41,8 +41,15 @@ OUTPUT FORMAT — JSON array only, no markdown fences, no commentary:
 
 Respond ONLY with the JSON array. No markdown. No commentary.`;
 
-export function buildImportCharacterExtractPrompt(textChunk: string): string {
-  return `Extract all named characters from the following text. For each character, produce a detailed visual specification suitable for AI image generation. Count their approximate appearances. If the text doesn't describe a character's appearance explicitly, INFER it from their role, era, and context (e.g. a Ming Dynasty emperor wears 龙袍, a soldier wears 铠甲).
+export function buildImportCharacterExtractPrompt(
+  textChunk: string,
+  styleContext?: { visualStyle: string; eraAesthetic: string }
+): string {
+  const styleBlock = styleContext?.visualStyle
+    ? `\n\n═══════ 项目风格 (已确定) ═══════\n视觉风格: ${styleContext.visualStyle}\n时代美学: ${styleContext.eraAesthetic || "未指定"}\n\n基于以上风格创作角色描述。不要重新推断风格。`
+    : "";
+
+  return `Extract all named characters from the following text. For each character, produce a detailed visual specification suitable for AI image generation. Count their approximate appearances. If the text doesn't describe a character's appearance explicitly, INFER it from their role, era, and context (e.g. a Ming Dynasty emperor wears 龙袍, a soldier wears 铠甲).${styleBlock}
 
 --- TEXT ---
 ${textChunk}
