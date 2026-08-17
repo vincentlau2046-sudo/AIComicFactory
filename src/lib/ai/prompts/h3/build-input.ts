@@ -5,9 +5,10 @@
 // ═══════════════════════════════════════════════
 
 import { db } from "@/lib/db";
-import { characters, dialogues, episodes, projects, scenes } from "@/lib/db/schema";
+import { characters, dialogues, episodes, projects, scenes, shotAssets } from "@/lib/db/schema";
 import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 import { eq, and, asc, inArray } from "drizzle-orm";
+import { stripCharHint } from "@/lib/shot-asset-utils";
 import type { H3PromptInput } from "./types";
 
 interface ShotRow {
@@ -47,7 +48,7 @@ export interface BuildH3InputOptions {
   projectId: string;
   shot: ShotRow;
   /** Optional: pre-loaded project characters (avoids duplicate DB query) */
-  shotCharacters?: Array<{ id: string; name: string; description?: string | null; visualHint?: string | null; referenceImage?: string | null; performanceStyle?: string | null; scope: "main" | "guest"; heightCm?: number | null; bodyType?: string | null }>;
+  shotCharacters?: Array<{ id: string; name: string; baseName?: string | null; description?: string | null; visualHint?: string | null; referenceImage?: string | null; performanceStyle?: string | null; scope: "main" | "guest"; heightCm?: number | null; bodyType?: string | null }>;
   /** Optional: frame file URLs (pipeline has these, route may not) */
   firstFrame?: { fileUrl: string; prompt?: string | null };
   lastFrame?: { fileUrl: string; prompt?: string | null };
@@ -64,7 +65,30 @@ export async function buildH3Input(opts: BuildH3InputOptions): Promise<H3PromptI
 
   // ── Characters ──
   const episodeId = shot.episodeId;
-  const shotCharacters = maybeChars ?? await getEpisodeCharacters(projectId, episodeId);
+  let shotCharacters = maybeChars ?? await getEpisodeCharacters(projectId, episodeId);
+
+  // ── Shot-level character filtering (match pipeline behavior) ──
+  // Read characters[] from first_frame and last_frame shot_assets
+  const frameAssets = await db.select({ characters: shotAssets.characters })
+    .from(shotAssets)
+    .where(and(eq(shotAssets.shotId, shot.id), eq(shotAssets.isActive, 1)))
+    .limit(2);
+  const frameCharNames = new Set<string>();
+  for (const a of frameAssets) {
+    if (!a.characters) continue;
+    const names: string[] = typeof a.characters === 'string' ? JSON.parse(a.characters) : a.characters;
+    for (const n of names) frameCharNames.add(stripCharHint(n));
+  }
+  if (frameCharNames.size > 0) {
+    shotCharacters = shotCharacters.filter(c =>
+      frameCharNames.has(c.name) || frameCharNames.has(c.baseName || stripCharHint(c.name))
+    );
+    if (shotCharacters.length === 0) {
+      // Fallback: if frame character lists don't match any DB characters,
+      // use all episode characters (e.g. before frames are generated)
+      shotCharacters = maybeChars ?? await getEpisodeCharacters(projectId, episodeId);
+    }
+  }
 
   // ── Dialogues ──
   let dialoguesList: H3PromptInput["dialogues"] = undefined;
