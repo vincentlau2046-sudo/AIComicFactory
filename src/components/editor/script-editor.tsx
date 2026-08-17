@@ -308,6 +308,7 @@ export function ScriptEditor() {
       {/* Style context bar */}
       <StyleBar
         projectId={project.id}
+        episodeId={useProjectStore.getState().currentEpisodeId ?? undefined}
         visualStyle={project.visualStyle}
         visualStyleKey={project.visualStyleKey}
         eraAesthetic={project.eraAesthetic}

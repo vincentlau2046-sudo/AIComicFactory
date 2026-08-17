@@ -125,6 +125,7 @@ function StyleDropdown({
 
 interface StyleBarProps {
   projectId: string;
+  episodeId?: string;
   visualStyle?: string;
   visualStyleKey?: string;
   eraAesthetic?: string;
@@ -140,7 +141,7 @@ const MOOD_TEMPLATES = [
   { key: "tense-suspense", label: "紧张悬疑", labelEn: "Tense & Suspenseful" },
 ];
 
-export function StyleBar({ projectId, visualStyle, visualStyleKey, eraAesthetic, moodDirection }: StyleBarProps) {
+export function StyleBar({ projectId, episodeId, visualStyle, visualStyleKey, eraAesthetic, moodDirection }: StyleBarProps) {
   const t = useTranslations("project");
   const locale = useLocale();
   const { fetchProject } = useProjectStore();
@@ -153,7 +154,7 @@ export function StyleBar({ projectId, visualStyle, visualStyleKey, eraAesthetic,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    fetchProject(projectId);
+    fetchProject(projectId, episodeId);
   };
 
   const visualOptions = VISUAL_STYLE_ENTRIES.map((s) => ({
