@@ -18,7 +18,8 @@
     "batchPartialFailed": "Some items failed to generate. Please try again.",
     "promptTemplates": "Prompt Templates",
     "upload": "Upload",
-    "uploadFailed": "Upload failed. Please try again."
+    "uploadFailed": "Upload failed. Please try again.",
+    "unassigned": "Unassigned"
   },
   "dashboard": {
     "title": "My Projects",
@@ -240,17 +241,17 @@
   "import": {
     "title": "Import Script",
     "backToEpisodes": "Back to Episodes",
-    "dropHint": "Click or drag file here",
-    "supportedFormats": "Supports TXT, DOCX, PDF, Markdown — max 20MB",
+    "dropHint": "Drop or click to upload",
+    "supportedFormats": "Supported Formats",
     "episodeDuration": "Target episode duration",
     "minutes": "min",
     "startImport": "Start Import",
-    "fileTooLarge": "File too large — max 20MB",
+    "fileTooLarge": "File too large",
     "reviewCharacters": "Review Characters",
-    "reviewCharactersHint": "Click main/guest labels to toggle character type. Confirm to proceed to splitting.",
+    "reviewCharactersHint": "Please confirm extracted characters",
     "confirmAndSplit": "Confirm & Split",
     "reviewEpisodes": "Review Episodes",
-    "reviewEpisodesHint": "Edit titles or remove episodes as needed. Confirm to create.",
+    "reviewEpisodesHint": "Please confirm episode plan",
     "confirmAndGenerate": "Confirm & Create",
     "processLog": "Process Log",
     "complete": "Import complete!",
@@ -259,14 +260,20 @@
     "showAll": "Show All",
     "main": "Main",
     "guest": "Guest",
-    "frequency": "Appearances",
+    "frequency": "Frequency",
     "importStep": {
-      "parse": "Parse Text",
-      "characters": "Extract Characters",
+      "parse": "Text Parse",
+      "assess": "Project Assessment",
+      "characters": "Characters",
       "split": "Auto Split",
-      "generate": "Create Episodes",
-      "perEpCharacter": "Per-EP Characters"
-    }
+      "arc": "Character Arc",
+      "generate": "Create Episodes"
+    },
+    "confirmAndArc": "Confirm & Design Arc",
+    "confirmAndExtract": "Confirm & Extract Characters",
+    "importModelLabel": "Import Model",
+    "reviewAssess": "Review Assessment",
+    "reviewAssessHint": "Please confirm the project assessment"
   },
   "uploadScript": {
     "title": "Upload Script",

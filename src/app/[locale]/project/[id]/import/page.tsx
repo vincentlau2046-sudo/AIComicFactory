@@ -625,12 +625,6 @@ export default function ImportPage({
               <Sparkles className="mr-2 h-4 w-4" />
               {t("startImport")}
             </Button>
-
-            {/* Model selector */}
-            <div className="mt-4 rounded-xl border border-[--border-subtle] bg-white p-4">
-              <p className="mb-2 text-xs font-medium text-[--text-muted]">{t("importModelLabel") || "导入使用的 AI 模型"}</p>
-              <InlineModelPicker capability="text" />
-            </div>
           </div>
         )}
 
