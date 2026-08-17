@@ -8,6 +8,7 @@ import type { H3PromptInput, H3Language } from "../types";
 import { mapCameraDirection } from "../camera-map";
 import { resolveLanguage } from "../shared/base-builder";
 import { getPromptDefinition, getDefaultSlotContents } from "@/lib/ai/prompts/registry";
+import { mapStyleToH3 } from "../../style-registry";
 
 // ── Layer 1: Content Assembly ───────────────────────────
 
@@ -30,6 +31,10 @@ function buildContentLayer(
     }
     if (input.projectWorldSetting) {
       parts.push(L(`世界观：${input.projectWorldSetting}`, `World Setting: ${input.projectWorldSetting}`));
+    }
+    if (input.visualStyleKey) {
+      const h3Style = mapStyleToH3(input.visualStyleKey);
+      parts.push(L(`视觉风格: ${h3Style}`, `Visual Style: ${h3Style}`));
     }
     parts.push("");
   }

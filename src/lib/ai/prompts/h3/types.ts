@@ -107,6 +107,7 @@ export interface H3PromptInput {
   projectIdea?: string;
   languageMode: "auto" | "en" | "zh";
   slotContents?: Record<string, string>;
+  visualStyleKey?: string;
   /** Pre-generated narration lines in H3 voiceover format (Phase 2) */
   narrations?: string[];
   innerMonologues?: string[];
