@@ -39,3 +39,5 @@ export function buildVideoPrompt(input: H3PromptInput): H3PromptOutput {
 }
 
 export type { H3PromptInput, H3PromptOutput };
+export { buildH3Input } from "./build-input";
+export type { BuildH3InputOptions } from "./build-input";
