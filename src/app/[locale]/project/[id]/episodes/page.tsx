@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { EpisodeCard } from "@/components/editor/episode-card";
 import { EpisodeDialog } from "@/components/editor/episode-dialog";
 import { useEpisodeStore, type Episode } from "@/stores/episode-store";
+import { useProjectStore } from "@/stores/project-store";
+import { StyleBar } from "@/components/editor/style-bar";
 import { apiFetch } from "@/lib/api-fetch";
 import Link from "next/link";
 
@@ -19,6 +21,7 @@ export default function EpisodesPage({
 }) {
   const { id: projectId } = use(params);
   const locale = useLocale();
+  const { project } = useProjectStore();
   const t = useTranslations("episode");
   const tc = useTranslations("common");
   const {
@@ -182,6 +185,19 @@ export default function EpisodesPage({
           </Button>
         </div>
       </div>
+
+      {/* Project style settings */}
+      {project && (
+        <div className="mb-6">
+          <StyleBar
+            projectId={projectId}
+            visualStyle={project.visualStyle}
+            visualStyleKey={project.visualStyleKey}
+            eraAesthetic={project.eraAesthetic}
+            moodDirection={project.moodDirection}
+          />
+        </div>
+      )}
 
       {/* Episode grid */}
       {episodes.length === 0 ? (
