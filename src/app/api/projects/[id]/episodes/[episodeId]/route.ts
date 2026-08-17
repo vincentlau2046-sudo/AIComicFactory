@@ -156,6 +156,7 @@ export async function GET(
     title: project.title,
     idea: episode.idea,
     script: episode.script,
+    screenplay: episode.screenplay,
     status: episode.status,
     finalVideoUrl: episode.finalVideoUrl,
     generationMode: episode.generationMode,

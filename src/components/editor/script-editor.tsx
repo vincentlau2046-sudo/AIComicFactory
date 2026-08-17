@@ -23,9 +23,26 @@ export function ScriptEditor() {
   const [generatingOutline, setGeneratingOutline] = useState(false);
   const [outline, setOutline] = useState(project?.outline || "");
   const [parsing, setParsing] = useState(false);
-  const [parseResult, setParseResult] = useState<{ sceneCount: number; dialogueCount: number } | null>(null);
+  const [parseResult, setParseResult] = useState<{ sceneCount: number; dialogueCount: number; scenes: any[] } | null>(null);
+  const [parseExpanded, setParseExpanded] = useState(false);
+  const [showRawJson, setShowRawJson] = useState(false);
   const textGuard = useModelGuard("text");
   const scriptTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Compute parse result from stored screenplay on mount
+  useEffect(() => {
+    if (project?.screenplay) {
+      try {
+        const s = JSON.parse(project.screenplay);
+        const scenes = s.scenes || [];
+        setParseResult({
+          sceneCount: scenes.length,
+          dialogueCount: scenes.reduce((n: number, x: any) => n + (x.dialogues?.length || 0), 0),
+          scenes,
+        });
+      } catch { setParseResult(null); }
+    }
+  }, [project?.screenplay]);
 
   // Sync outline from project when project data changes
   useEffect(() => {
@@ -172,8 +189,9 @@ export function ScriptEditor() {
         while (true) { const { done, value } = await r.read(); if (done) break; t += d.decode(value, { stream: true }); }
         try {
           const p = JSON.parse(t.trim());
-          setParseResult({ sceneCount: p.scenes?.length || 0, dialogueCount: p.scenes?.reduce((s: number, x: any) => s + (x.dialogues?.length || 0), 0) || 0 });
-        } catch { setParseResult({ sceneCount: 0, dialogueCount: 0 }); }
+          const scenes = p.scenes || [];
+          setParseResult({ sceneCount: scenes.length, dialogueCount: scenes.reduce((s: number, x: any) => s + (x.dialogues?.length || 0), 0), scenes });
+        } catch { setParseResult({ sceneCount: 0, dialogueCount: 0, scenes: [] }); }
       }
     } catch { /* silent */ }
     setParsing(false);
@@ -444,11 +462,65 @@ export function ScriptEditor() {
           </Button>
         </div>
         {parseResult && !parsing && (
-          <div className="mt-2 flex items-center gap-3 text-sm text-[--text-muted]">
-            <span>📋 {t("project.sceneCount", { count: parseResult.sceneCount })}</span>
-            <span>💬 {t("project.dialogueCount", { count: parseResult.dialogueCount })}</span>
-            <span className="text-xs">— {t("project.parsedInfo")}</span>
-          </div>
+          <>
+            <div className="mt-2 flex items-center gap-3 text-sm text-[--text-muted]">
+              <span>📋 {t("project.sceneCount", { count: parseResult.sceneCount })}</span>
+              <span>💬 {t("project.dialogueCount", { count: parseResult.dialogueCount })}</span>
+            </div>
+            {/* Scene list */}
+            <div className="mt-3 space-y-2">
+              {parseResult.scenes.slice(0, parseExpanded ? parseResult.scenes.length : 1).map((scene: any, i: number) => (
+                <div key={i} className="rounded-xl border border-[--border-subtle] bg-[--surface] p-3">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {t("project.sceneLabel", { index: i + 1 })}
+                    </span>
+                    {scene.sceneTitle && (
+                      <span className="text-sm font-medium text-[--text-primary]">{scene.sceneTitle}</span>
+                    )}
+                  </div>
+                  {scene.sceneDescription && (
+                    <p className="mt-1 text-xs leading-relaxed text-[--text-muted]">{scene.sceneDescription.slice(0, 120)}{scene.sceneDescription.length > 120 ? "..." : ""}</p>
+                  )}
+                  {scene.dialogues?.length > 0 && (
+                    <div className="mt-2 space-y-0.5">
+                      {scene.dialogues.slice(0, 2).map((d: any, j: number) => (
+                        <p key={j} className="text-xs text-[--text-muted]">
+                          <span className="font-medium text-[--text-secondary]">{d.character}:</span> {d.text.slice(0, 60)}{d.text.length > 60 ? "..." : ""}
+                        </p>
+                      ))}
+                      {scene.dialogues.length > 2 && (
+                        <p className="text-[10px] text-[--text-muted]">... {scene.dialogues.length - 2} 句</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Controls */}
+            {parseResult.scenes.length > 1 && (
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  onClick={() => setParseExpanded(!parseExpanded)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {parseExpanded ? t("project.collapse") : t("project.expandAll", { count: parseResult.scenes.length })}
+                </button>
+                <button
+                  onClick={() => setShowRawJson(!showRawJson)}
+                  className="text-xs text-[--text-muted] hover:text-[--text-secondary]"
+                >
+                  {showRawJson ? t("project.hideRaw") : t("project.showRaw")}
+                </button>
+              </div>
+            )}
+            {/* Raw JSON */}
+            {showRawJson && (
+              <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-[--surface] p-3 text-[10px] leading-relaxed text-[--text-muted]">
+                {JSON.stringify(parseResult.scenes, null, 2)}
+              </pre>
+            )}
+          </>
         )}
         {!parseResult && !parsing && (
           <p className="mt-2 text-xs text-[--text-muted]">

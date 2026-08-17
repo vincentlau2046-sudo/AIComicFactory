@@ -204,6 +204,7 @@ interface Project {
   status: string;
   finalVideoUrl: string | null;
   generationMode: "keyframe" | "reference";
+  screenplay?: string;
   visualStyle?: string;
   visualStyleKey?: string;
   eraAesthetic?: string;

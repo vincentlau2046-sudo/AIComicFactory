@@ -103,7 +103,12 @@
     "parseHint": "Parse the script into structured scene list for storyboard use. Requires one AI call.",
     "sceneCount": "{count} scenes",
     "dialogueCount": "{count} lines of dialogue",
-    "parsedInfo": "Parsed. Will be referenced by storyboard."
+    "parsedInfo": "Parsed. Will be referenced by storyboard.",
+    "sceneLabel": "Scene {index}",
+    "expandAll": "Expand all ({count})",
+    "collapse": "Collapse",
+    "showRaw": "Show JSON",
+    "hideRaw": "Hide JSON"
   },
   "character": {
     "name": "Character Name",

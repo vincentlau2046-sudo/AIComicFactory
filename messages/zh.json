@@ -104,7 +104,12 @@
     "parseHint": "将剧本解析为结构化场景列表，供分镜拆解使用。需要调用一次 AI。",
     "sceneCount": "{count} 个场景",
     "dialogueCount": "{count} 句对白",
-    "parsedInfo": "已解析，S1 分镜将自动引用"
+    "parsedInfo": "已解析，S1 分镜将自动引用",
+    "sceneLabel": "场景 {index}",
+    "expandAll": "展开全部 ({count} 个)",
+    "collapse": "收起",
+    "showRaw": "查看 JSON",
+    "hideRaw": "隐藏 JSON"
   },
   "character": {
     "name": "角色名",
