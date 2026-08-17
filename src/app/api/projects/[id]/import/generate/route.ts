@@ -48,10 +48,28 @@ export async function POST(
       relationType: string;
       description?: string;
     }>;
+    projectAssess?: {
+      visualStyle?: string;
+      eraAesthetic?: string;
+      moodDirection?: string;
+    };
+    characterArcs?: Array<{
+      characterName: string;
+      phases: Array<{
+        phaseName: string;
+        description?: string;
+        episodeStart?: number;
+        episodeEnd?: number;
+        triggerEvent: string;
+        visualChanges: Record<string, string>;
+        t2iStructure?: Record<string, string>;
+        statusChange: string;
+      }>;
+    }>;
   };
 
   await addImportLog(
-    projectId, 4, "running",
+    projectId, 6, "running",
     `开始创建 ${body.episodes.length} 集和 ${body.characters.length} 个角色`
   );
 
@@ -95,7 +113,7 @@ export async function POST(
   }
 
   await addImportLog(
-    projectId, 4, "running",
+    projectId, 6, "running",
     `已创建 ${body.characters.length} 个角色${body.relationships?.length ? `和 ${body.relationships.length} 个关系` : ""}`
   );
 
@@ -143,8 +161,63 @@ export async function POST(
     }
   }
 
+  // 4. Write project assess style fields to projects table
+  if (body.projectAssess) {
+    await db
+      .update(projects)
+      .set({
+        visualStyle: body.projectAssess.visualStyle ?? "",
+        visualStyleKey: (body.projectAssess as any)?.visualStyleKey ?? "",
+        eraAesthetic: body.projectAssess.eraAesthetic ?? "",
+        moodDirection: body.projectAssess.moodDirection ?? "",
+      })
+      .where(eq(projects.id, projectId));
+
+    // Propagate to all episodes (can be overridden per-EP later)
+    if (body.projectAssess.visualStyle || body.projectAssess.eraAesthetic || body.projectAssess.moodDirection) {
+      await db
+        .update(episodes)
+        .set({
+          visualStyle: body.projectAssess.visualStyle ?? "",
+          eraAesthetic: body.projectAssess.eraAesthetic ?? "",
+          moodDirection: body.projectAssess.moodDirection ?? "",
+        })
+        .where(eq(episodes.projectId, projectId));
+    }
+  }
+
+  // 5. Write phase cards as characters rows
+  if (body.characterArcs?.length) {
+    let phaseCount = 0;
+    for (const arc of body.characterArcs) {
+      const charId = charIdByName.get(arc.characterName.toLowerCase().trim());
+      if (!charId) continue;
+      for (let i = 0; i < arc.phases.length; i++) {
+        const p = arc.phases[i];
+        await db.insert(characters).values({
+          id: genId(),
+          projectId,
+          baseName: arc.characterName,
+          name: `${arc.characterName}（${p.phaseName}）`,
+          description: p.description || "",
+          phaseName: p.phaseName,
+          episodeStart: p.episodeStart || p.episodeEnd || 0,
+          episodeEnd: p.episodeEnd || p.episodeStart || 0,
+          visualChanges: typeof p.visualChanges === "string" ? p.visualChanges : (p.visualChanges ? JSON.stringify(p.visualChanges) : null),
+          t2iStructure: p.t2iStructure ? JSON.stringify(p.t2iStructure) : null,
+          scope: "main",
+        });
+        phaseCount++;
+      }
+    }
+    await addImportLog(
+      projectId, 6, "running",
+      `已写入 ${body.characterArcs.length} 个角色的 ${phaseCount} 个弧光阶段`
+    );
+  }
+
   await addImportLog(
-    projectId, 4, "done",
+    projectId, 6, "done",
     `导入完成！创建了 ${body.characters.length} 个角色和 ${created.length} 集（${relationCount} 个角色分配）`,
     { episodeCount: created.length, characterCount: body.characters.length }
   );

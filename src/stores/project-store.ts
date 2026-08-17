@@ -204,6 +204,10 @@ interface Project {
   status: string;
   finalVideoUrl: string | null;
   generationMode: "keyframe" | "reference";
+  visualStyle?: string;
+  visualStyleKey?: string;
+  eraAesthetic?: string;
+  moodDirection?: string;
   characters: Character[];
   shots: Shot[];
   versions: StoryboardVersion[];

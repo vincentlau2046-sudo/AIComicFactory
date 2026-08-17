@@ -96,7 +96,14 @@
     "kanbanBatchGenerate": "批量生成 ({count})",
     "continueFromPrev": "续上集",
     "continueFromPrevTooltip": "使用上一集最后一帧作为本集首帧",
-    "prevEpisodeNoFrames": "上一集尚未生成帧，无法续接"
+    "prevEpisodeNoFrames": "上一集尚未生成帧，无法续接",
+    "styleContextHint": "项目定位已确定，生成剧本时将自动遵循以上风格。",
+    "structuredParse": "剧本结构化",
+    "parse": "结构化解析",
+    "parseHint": "将剧本解析为结构化场景列表，供分镜拆解使用。需要调用一次 AI。",
+    "sceneCount": "{count} 个场景",
+    "dialogueCount": "{count} 句对白",
+    "parsedInfo": "已解析，S1 分镜将自动引用"
   },
   "character": {
     "name": "角色名",

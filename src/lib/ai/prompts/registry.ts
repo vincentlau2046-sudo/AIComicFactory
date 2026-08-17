@@ -7,9 +7,24 @@ import {
   languageRuleBlock,
   referenceImageBlock,
   artStyleBlock,
-  themeStyleMappingBlock,
   physicsRealismBlock,
 } from "./blocks";
+import {
+  PROJECT_ASSESS_SYSTEM,
+  PROJECT_ASSESS_OUTPUT,
+  PROJECT_ASSESS_LANGUAGE,
+  getAssessDimensions,
+} from "./project-assess";
+import {
+  CHARACTER_ARC_SYSTEM,
+  CHARACTER_ARC_DETECTION,
+  CHARACTER_ARC_PHASE_RULES,
+  CHARACTER_ARC_OUTPUT,
+  CHARACTER_ARC_LANGUAGE,
+} from "./character-arc";
+import {
+  buildStyleMappingBlock,
+} from "./style-registry";
 
 // ── Types ────────────────────────────────────────────────
 
@@ -27,6 +42,7 @@ export interface PromptSlot {
 }
 
 export type PromptCategory =
+  | "import"
   | "script"
   | "character"
   | "shot"
@@ -868,6 +884,47 @@ const importCharacterExtractDef: PromptDefinition = {
   },
 };
 
+// ─── 5.5. project_assess ───────────────────────────────
+
+const projectAssessDef: PromptDefinition = {
+  key: "project_assess",
+  nameKey: "promptTemplates.prompts.projectAssess",
+  descriptionKey: "promptTemplates.prompts.projectAssessDesc",
+  category: "import",
+  slots: [
+    slot("role_definition", PROJECT_ASSESS_SYSTEM, true),
+    slot("dimensions", getAssessDimensions(), true),
+    slot("output_format", PROJECT_ASSESS_OUTPUT, false),
+    slot("language_rules", PROJECT_ASSESS_LANGUAGE, false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition"), "", r("dimensions"), "", r("output_format"), "", r("language_rules")].join("\n");
+  },
+};
+
+// ─── 5.6. character_arc ────────────────────────────────
+
+const characterArcDef: PromptDefinition = {
+  key: "character_arc",
+  nameKey: "promptTemplates.prompts.characterArc",
+  descriptionKey: "promptTemplates.prompts.characterArcDesc",
+  category: "import",
+  slots: [
+    slot("role_definition", CHARACTER_ARC_SYSTEM, true),
+    slot("detection_rules", CHARACTER_ARC_DETECTION, true),
+    slot("phase_rules", CHARACTER_ARC_PHASE_RULES, true),
+    slot("output_format", CHARACTER_ARC_OUTPUT, false),
+    slot("language_rules", CHARACTER_ARC_LANGUAGE, false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition"), "", r("detection_rules"), "", r("phase_rules"), "", r("output_format"), "", r("language_rules")].join("\n");
+  },
+};
+
 // ─── 6. character_image ─────────────────────────────────
 
 const CHAR_IMAGE_STYLE_MATCHING = `=== 关键：画风匹配（最高优先级）===
@@ -878,7 +935,7 @@ const CHAR_IMAGE_STYLE_MATCHING = `=== 关键：画风匹配（最高优先级�
 - 如果描述暗示其他风格 → 忠实遵循该风格
 - 如果完全未提及风格 → 根据角色的背景和类型推断最合适的风格
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 **写作语言**：使用自然中文散文描述每个部分，不要权重语法 "（xx：1.99）"，不要结构化标签 "Scene:" "Style:"——Seedance/即梦 系图像模型对自然语言理解最强。`;
 
@@ -1359,7 +1416,7 @@ const SHOT_KEYFRAME_ASSETS_ROLE = `你是一位资深的电影摄影师和分镜
 
 const SHOT_KEYFRAME_ASSETS_RULES = `${physicsRealismBlock()}
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 【角色一致性锚定】
 - 只写 baseName（如 "朱元璋"、"刘德"），禁止带 visualHint 括号——EP 内 baseName 唯一
@@ -1530,7 +1587,7 @@ const FIRST_FRAME_STYLE_MATCHING = `=== 关键：画风匹配（最高优先级�
 - 如果附有参考图，参考图的视觉风格就是真理——精确匹配
 - 输出的画风必须与角色设定图一致
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 ${artStyleBlock()}
 
@@ -1658,7 +1715,7 @@ const SCENE_FRAME_REFERENCE_RULES = `=== 无人物强制约束（最高优先级
 - 允许：空的环境、建筑、道具、自然景观、天气、光线、大气粒子
 - 角色一致性由后续视频生成阶段的多图参考机制保证，与本步骤完全解耦
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 ${physicsRealismBlock()}`;
 
@@ -2520,7 +2577,7 @@ ${physicsRealismBlock()}
 - 禁止抽象情感词当主语（改为具体视觉描述）
 - 禁止画面里出现任何人物、身体部位、正在被穿着的衣物
 
-${themeStyleMappingBlock()}
+${buildStyleMappingBlock()}
 
 【正确示例 1 —— 默认单场景（对话/站立/特写/蓄力/挥拳等单一地点动作）】
 {
@@ -2618,6 +2675,8 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   scriptSplitDef,
   characterExtractDef,
   importCharacterExtractDef,
+  projectAssessDef,
+  characterArcDef,
   characterImageDef,
   shotSplitDef,
   shotKeyframeAssetsDef,

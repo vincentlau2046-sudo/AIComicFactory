@@ -4,7 +4,8 @@ import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
 import { parseLLMJSON } from "@/lib/ai/json-repair";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
-import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters, characterRelations, agentBindings, agents } from "@/lib/db/schema";
+import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters, characterRelations, agentBindings, agents, scenes, shotAssets, importLogs, tasks } from "@/lib/db/schema";
+import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 import { callAgent, callAgentStream, validateAgentOutput, type AgentCategory } from "@/lib/ai/agent-caller";
 
 /** Wrap agent call + validation, returning user-friendly error response on failure */
@@ -28,7 +29,7 @@ async function callAndValidateAgent(
     return NextResponse.json({ error: message }, { status: 422 });
   }
 }
-import { eq, asc, and, lt, gt, desc, or, isNull, inArray } from "drizzle-orm";
+import { eq, asc, and, lt, gt, lte, gte, desc, or, isNull, isNotNull, inArray } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import path from "path";
 import { id as genId } from "@/lib/id";
@@ -72,9 +73,6 @@ import { getUploadDir } from "@/lib/env";
 export const maxDuration = 300;
 
 
-
-/** Fetch characters linked to an episode via episode_characters, or all project characters if no episode. */
-import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 
 function isCharacterOnScreen(
   characterName: string,
@@ -199,6 +197,10 @@ export async function POST(
     return handleSingleCharacterImage(payload, modelConfig);
   }
 
+  if (action === "single_phase_image") {
+    return handleSinglePhaseImage(projectId, payload, modelConfig);
+  }
+
   if (action === "batch_character_image") {
     return handleBatchCharacterImage(projectId, modelConfig, episodeId);
   }
@@ -308,13 +310,26 @@ async function handleScriptOutlineAction(
     return NextResponse.json({ error: "No idea provided" }, { status: 400 });
   }
 
+  // Fetch project style for outline guidance
+  let styleHint = "";
+  try {
+    const [proj] = await db
+      .select({ visualStyle: projects.visualStyle, eraAesthetic: projects.eraAesthetic, moodDirection: projects.moodDirection })
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    if (proj?.visualStyle) {
+      styleHint = `\n\n【项目定位】\n视觉风格: ${proj.visualStyle}\n时代美学: ${proj.eraAesthetic || "未指定"}\n情绪基调: ${proj.moodDirection || "未指定"}\n\n大纲的节拍设计和情感走向需与以上定位保持一致。`;
+    }
+  } catch { /* ignore — style fields may not exist yet */ }
+  const ideaPrompt = `创意构想：${idea}${styleHint}`;
+
   // === 智能体路由（流式）===
   const boundAgent = await findBoundAgent(projectId, "script_outline");
   if (boundAgent) {
     try {
       const agentStream = await callAgentStream(
         { platform: boundAgent.platform as "bailian" | "dify" | "coze", appId: boundAgent.appId, apiKey: boundAgent.apiKey },
-        `创意构想：${idea}`,
+        ideaPrompt,
       );
       // TransformStream: accumulate chunks, save to DB in flush (tied to response lifecycle)
       const decoder = new TextDecoder();
@@ -363,7 +378,7 @@ async function handleScriptOutlineAction(
   const result = streamText({
     model,
     system: outlineSystem,
-    prompt: `创意构想：${idea}`,
+    prompt: ideaPrompt,
     temperature: 0.7,
     onFinish: async ({ text }) => {
       try {
@@ -484,12 +499,88 @@ async function handleScriptGenerate(
     ? `\n\n【故事大纲 - 请严格按照以下大纲结构展开剧本】\n${outline}\n\n`
     : "";
 
-  // Fetch world setting from project
+  // Fetch world setting + style fields from project
   let worldSettingContext = "";
-  const [projForWorld] = await db.select({ worldSetting: projects.worldSetting }).from(projects).where(eq(projects.id, projectId));
-  if (projForWorld?.worldSetting) {
-    worldSettingContext = `\n\n【世界观设定】\n${projForWorld.worldSetting}\n\n剧本必须与此世界观设定保持一致。\n\n`;
+  let styleContext = "";
+  let characterContext = "";
+  const [projCtx] = await db
+    .select({
+      worldSetting: projects.worldSetting,
+      visualStyle: projects.visualStyle,
+      eraAesthetic: projects.eraAesthetic,
+      moodDirection: projects.moodDirection,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  if (projCtx?.worldSetting) {
+    worldSettingContext = `\n\n【世界观设定】\n${projCtx.worldSetting}\n\n剧本必须与此世界观设定保持一致。\n\n`;
   }
+  if (projCtx?.visualStyle) {
+    styleContext = [
+      `\n\n【项目风格圣经 — 已由制作团队确定，请严格遵循】`,
+      `视觉风格: ${projCtx.visualStyle}`,
+      `时代美学: ${projCtx.eraAesthetic || "未指定"}`,
+      `情绪基调: ${projCtx.moodDirection || "未指定"}`,
+      ``,
+      `§1 视觉风格块不再重新定义风格，只做本集的场景化细化和确认。`,
+      `§2 角色描述必须与以上时代美学一致（服装、道具、建筑风格）。`,
+      `§3 场景描写的氛围必须与以上情绪基调对齐。`,
+      ``,
+    ].join("\n");
+  }
+
+  // Inject characters DB data for §2 reference
+  try {
+    const projectCharacters = await db
+      .select({
+        name: characters.name,
+        baseName: characters.baseName,
+        description: characters.description,
+        scope: characters.scope,
+      })
+      .from(characters)
+      .where(and(eq(characters.projectId, projectId), isNull(characters.episodeId)));
+
+    if (projectCharacters.length > 0) {
+      // Read phase cards for the current EP
+      let phaseByBaseName = new Map<string, string>();
+      if (episodeId) {
+        const [ep] = await db.select({ sequence: episodes.sequence }).from(episodes).where(eq(episodes.id, episodeId));
+        if (ep?.sequence != null) {
+          const epPhases = await db
+            .select({ baseName: characters.baseName, phaseName: characters.phaseName })
+            .from(characters)
+            .where(and(
+              eq(characters.projectId, projectId),
+              isNotNull(characters.phaseName),
+              lte(characters.episodeStart, ep.sequence),
+              gte(characters.episodeEnd, ep.sequence)
+            ));
+          for (const p of epPhases) {
+            if (p.baseName && p.phaseName) phaseByBaseName.set(p.baseName, p.phaseName);
+          }
+        }
+      }
+
+      const list = projectCharacters.map(c => {
+        const phase = c.baseName ? phaseByBaseName.get(c.baseName) : undefined;
+        const label = c.scope === "main" ? "主角" : "配角";
+        const phaseTag = phase ? `【当前阶段: ${phase}】` : "";
+        return `- ${c.name}(${label})${phaseTag}: ${(c.description || "").slice(0, 80)}`;
+      }).join("\n");
+
+      characterContext = [
+        `\n\n【已设计的角色 — 请直接引用，不要重新创建】`,
+        list,
+        ``,
+        `§2 角色描述块改为引用以上角色。`,
+        `已提供角色当前的阶段信息（如有），请在描述中体现该阶段的服装和状态。`,
+        `对于没有阶段的角色，使用基准外观。`,
+        `不要创建新角色、不要改写已有角色的外貌基准。`,
+        ``,
+      ].join("\n");
+    }
+  } catch { /* ignore — characters table may not exist yet */ }
 
   const model = createLanguageModel(modelConfig.text);
   const scriptGenerateSystem = await resolvePrompt("script_generate", { userId, projectId });
@@ -497,7 +588,7 @@ async function handleScriptGenerate(
   const result = streamText({
     model,
     system: scriptGenerateSystem,
-    prompt: worldSettingContext + outlineContext + buildScriptGeneratePrompt(idea),
+    prompt: styleContext + characterContext + worldSettingContext + outlineContext + buildScriptGeneratePrompt(idea),
     temperature: 0.8,
     onFinish: async ({ text }) => {
       try {
@@ -555,16 +646,23 @@ async function handleScriptParseStream(
         { platform: boundAgent.platform as "bailian" | "dify" | "coze", appId: boundAgent.appId, apiKey: boundAgent.apiKey },
         script,
       );
+      const spDecoder = new TextDecoder();
+      let spScriptBuf = "";
       const spSaveTransform = new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) { controller.enqueue(chunk); },
+        transform(chunk, controller) {
+          spScriptBuf += spDecoder.decode(chunk, { stream: true });
+          controller.enqueue(chunk);
+        },
         async flush() {
+          const screenplay = spScriptBuf.trim();
+          if (!screenplay) return;
           try {
             if (episodeId) {
-              await db.update(episodes).set({ updatedAt: new Date() }).where(eq(episodes.id, episodeId));
+              await db.update(episodes).set({ screenplay, updatedAt: new Date() }).where(eq(episodes.id, episodeId));
             } else {
               await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId));
             }
-            console.log(`[ScriptParse Agent] Updated timestamp`);
+            console.log(`[ScriptParse Agent] Saved screenplay (${screenplay.length} chars)`);
           } catch (err) {
             console.error(`[ScriptParse Agent] DB update failed:`, err);
           }
@@ -601,11 +699,11 @@ async function handleScriptParseStream(
         const screenplay = extractJSON(text);
         JSON.parse(screenplay); // validate JSON
         if (episodeId) {
-          await db.update(episodes).set({ updatedAt: new Date() }).where(eq(episodes.id, episodeId));
+          await db.update(episodes).set({ screenplay, updatedAt: new Date() }).where(eq(episodes.id, episodeId));
         } else {
           await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId));
         }
-        console.log(`[ScriptParse] Parsed screenplay for ${episodeId || projectId}`);
+        console.log(`[ScriptParse] Saved screenplay for ${episodeId || projectId} (${screenplay.length} chars)`);
       } catch (err) {
         console.error("[ScriptParse] onFinish error:", err);
       }
@@ -738,6 +836,20 @@ async function handleCharacterExtract(
     }
   }
 
+  // Inject project style as authoritative context
+  let visualStyle: string | undefined;
+  if (episodeId) {
+    const [ep] = await db.select({ visualStyle: episodes.visualStyle }).from(episodes).where(eq(episodes.id, episodeId));
+    visualStyle = ep?.visualStyle || undefined;
+  }
+  if (!visualStyle) {
+    const [proj] = await db.select({ visualStyle: projects.visualStyle }).from(projects).where(eq(projects.id, projectId));
+    visualStyle = proj?.visualStyle || undefined;
+  }
+  if (visualStyle) {
+    script = `【项目视觉风格 — 已确定，禁止重新推断】\n${visualStyle}\n\n基于以上风格创作角色，不要推断风格。\n\n${script}`;
+  }
+
   let aiText: string;
   const boundAgent = await findBoundAgent(projectId, "character_extract");
   if (boundAgent) {
@@ -795,7 +907,7 @@ async function handleCharacterExtract(
 
   for (const raw of rawChars) {
     const baseName = raw.baseName || raw.name || "";
-    const episodes: Array<{ episodeIndex: number; visualHint?: string; description?: string; t2iStructure?: Record<string, string> }> =
+    const episodes: Array<{ episodeIndex: number; visualHint?: string; description?: string; t2iStructure?: Record<string, string>; phaseName?: string }> =
       raw.episodes || [{ episodeIndex: 1, visualHint: raw.visualHint, description: raw.description }];
 
     // S2: Create/update template row (Type A: episode_id=null)
@@ -820,14 +932,13 @@ async function handleCharacterExtract(
       console.log(`[CharacterExtract] Created template row "${baseName}" (${templateId})`);
       createdCount++;
     } else {
-      // Update template description from first EP's data
-      await db.update(characters)
-        .set({
-          description: episodes[0]?.description || raw.description || "",
-          scope: (raw.scope === "guest" ? "guest" : "main") as "main" | "guest",
-        })
-        .where(eq(characters.id, templateId));
-      console.log(`[CharacterExtract] Reused template "${baseName}" (${templateId})`);
+      // Reuse template — keep C phase description, only upgrade scope if needed
+      if (raw.scope === "main") {
+        await db.update(characters)
+          .set({ scope: "main" })
+          .where(eq(characters.id, templateId));
+      }
+      console.log(`[CharacterExtract] Reused template "${baseName}" (keep C phase description)`);
       reusedCount++;
     }
 
@@ -850,12 +961,34 @@ async function handleCharacterExtract(
           eq(characters.episodeId, ep.id)
         ));
 
+      // Look up phase card for this character in the current EP
+      let instancePhaseName = "";
+      if (ep) {
+        const epSeq = ep.sequence ?? (epByIndex.size > 0 ? Array.from(epByIndex.keys()).find(k => epByIndex.get(k)?.id === ep.id) ?? 0 : 0);
+        if (epSeq > 0) {
+          const [phaseCard] = await db
+            .select({ phaseName: characters.phaseName })
+            .from(characters)
+            .where(and(
+              eq(characters.projectId, projectId),
+              eq(characters.baseName, baseName),
+              isNotNull(characters.phaseName),
+              lte(characters.episodeStart, epSeq),
+              gte(characters.episodeEnd, epSeq)
+            ));
+          instancePhaseName = phaseCard?.phaseName || "";
+        }
+      }
+      const instanceLabel = instancePhaseName || epVar.visualHint || "";
+
       if (existingInstance) {
         await db.update(characters)
           .set({
             visualHint: epVar.visualHint || "",
             description: epVar.description || "",
             t2iStructure,
+            phaseName: instancePhaseName || epVar.phaseName || undefined,
+            name: instanceLabel ? `${baseName}（${instanceLabel}）` : baseName,
           })
           .where(eq(characters.id, existingInstance.id));
         linkedCharIds.add(existingInstance.id);
@@ -865,10 +998,11 @@ async function handleCharacterExtract(
           id: instId,
           projectId,
           baseName,
-          name: `${baseName}（${epVar.visualHint || ""}）`,
+          name: instanceLabel ? `${baseName}（${instanceLabel}）` : baseName,
           description: epVar.description || "",
           t2iStructure,
           visualHint: epVar.visualHint || "",
+          phaseName: instancePhaseName || epVar.phaseName || undefined,
           heightCm: raw.heightCm || 0,
           bodyType: raw.bodyType || "average",
           performanceStyle: raw.performanceStyle || "",
@@ -1064,6 +1198,68 @@ async function handleSingleCharacterImage(
   } catch (err) {
     console.error(`[SingleCharacterImage] Error for ${character.name}:`, err);
     return NextResponse.json({ characterId, status: "error", error: extractErrorMessage(err) }, { status: 500 });
+  }
+}
+
+// --- single_phase_image: generate reference image for a character phase card ---
+
+async function handleSinglePhaseImage(
+  projectId: string,
+  payload?: Record<string, unknown>,
+  modelConfig?: ModelConfig
+) {
+  const phaseId = payload?.phaseId as string;
+  if (!phaseId) {
+    return NextResponse.json({ error: "No phaseId provided" }, { status: 400 });
+  }
+
+  if (!modelConfig?.image) {
+    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
+  }
+
+  const [phase] = await db
+    .select()
+    .from(characters)
+    .where(and(eq(characters.id, phaseId), isNotNull(characters.phaseName)));
+  if (!phase) {
+    return NextResponse.json({ error: "Phase not found" }, { status: 404 });
+  }
+
+  const baseDescription = phase.description || "";
+
+  const ai = resolveImageProvider(modelConfig);
+  const prompt = buildCharacterFrontViewPrompt(phase.t2iStructure ?? null, baseDescription || phase.phaseName || "");
+  try {
+    const rawImagePath = await ai.generateImage(prompt, {
+      size: "2560x1440",
+      aspectRatio: "16:9",
+      quality: "hd",
+      pipeline: "phase-image",
+      pipelineParams: {
+        phase_name: phase.phaseName,
+        base_name: phase.baseName || "",
+        phase_prompt: prompt,
+        seed: Math.floor(Math.random() * 1000000),
+      },
+    });
+
+    const imagePath = copyToUploads(rawImagePath, 'character_reference');
+
+    // Append to history
+    let history: string[] = [];
+    try { history = JSON.parse(phase.referenceImageHistory || "[]"); } catch {}
+    if (phase.referenceImage && !history.includes(phase.referenceImage)) {
+      history.push(phase.referenceImage);
+    }
+
+    await db.update(characters)
+      .set({ referenceImage: imagePath, referenceImageHistory: JSON.stringify(history) })
+      .where(eq(characters.id, phaseId));
+
+    return NextResponse.json({ phaseId, imagePath, status: "ok" });
+  } catch (err) {
+    console.error(`[SinglePhaseImage] Error for phase ${phase.phaseName}:`, err);
+    return NextResponse.json({ phaseId, status: "error", error: extractErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -3731,10 +3927,19 @@ async function handleSingleKeyframePrompts(
   });
 
   try {
+    // Load dialogues for narrative context
+    const shotDialogues = await db.select().from(dialogues).where(eq(dialogues.shotId, shotId));
+    const dialogueText = shotDialogues.map(d => {
+      const c = projectCharacters.find(pc => pc.id === d.characterId);
+      return `${c?.baseName || c?.name || "?"}: ${d.text}`;
+    }).join(" ");
+
     const basePromptRequest = buildKeyframePromptsRequest(
       [{
         sequence: shot.sequence,
         prompt: shot.prompt || "",
+        videoScript: shot.videoScript,
+        dialogues: dialogueText || undefined,
         motionScript: shot.motionScript,
         cameraDirection: shot.cameraDirection,
       }],
@@ -3983,6 +4188,17 @@ async function handleGenerateKeyframePrompts(
     projectId,
   });
 
+  // Pre-load dialogues for all shots (provides narrative context to keyframe LLM)
+  const allDialogues = await db.select().from(dialogues)
+    .where(inArray(dialogues.shotId, allShots.map(s => s.id)));
+  const dialoguesByShot = new Map<string, string>();
+  for (const d of allDialogues) {
+    const existing = dialoguesByShot.get(d.shotId) || "";
+    const char = projectCharacters.find(c => c.id === d.characterId);
+    const name = char?.baseName || char?.name || "Unknown";
+    dialoguesByShot.set(d.shotId, existing + `${name}: ${d.text} `);
+  }
+
   // Sequential per-shot generation: one LLM call at a time with immediate DB writes.
   const total = allShots.length;
   let doneCount = 0;
@@ -3995,6 +4211,8 @@ async function handleGenerateKeyframePrompts(
         [{
           sequence: shot.sequence,
           prompt: shot.prompt || "",
+          videoScript: shot.videoScript,
+          dialogues: dialoguesByShot.get(shot.id),
           motionScript: shot.motionScript,
           cameraDirection: shot.cameraDirection,
         }],

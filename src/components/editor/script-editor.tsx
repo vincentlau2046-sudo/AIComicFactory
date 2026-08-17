@@ -22,6 +22,8 @@ export function ScriptEditor() {
   const [generating, setGenerating] = useState(false);
   const [generatingOutline, setGeneratingOutline] = useState(false);
   const [outline, setOutline] = useState(project?.outline || "");
+  const [parsing, setParsing] = useState(false);
+  const [parseResult, setParseResult] = useState<{ sceneCount: number; dialogueCount: number } | null>(null);
   const textGuard = useModelGuard("text");
   const scriptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -147,6 +149,36 @@ export function ScriptEditor() {
     scheduleSave();
   }
 
+  async function runParse() {
+    if (!project) return;
+    const currentEpisodeId = useProjectStore.getState().currentEpisodeId;
+    if (!currentEpisodeId) return;
+    setParsing(true);
+    setParseResult(null);
+    try {
+      const resp = await apiFetch(`/api/projects/${project.id}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "script_parse",
+          modelConfig: getModelConfig(),
+          episodeId: currentEpisodeId,
+        }),
+      });
+      if (resp.ok && resp.body) {
+        const r = resp.body.getReader();
+        const d = new TextDecoder();
+        let t = "";
+        while (true) { const { done, value } = await r.read(); if (done) break; t += d.decode(value, { stream: true }); }
+        try {
+          const p = JSON.parse(t.trim());
+          setParseResult({ sceneCount: p.scenes?.length || 0, dialogueCount: p.scenes?.reduce((s: number, x: any) => s + (x.dialogues?.length || 0), 0) || 0 });
+        } catch { setParseResult({ sceneCount: 0, dialogueCount: 0 }); }
+      }
+    } catch { /* silent */ }
+    setParsing(false);
+  }
+
   async function handleGenerateScript() {
     if (!project) return;
     if (!textGuard()) return;
@@ -243,7 +275,7 @@ export function ScriptEditor() {
           </h2>
         </div>
         <div className="flex items-center gap-2">
-          <PromptEditButton promptKeys={["script_outline", "script_generate"]} projectId={project.id} />
+          <PromptEditButton promptKeys={["script_outline", "script_generate", "script_parse"]} projectId={project.id} />
           <InlineModelPicker capability="text" />
           {saving && (
             <span className="flex items-center gap-1.5 text-xs text-[--text-muted]">
@@ -253,6 +285,31 @@ export function ScriptEditor() {
           )}
         </div>
       </div>
+
+      {/* Style context bar */}
+      {project?.visualStyle && (
+        <div className="rounded-2xl border border-[--border-subtle] bg-gradient-to-r from-primary/5 to-transparent p-4">
+          <div className="flex items-center gap-2 text-sm text-[--text-primary]">
+            <span className="text-base">🎨</span>
+            <span className="font-medium">{project.visualStyle?.slice(0, 40)}{(project.visualStyle?.length || 0) > 40 ? "..." : ""}</span>
+            {project.eraAesthetic && (
+              <>
+                <span className="text-[--text-muted]">·</span>
+                <span className="text-[--text-muted]">{project.eraAesthetic?.slice(0, 30)}</span>
+              </>
+            )}
+            {project.moodDirection && (
+              <>
+                <span className="text-[--text-muted]">·</span>
+                <span className="text-[--text-muted]">{project.moodDirection?.slice(0, 30)}</span>
+              </>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-[--text-muted]">
+            {t("project.styleContextHint")}
+          </p>
+        </div>
+      )}
 
       {/* Idea input */}
       <div className="rounded-2xl border border-[--border-subtle] bg-white p-1.5">
@@ -357,6 +414,47 @@ export function ScriptEditor() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Screenplay parse panel */}
+      <div className="rounded-2xl border border-[--border-subtle] bg-white p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📊</span>
+            <span className="text-sm font-medium text-[--text-primary]">
+              {t("project.structuredParse")}
+            </span>
+          </div>
+          <Button
+            size="sm"
+            onClick={runParse}
+            disabled={parsing || !project?.script?.trim()}
+          >
+            {parsing ? (
+              <>
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                {t("common.generating")}
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-1 h-3.5 w-3.5" />
+                {t("project.parse")}
+              </>
+            )}
+          </Button>
+        </div>
+        {parseResult && !parsing && (
+          <div className="mt-2 flex items-center gap-3 text-sm text-[--text-muted]">
+            <span>📋 {t("project.sceneCount", { count: parseResult.sceneCount })}</span>
+            <span>💬 {t("project.dialogueCount", { count: parseResult.dialogueCount })}</span>
+            <span className="text-xs">— {t("project.parsedInfo")}</span>
+          </div>
+        )}
+        {!parseResult && !parsing && (
+          <p className="mt-2 text-xs text-[--text-muted]">
+            {t("project.parseHint")}
+          </p>
+        )}
       </div>
     </div>
   );

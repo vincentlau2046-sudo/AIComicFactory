@@ -9,6 +9,8 @@ export function buildKeyframePromptsRequest(
   shots: Array<{
     sequence: number;
     prompt: string;
+    videoScript?: string | null;
+    dialogues?: string;
     motionScript?: string | null;
     cameraDirection?: string | null;
   }>,
