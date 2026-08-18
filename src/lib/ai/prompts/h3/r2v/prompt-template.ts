@@ -1,17 +1,13 @@
 // ═══════════════════════════════════════════════
-// H3 R2V Prompt Template — Vision LLM context assembly (v0.3.9)
-// Parallel to fl2v/prompt-template.ts.
-// Image-aware: maps scene frames + character refs to <Picture N> labels.
+// H3 R2V Prompt Template (v2) — full context injection
+// Now includes: dialogues, time-seg, camera mapping, BGM, episode context.
+// Outputs: <Picture N> / <Subject N> labeled 6-section H3 prompt.
 // ═══════════════════════════════════════════════
 
 import type { H3PromptInput, H3Language } from "../types";
 import { resolveLanguage } from "../shared/base-builder";
 import { getDefaultSlotContents } from "@/lib/ai/prompts/registry";
 
-/**
- * Build the user + system prompt for R2V Vision LLM call.
- * Returns { system, user } — images are passed separately by the caller.
- */
 export async function buildR2VPromptTemplate(
   input: H3PromptInput,
   systemOverride?: string,
@@ -19,17 +15,14 @@ export async function buildR2VPromptTemplate(
   const lang = resolveLanguage(input);
   
   // System prompt: from Registry slot or override
-  let system = "";
-  if (systemOverride) {
-    system = systemOverride;
-  } else {
+  let system = systemOverride || "";
+  if (!system) {
     const slots = getDefaultSlotContents("ref_video_prompt_h3");
     system = slots?.role_definition || slots?.rules || "";
   }
   
-  // User prompt: context assembly
+  // User prompt: full context assembly
   const user = buildUserContext(input, lang);
-
   return { system, user };
 }
 
@@ -37,61 +30,148 @@ function buildUserContext(input: H3PromptInput, lang: H3Language): string {
   const L = (zh: string, en: string) => lang === "zh" ? zh : en;
   const parts: string[] = [];
 
-  // ── Image Mapping ───────────────────────────
-  parts.push(L("## 参考图映射", "## REFERENCE IMAGE MAPPING"));
+  // ── Section 0: Role & Task ──────────────────
+  parts.push(L(
+    "你是一位专业的 MiniMax H3 Ref2VA 视频提示词工程师。",
+    "You are a professional MiniMax H3 Ref2VA video prompt engineer."
+  ));
+  parts.push(L(
+    "给定场景帧（首帧/尾帧）和角色参考图，你的任务是为该镜头生成完整的 6-section H3 R2V 视频生成提示词。",
+    "Given scene frames (first/last frame) and character reference images, generate a complete 6-section H3 R2V video prompt for this shot."
+  ));
+  parts.push("");
+
+  // ── Section 1: Image Mapping ─────────────────
+  parts.push(`=== ${L("参考图映射", "REFERENCE IMAGE MAPPING")} ===`);
+  parts.push(L(
+    "使用 <Picture N> 标签引用参考图。严格按以下顺序编号：",
+    "Use <Picture N> tags to reference images. Numbering strictly follows this order:"
+  ));
   parts.push("");
   
-  // Scene frames
-  if (input.firstFrame?.prompt || input.lastFrame?.prompt) {
-    if (input.firstFrame?.prompt) {
-      parts.push(L(`<Picture 1> = 首帧场景: ${input.firstFrame.prompt}`, `<Picture 1> = First frame scene`));
-    }
-    if (input.lastFrame?.prompt) {
-      const nextIdx = input.firstFrame?.prompt ? 2 : 1;
-      parts.push(L(`<Picture ${nextIdx}> = 尾帧场景: ${input.lastFrame.prompt}`, `<Picture ${nextIdx}> = Last frame scene`));
-    }
+  if (input.firstFrame?.prompt) {
+    parts.push(`<Picture 1> = ${L("首帧场景", "First frame scene")}: ${input.firstFrame.prompt}`);
   }
-
-  // Character references
+  if (input.lastFrame?.prompt) {
+    const idx = input.firstFrame?.prompt ? 2 : 1;
+    parts.push(`<Picture ${idx}> = ${L("尾帧场景", "Last frame scene")}: ${input.lastFrame.prompt}`);
+  }
+  
   let picIdx = (input.firstFrame?.prompt ? 1 : 0) + (input.lastFrame?.prompt ? 1 : 0) + 1;
   for (const char of input.characters) {
     if (char.referenceImage) {
-      const desc = [char.description, char.visualHint].filter(Boolean).join("; ");
-      parts.push(L(`<Picture ${picIdx}> = 角色 ${char.name}${desc ? `: ${desc}` : ""}`, `<Picture ${picIdx}> = Character ${char.name}`));
+      parts.push(L(
+        `<Picture ${picIdx}> = 角色 ${char.name}${char.visualHint ? `（${char.visualHint}）` : ""}`,
+        `<Picture ${picIdx}> = Character ${char.name}`
+      ));
       picIdx++;
     }
   }
   parts.push("");
 
-  // ── Project Context ─────────────────────────
-  parts.push(L("## 项目背景", "## PROJECT CONTEXT"));
-  if (input.projectTitle) parts.push(input.projectTitle);
-  if (input.projectOutline) parts.push(input.projectOutline);
-  if (input.sceneDescription) parts.push(L(`场景: ${input.sceneDescription}`, `Scene: ${input.sceneDescription}`));
-  parts.push("");
-
-  // ── Characters ──────────────────────────────
-  parts.push(L("## 登场角色", "## CHARACTERS"));
-  for (const char of input.characters) {
-    if (!char.referenceImage) continue;
-    const desc = [char.description, char.visualHint, char.performanceStyle].filter(Boolean).join("; ");
-    parts.push(`- ${char.name}: ${desc}`);
-    if (char.heightCm) parts.push(L(`  身高: ${char.heightCm}cm, 体型: ${char.bodyType || "average"}`, `  Height: ${char.heightCm}cm, Build: ${char.bodyType || "average"}`));
+  // ── Section 2: Characters ────────────────────
+  parts.push(`=== ${L("登场角色", "CHARACTERS")} ===`);
+  for (let i = 0; i < input.characters.length; i++) {
+    const c = input.characters[i];
+    if (!c.referenceImage) continue;
+    const attrs = [
+      c.description, c.visualHint,
+      c.heightCm && c.heightCm > 0 ? `${c.heightCm}cm/${c.bodyType || "average"}` : null,
+      c.performanceStyle
+    ].filter(Boolean).join(" — ");
+    parts.push(L(
+      `<Subject ${i + 1}> = ${c.name}: ${attrs}`,
+      `<Subject ${i + 1}> = ${c.name}: ${attrs || "character"}`
+    ));
+  }
+  if (input.sceneDescription) {
+    const sceneIdx = input.characters.length + 1;
+    parts.push(L(
+      `<Subject ${sceneIdx}> = 场景环境: ${input.sceneDescription}${input.sceneLighting ? ` / 光照: ${input.sceneLighting}` : ""}`,
+      `<Subject ${sceneIdx}> = Scene: ${input.sceneDescription}`
+    ));
   }
   parts.push("");
 
-  // ── Motion & Camera ────────────────────────
-  parts.push(L("## 动作与运镜", "## MOTION & CAMERA"));
-  if (input.motionScript) parts.push(L(`动作: ${input.motionScript}`, `Motion: ${input.motionScript}`));
-  if (input.cameraDirection) parts.push(L(`运镜: ${input.cameraDirection}`, `Camera: ${input.cameraDirection}`));
+  // ── Section 3: Scene & Shot Context ──────────
+  parts.push(`=== ${L("场景与分镜", "SCENE & SHOT CONTEXT")} ===`);
+  if (input.projectTitle) parts.push(L(`项目: ${input.projectTitle}`, `Project: ${input.projectTitle}`));
+  if (input.projectOutline) parts.push(L(`大纲: ${input.projectOutline}`, `Outline: ${input.projectOutline}`));
+  if (input.projectWorldSetting) parts.push(L(`世界观: ${input.projectWorldSetting}`, `World Setting: ${input.projectWorldSetting}`));
+  parts.push("");
+
+  // ── Section 4: Motion & Camera ──────────────
+  parts.push(`=== ${L("动作脚本与运镜", "MOTION & CAMERA")} ===`);
+  parts.push(L(
+    "以下为镜头的完整动作脚本。你需要：\n1. 按照动作节拍自然切分为 2-3 秒的子段落\n2. 每个子段落标注精确的时间起点\n3. 每个子段落注入对应的运镜动作（幅度: 小/中/大/快速）\n4. 所有时间标注使用精确到小数点后一位的秒数",
+    "Below is the shot's complete motion script. You must:\n1. Split into 2-3 second sub-beats naturally\n2. Label each with precise time start\n3. Inject corresponding camera movement (amplitude: small/medium/large/rapid)\n4. All timestamps use seconds with one decimal place"
+  ));
+  parts.push("");
+  if (input.motionScript) parts.push(L(`动作脚本: ${input.motionScript}`, `Motion: ${input.motionScript}`));
+  if (input.videoScript) parts.push(L(`视频脚本: ${input.videoScript}`, `Video Script: ${input.videoScript}`));
+  if (input.cameraDirection) parts.push(L(`运镜指令: ${input.cameraDirection}`, `Camera: ${input.cameraDirection}`));
   parts.push(L(`时长: ${input.duration || 10}s`, `Duration: ${input.duration || 10}s`));
   parts.push("");
 
-  // ── Output Requirements ────────────────────
-  parts.push(L("## 输出要求", "## OUTPUT REQUIREMENTS"));
+  // ── Section 5: Dialogue ──────────────────────
+  if (input.dialogues?.length) {
+    parts.push(`=== ${L("对白", "DIALOGUES")} ===`);
+    parts.push(L(
+      "对白使用 <d>[语言] 文本</d> 格式。脚本语言=中文时用 [中文]，英文时用 [English]。",
+      "Dialogues use <d>[language] text</d> format."
+    ));
+    for (const d of input.dialogues) {
+      const subjIdx = input.characters.findIndex(c => c.name === d.characterName);
+      const subjLabel = subjIdx >= 0 ? ` (S${subjIdx + 1})` : "";
+      parts.push(L(
+        `${d.characterName}${subjLabel} 说：<d>[中文] ${d.text}</d>`,
+        `${d.characterName}${subjLabel} says: <d>[English] ${d.text}</d>`
+      ));
+    }
+    parts.push("");
+  } else {
+    parts.push(L(
+      `=== ${L("对白", "DIALOGUES")} ===\n${L("本镜头无对白，通过动作和画面叙事。", "No dialogue in this shot. Tell the story through action and visuals.")}`,
+      `=== DIALOGUES ===\nNo dialogue. Use motion and visuals only.`
+    ));
+    parts.push("");
+  }
+
+  // ── Section 6: Audio ────────────────────────
+  parts.push(`=== ${L("音频参考", "AUDIO REFERENCES")} ===`);
+  if (input.bgmUrl) {
+    parts.push(L(`BGM 风格参考: ${input.bgmUrl}`, `BGM reference: ${input.bgmUrl}`));
+  } else {
+    parts.push(L("BGM: 基于项目氛围和剧情自行设计", "BGM: Design based on project atmosphere"));
+  }
+  if (input.soundDesign) {
+    parts.push(L(`音效设计: ${input.soundDesign}`, `Sound Design: ${input.soundDesign}`));
+  }
+  if (input.musicCue) {
+    parts.push(L(`音乐提示: ${input.musicCue}`, `Music cue: ${input.musicCue}`));
+  }
+  parts.push("");
+
+  // ── Section 7: Output Format Requirements ────
+  parts.push(`=== ${L("输出格式要求", "OUTPUT FORMAT REQUIREMENTS")} ===`);
   parts.push(L(
-    "1. 按 MiniMax H3 Ref2VA 6-section 格式输出\n2. 用 <Subject N> 引用角色, <Picture N> 引用图片\n3. subject_definitions 基于参考图描述每个角色的实际外观\n4. retention_analysis: fully_preserved/partially_preserved/attribute_transfer/weak_reference\n5. detailed_description: 用 <Subject N> 和 <Picture N> 标签写视频散文\n6. overall_soundscape + non_diegetic_music 基于氛围和 BGM 参考\n7. 禁止真实人名/品牌/IP/艺术家",
-    "1. Output in MiniMax H3 Ref2VA 6-section format\n2. Use <Subject N> for characters, <Picture N> for images\n3. subject_definitions describe each character's appearance based on reference images\n4. retention_analysis with proper visual retention levels\n5. detailed_description with <Subject N> and <Picture N> labels\n6. overall_soundscape + non_diegetic_music based on atmosphere and BGM\n7. No real person names/brands/IPs/artists"
+    "按 MiniMax H3 Ref2VA 6-section 格式输出。每个 section 用对应的英文标题开始，然后写中文内容：\n\n" +
+    "horizontal_style:\n(描述视觉风格和颜色调色板)\n\n" +
+    "frame_alignment:\n(说明 <Picture N> 对应的时间点)\n\n" +
+    "integrated_multimodal_description:\n" +
+    "(详细视频描述。每 2-3 秒一个自然段落。每个段落用 <Subject N> 和 <Picture N> 标签。\n" +
+    "对白使用 <d>[中文] text</d> 格式嵌入对应的 subject。\n" +
+    "每个段落必须以时间戳开始。\n" +
+    "每个段落包含对应的运镜动作)\n\n" +
+    "overall_soundscape:\n(环境音、氛围声、音效)\n\n" +
+    "non_diegetic_music:\n(非叙事音乐的描述)\n\n" +
+    "严格要求：禁止真实人名/品牌/IP/导演/演员。禁止markdown代码块。禁止前言。",
+    "Output in MiniMax H3 Ref2VA format with these English section headers and Chinese content:\n\n" +
+    "horizontal_style: (visual style and color palette)\n" +
+    "frame_alignment: (<Picture N> timing)\n" +
+    "integrated_multimodal_description: (video description with timestamps, <Subject N>/<Picture N> tags)\n" +
+    "overall_soundscape: (ambient sound)\n" +
+    "non_diegetic_music: (non-diegetic music description)"
   ));
 
   return parts.join("\n");
