@@ -1,27 +1,25 @@
 /**
- * Reference Video Prompt Generate Pipeline Handler.
+ * Reference Video Prompt Generate Pipeline Handler (v0.3.9).
  *
- * Generates a reference-mode video prompt via Vision LLM (gemma4-31b-vl)
- * and stores it in shot.videoPrompt. This is a standalone step — video
- * generation is handled separately by reference-video-generate.ts.
+ * Generates a H3 R2V 6-section video prompt via Vision LLM.
+ * Tier 1: gemma4-31b-vl (or any VL model) with scene frame images.
+ * Tier 2: buildR2VPrompt local heuristics (no images, fallback).
  *
- * Input: scene frame images (shot_assets type='reference')
- * Output: shot.videoPrompt (text, with @图片N reference format)
+ * Output: shot.videoPrompt with [R2V-VL] or [R2V-LOCAL] prefix.
  */
 
 import { db } from "@/lib/db";
 import { shots } from "@/lib/db/schema";
 import { resolveAIProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
-import { resolvePrompt } from "@/lib/ai/prompts/resolver";
-import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-generate";
-import { buildReferenceVideoPrompt } from "@/lib/ai/prompts/video-generate";
-import { getModelMaxDuration } from "@/lib/ai/model-limits";
+import { getActiveAssets } from "@/lib/shot-asset-utils";
+import { getEpisodeCharacters } from "@/lib/db/episode-characters";
+import { buildH3Input } from "@/lib/ai/prompts/h3";
+import { buildR2VPromptLLM } from "@/lib/ai/prompts/h3/r2v/builder";
+import { buildR2VPrompt } from "@/lib/ai/prompts/h3/r2v/ref-builder";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { failTask } from "@/lib/task-queue";
-import { getActiveAssets, loadShotLegacyView, stripCharHint } from "@/lib/shot-asset-utils";
-import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 
 export async function handleRefVideoPromptGenerate(task: Task) {
   const payload = task.payload as {
@@ -39,88 +37,65 @@ export async function handleRefVideoPromptGenerate(task: Task) {
   const allRefs = await getActiveAssets(shot.id, "reference");
   const pendingRefs = allRefs.filter(r => r.status === "pending");
   if (pendingRefs.length > 0) {
-    await failTask(task.id, `${pendingRefs.length} scene frames pending — generate them first`);
+    await failTask(task.id, `${pendingRefs.length} scene frames pending`);
     return;
   }
   const sceneFrames = allRefs.filter(r => r.fileUrl).sort((a, b) => a.sequenceInType - b.sequenceInType);
   const sceneFramePaths = sceneFrames.map(r => r.fileUrl as string);
   if (sceneFramePaths.length === 0) {
-    await failTask(task.id, "No scene reference images — generate scene frames first");
+    await failTask(task.id, "No scene reference images");
     return;
   }
 
-  // 3. Collect character info for reference labels
+  // 3. Build H3PromptInput (same struct as FL2V)
   const projectCharacters = await getEpisodeCharacters(payload.projectId, shot.episodeId);
-  const shotCharNames = new Set<string>();
-  for (const r of allRefs) {
-    for (const n of r.characters ?? []) shotCharNames.add(stripCharHint(n));
-  }
-  const charRefs = projectCharacters
-    .filter(c => !!c.referenceImage &&
-      (shotCharNames.has(stripCharHint(c.name)) || shotCharNames.has((c as any).baseName || "")))
-    .map(c => ({ name: c.name, imagePath: c.referenceImage as string }));
+  const charactersForH3 = projectCharacters.map(c => ({
+    id: c.id, name: c.name,
+    description: c.description ?? undefined,
+    visualHint: c.visualHint ?? undefined,
+    referenceImage: c.referenceImage ?? undefined,
+    performanceStyle: c.performanceStyle ?? undefined,
+    scope: (c.scope as "main" | "guest") || "main",
+    heightCm: c.heightCm ?? undefined,
+    bodyType: c.bodyType ?? undefined,
+  }));
 
-  const effectiveDuration = Math.min(shot.duration ?? 10,
-    getModelMaxDuration(payload.modelConfig?.video?.modelId));
+  const h3Input = {
+    videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
+    motionScript: shot.motionScript,
+    duration: shot.duration ?? 10,
+    cameraDirection: shot.cameraDirection || "static",
+    generationMode: "reference" as const,
+    characters: charactersForH3,
+    languageMode: "zh" as const,
+    // Scene frames as firstFrame/lastFrame for H3 context
+    firstFrame: sceneFrames[0] ? { fileUrl: sceneFrames[0].fileUrl!, prompt: sceneFrames[0].prompt } : undefined,
+    lastFrame: sceneFrames[sceneFrames.length - 1] ? { fileUrl: sceneFrames[sceneFrames.length - 1].fileUrl!, prompt: sceneFrames[sceneFrames.length - 1].prompt } : undefined,
+  };
 
-  // 4. Vision LLM: generate video prompt
-  let videoPrompt: string;
+  // 4. Try Vision LLM, fallback to local
+  const visionProvider = resolveAIProvider(payload.modelConfig);
+
+  let sections: string[];
+  let source: "vl" | "fallback";
+
   try {
-    const textProvider = resolveAIProvider(payload.modelConfig);
-    const systemPrompt = await resolvePrompt("ref_video_prompt", {
-      userId: payload.userId ?? "", projectId: payload.projectId,
-    });
-    const charInfos = charRefs.map((c, i) => ({ name: c.name, index: i + 1 }));
-    const sceneInfos = sceneFramePaths.map((_, i) => {
-      const name = (sceneFrames[i]?.meta as any)?.sceneName || `场景-${i + 1}`;
-      return { label: name, index: charRefs.length + i + 1 };
-    });
-
-    const promptReq = buildRefVideoPromptRequest({
-      motionScript: shot.motionScript || shot.videoScript || shot.prompt || "",
-      cameraDirection: shot.cameraDirection || "static",
-      duration: effectiveDuration,
-      characters: charInfos,
-      sceneFrames: sceneInfos,
-    });
-
-    const rawPrompt = await withTimeout(
-      textProvider.generateText(promptReq, {
-        systemPrompt, images: sceneFramePaths, temperature: 0.7,
-      }),
-      60_000,
-    );
-
-    if (!rawPrompt || rawPrompt.trim().length < 10) {
-      throw new Error("Vision LLM returned empty/invalid prompt");
-    }
-
-    videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
+    const result = await buildR2VPromptLLM(h3Input, visionProvider, sceneFramePaths);
+    sections = result.output.sections;
+    source = result.source;
   } catch (err) {
-    // Fallback: static template (no Vision LLM)
-    console.warn(`[RefVideoPrompt] Vision LLM failed, using fallback: ${err instanceof Error ? err.message : String(err)}`);
-    const charRefInfos = charRefs.map((c, i) => ({ name: c.name, index: i + 1 }));
-    const sceneFrameInfos = sceneFramePaths.map((_, i) => ({ label: `场景-${i + 1}`, index: charRefs.length + i + 1 }));
-    const fullMapping = [...charRefInfos.map(c => `@图片${c.index}是${c.name}`),
-      ...sceneFrameInfos.map(s => `@图片${s.index}是${s.label}`)].join("，") + "。";
-    videoPrompt = `图像映射：${fullMapping}。\n\n${buildReferenceVideoPrompt({
-      videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
-      cameraDirection: shot.cameraDirection || "static",
-      duration: effectiveDuration,
-      characters: projectCharacters,
-    })}`;
+    // Final fallback: pure local
+    console.warn(`[RefVideoPrompt] VL+fallback failed, using pure local: ${err}`);
+    const local = buildR2VPrompt(h3Input);
+    sections = local.sections;
+    source = "fallback";
   }
 
-  // 5. Store
-  await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
+  // 5. Store with source prefix
+  const prefix = source === "vl" ? "[R2V-VL] " : "[R2V-LOCAL] ";
+  const promptText = prefix + sections.join("\n\n");
 
-  return { shotId: shot.id, videoPrompt };
-}
+  await db.update(shots).set({ videoPrompt: promptText }).where(eq(shots.id, shot.id));
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: NodeJS.Timeout;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer!));
+  return { shotId: shot.id, source, sections };
 }

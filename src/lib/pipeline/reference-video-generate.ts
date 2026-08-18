@@ -88,14 +88,14 @@ export async function handleReferenceVideoGenerate(task: Task) {
   const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
 
   // 6. Build video prompt
-  //    Priority: reference-format stored prompt > Vision LLM > fallback template
+  //    Priority: stored reference prompt > Vision LLM > fallback template
   let videoPrompt: string;
   const storedPrompt = shot.videoPrompt || "";
-  const hasRefFormat = storedPrompt.includes("@图片") || storedPrompt.includes("图像映射");
+  const hasRefFormat = storedPrompt.includes("<Picture ") || storedPrompt.includes("<Subject ");
 
   if (hasRefFormat) {
-    // Valid reference-mode prompt (from ref_video_prompt_generate task)
-    videoPrompt = storedPrompt;
+    // Valid H3 R2V prompt (from ref_video_prompt_generate task)
+    videoPrompt = storedPrompt.replace(/^\[R2V-[A-Z]+\] /, "");  // strip source prefix
   } else {
     // No stored reference prompt → Vision LLM with fallback
     try {
