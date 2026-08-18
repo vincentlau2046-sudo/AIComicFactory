@@ -1385,21 +1385,57 @@ export function ShotCard({
             </div>
           )}
 
-          {/* Per-shot keyframe prompt regeneration */}
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={handleGenerateKeyframePrompts}
-            disabled={generatingKeyframePrompt || generatingFrames || generatingSceneFrame || generatingVideo || batchGeneratingFrames}
-          >
-            {generatingKeyframePrompt ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-            {generatingKeyframePrompt
-              ? t("common.generating")
-              : (getFirstFramePrompt(shot) || getLastFramePrompt(shot))
-                ? t("shot.regenerateKeyframePrompts")
-                : t("shot.generateKeyframePrompts")
-            }
-          </Button>
+          {/* Per-shot prompt regeneration — mode-aware */}
+          {generationMode === "reference" ? (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={async () => {
+                setGeneratingKeyframePrompt(true);
+                try {
+                  await apiFetch(`/api/projects/${projectId}/generate`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "generate_ref_prompts",
+                      payload: { shotId: id },
+                      modelConfig: getModelConfig(),
+                      
+                    }),
+                  });
+                  onUpdate();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+                } finally {
+                  setGeneratingKeyframePrompt(false);
+                }
+              }}
+              disabled={generatingKeyframePrompt || generatingFrames || generatingSceneFrame || generatingVideo || batchGeneratingFrames}
+            >
+              {generatingKeyframePrompt ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              {generatingKeyframePrompt
+                ? t("common.generating")
+                : hasRefImages
+                  ? t("shot.regenerateRefImages") || "重新生成场景帧提示词"
+                  : t("shot.generateRefImages") || "生成场景帧提示词"
+              }
+            </Button>
+          ) : (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={handleGenerateKeyframePrompts}
+              disabled={generatingKeyframePrompt || generatingFrames || generatingSceneFrame || generatingVideo || batchGeneratingFrames}
+            >
+              {generatingKeyframePrompt ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              {generatingKeyframePrompt
+                ? t("common.generating")
+                : (getFirstFramePrompt(shot) || getLastFramePrompt(shot))
+                  ? t("shot.regenerateKeyframePrompts")
+                  : t("shot.generateKeyframePrompts")
+              }
+            </Button>
+          )}
 
           <Button
             size="xs"
