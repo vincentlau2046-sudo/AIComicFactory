@@ -2283,9 +2283,7 @@ async function enqueueSingleTask(
 ) {
   const shotId = payload?.shotId as string;
   if (!shotId) return NextResponse.json({ error: "No shotId" }, { status: 400 });
-  const projectId = (payload as any)?.projectId as string;
-  if (!projectId) return NextResponse.json({ error: "No projectId" }, { status: 400 });
-  
+
   const task = await enqueueTask({
     type: taskType as any,
     projectId,
