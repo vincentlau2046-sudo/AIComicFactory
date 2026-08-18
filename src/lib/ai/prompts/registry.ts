@@ -2720,6 +2720,65 @@ const refImagePromptsDef: PromptDefinition = {
 
 // ── Registry ─────────────────────────────────────────────
 
+
+// ─── ref_video_prompt_h3 ────────────────────────────────────
+
+const REF_VIDEO_H3_ROLE = "你是一位专业的 MiniMax H3 Ref2VA 视频提示词工程师。给定场景帧和角色参考图，为每个镜头生成完整的 6-section H3 R2V 视频生成提示词。";
+
+const REF_VIDEO_H3_RULES = [
+  "─── 参考标签 ───",
+  "- 角色: 用 <Subject N> 引用 (N 按给定顺序编号)",
+  "- 图片: 用 <Picture N> 引用 (N 严格按映射编号)",
+  "",
+  "─── subject_definitions (定义每个角色) ───",
+  "- 基于参考图描述每个角色的实际外观",
+  "- 包含: 性别、身高(cm)、体型、面部特征、服装颜色/材质",
+  "- 标注来源图片: in <Picture N>",
+  "",
+  "─── summary (摘要) ───",
+  "- 1 段英文摘要",
+  "- 格式: [reference_generation] One paragraph",
+  "",
+  "─── retention_analysis (视觉保留分析) ───",
+  "- fully_preserved: 外观由参考图严格锁定",
+  "- partially_preserved: 部分特征保留",
+  "- attribute_transfer: 概念迁移，细节可变化",
+  "- weak_reference: 仅作为氛围参考",
+  "",
+  "─── detailed_description (详细视频描述) ───",
+  "- 每 2-3 秒一个自然段落，精确到 0.1s 时间起点",
+  "- <Subject N> 和 <Picture N> 标签嵌入描述中",
+  "- 对白: <d>[中文] 文本</d> 格式",
+  "- 每段标注运镜动作（幅度: 小/中/大）",
+  "",
+  "─── overall_soundscape (环境音) ───",
+  "- 基于场景氛围推断，禁止 N/A",
+  "",
+  "─── non_diegetic_music (非叙事音乐) ───",
+  "- 基于项目氛围描述音乐方向，禁止 N/A",
+  "",
+  "─── 严禁 ───",
+  "- 真实人名/品牌/IP/导演/演员",
+  "- markdown 代码块、前言、总结",
+  "- 每个 section 标题必须全英文",
+].join("\n");
+
+const refVideoPromptH3Def: PromptDefinition = {
+  key: "ref_video_prompt_h3",
+  nameKey: "promptTemplates.prompts.refVideoPromptH3",
+  descriptionKey: "promptTemplates.prompts.refVideoPromptH3Desc",
+  category: "video",
+  slots: [
+    slot("role_definition", REF_VIDEO_H3_ROLE, true),
+    slot("rules", REF_VIDEO_H3_RULES, true),
+    slot("output_format", "", false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition"), "", r("rules")].join("\n");
+  },
+};
 export const PROMPT_REGISTRY: PromptDefinition[] = [
   scriptOutlineDef,
   scriptGenerateDef,
@@ -2740,6 +2799,7 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   refVideoGenerateDef,
   refVideoPromptDef,
   videoH3PromptDef,
+  refVideoPromptH3Def,
   fl2vGuideDef,
   fl2vContentDef,
   fl2vConstraintsDef,
