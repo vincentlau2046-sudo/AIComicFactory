@@ -238,7 +238,7 @@ export async function POST(
   }
 
   if (action === "single_ref_video_prompt") {
-    return enqueueSingleTask(payload, modelConfig, "ref_video_prompt_generate");
+    return enqueueSingleTask(projectId, payload, modelConfig, "ref_video_prompt_generate");
   }
 
   if (action === "batch_ref_video_prompt") {
@@ -254,7 +254,7 @@ export async function POST(
   }
 
   if (action === "single_reference_video") {
-    return enqueueSingleTask(payload, modelConfig, "reference_video_generate");
+    return enqueueSingleTask(projectId, payload, modelConfig, "reference_video_generate");
   }
 
   if (action === "batch_reference_video") {
@@ -282,7 +282,7 @@ export async function POST(
   }
 
   if (action === "single_ref_image_generate") {
-    return enqueueSingleTask(payload, modelConfig, "scene_frame_generate");
+    return enqueueSingleTask(projectId, payload, modelConfig, "scene_frame_generate");
   }
 
   if (action === "generate_ref_prompts") {
@@ -2277,6 +2277,7 @@ async function handleBatchVideoGenerate(
 // ═══ Queue Dispatch Helpers (R2V Worker access) ═══
 
 async function enqueueSingleTask(
+  projectId: string,
   payload: Record<string, unknown> | undefined,
   modelConfig: ModelConfig | undefined,
   taskType: string,
