@@ -155,32 +155,13 @@ function buildUserContext(input: H3PromptInput, lang: H3Language): string {
   // ── Section 7: Output Format Requirements ────
   parts.push(`=== ${L("输出格式要求", "OUTPUT FORMAT REQUIREMENTS")} ===`);
   parts.push(L(
-    "按以下 6-section 英文标题格式输出。内容中文。section 顺序严格不可变：\n\n" +
-    "subject_definitions:\n" +
-    "<Subject 1> is 角色名，性别，身高cm，体型描述，面部特征… in <Picture N>.\n" +
-    "<Subject 2> is 场景环境: 场景描述… in <Picture N>.\n\n" +
-    "summary:\n" +
-    "[reference_generation] One paragraph in English describing the target video and its main reference relationships.\n\n" +
-    "retention_analysis:\n" +
-    "<Subject 1>: fully_preserved — 角色外观由 <Picture N> 严格锁定\n" +
-    "<Subject 2>: weak_reference — 场景氛围作为视觉引导\n\n" +
-    "detailed_description:\n" +
-    "(每2-3秒一个段落，精确到0.1s。用 <Subject N> <Picture N> 标签。\n" +
-    " 对白用 <d>[语言] 文本</d>。每段标注运镜动作)\n" +
-    "0.0s-3.0s: ... 运镜: push in (中幅度)\n" +
-    "3.0s-6.0s: ... 运镜: 中景切近景 (小幅度)\n\n" +
-    "overall_soundscape:\n" +
-    "(环境音/氛围声/音效描述。不可写 N/A)\n\n" +
-    "non_diegetic_music:\n" +
-    "(非叙事音乐描述。不可写 N/A)\n\n" +
-    "严格要求：禁止真实人名品牌IP。禁止markdown代码块。禁止前言。",
-    "Output in 6-section format with English headers, Chinese content. Sections must follow this exact order:\n\n" +
-    "subject_definitions: (each Subject with appearance from reference images)\n" +
-    "summary: (English paragraph with [task_type])\n" +
-    "retention_analysis: (fully_preserved/partially_preserved/attribute_transfer/weak_reference)\n" +
-    "detailed_description: (time-segmented with <Subject N>/<Picture N>/<d> tags)\n" +
-    "overall_soundscape: (ambient audio, cannot be N/A)\n" +
-    "non_diegetic_music: (music description, cannot be N/A)"
+    "严格按系统提示词中的 6-section 格式输出。\n\n" +
+    "特别注意：summary 必须用与脚本相同的语言书写（本条中文脚本 → summary 用中文），\n" +
+    "首行保留 [reference_generation] 标记，正文紧跟其后。\n\n" +
+    "禁止：重复输出任何 section、省略任何 section、输出 markdown 代码块、前言或总结。",
+    "Output in the exact 6-section format specified in the system prompt.\n" +
+    "CRITICAL: summary must be in the same language as the script. Do NOT force English.\n" +
+    "FORBIDDEN: duplicate sections, omitted sections, markdown blocks, preambles."
   ));
 
   return parts.join("\n");
