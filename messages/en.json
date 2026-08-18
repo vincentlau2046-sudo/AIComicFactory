@@ -559,7 +559,11 @@
       "rules": "Rules",
       "rulesDesc": "Core ruleset for this prompt",
       "durationStrategy": "Duration Strategy",
-      "durationStrategyDesc": "Description-granularity rules tiered by shot duration"
+      "durationStrategyDesc": "Description-granularity rules tiered by shot duration",
+      "processSteps": "Process Steps",
+      "processStepsDesc": "H3 video prompt generation steps and constraints",
+      "outputRules": "Output Rules",
+      "outputRulesDesc": "H3 video prompt output format requirements"
     }
   },
   "categories": {}

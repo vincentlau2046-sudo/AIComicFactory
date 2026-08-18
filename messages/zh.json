@@ -407,7 +407,9 @@
       "videoH3R2vGuide": "H3 R2V · 引导",
       "videoH3R2vGuideDesc": "R2V 参考模式引导层",
       "videoH3T2vGuide": "H3 T2V · 引导",
-      "videoH3T2vGuideDesc": "T2V 文本模式引导层"
+      "videoH3T2vGuideDesc": "T2V 文本模式引导层",
+      "refVideoPromptH3": "R2V 视频提示词 (H3)",
+      "refVideoPromptH3Desc": "基于参考图的 H3 Ref2VA 6-section 视频提示词"
     },
     "editor": {
       "slotMode": "插槽",
@@ -562,7 +564,11 @@
       "rules": "规则",
       "rulesDesc": "本提示词的核心规则集",
       "durationStrategy": "时长策略",
-      "durationStrategyDesc": "按镜头时长分级的描述颗粒度规则"
+      "durationStrategyDesc": "按镜头时长分级的描述颗粒度规则",
+      "processSteps": "生成步骤",
+      "processStepsDesc": "H3 视频提示词的生成步骤与约束规则",
+      "outputRules": "输出规则",
+      "outputRulesDesc": "H3 视频提示词的输出格式要求"
     }
   },
   "categories": {}
