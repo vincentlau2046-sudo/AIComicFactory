@@ -383,6 +383,8 @@ export const tasks = sqliteTable("tasks", {
       "character_image",
       "shot_split",
       "frame_generate",
+      "scene_frame_generate",
+      "reference_video_generate",
       "video_generate",
       "video_assemble",
     ],

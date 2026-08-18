@@ -242,15 +242,15 @@ export async function POST(
   }
 
   if (action === "batch_scene_frame") {
-    return handleBatchSceneFrame(projectId, userId, payload, modelConfig, episodeId);
+    return handleBatchSceneFrameViaQueue(projectId, userId, payload, modelConfig, episodeId, "scene_frame_generate");
   }
 
   if (action === "single_reference_video") {
-    return handleSingleReferenceVideo(projectId, userId, payload, modelConfig);
+    return enqueueSingleTask(payload, modelConfig, "reference_video_generate");
   }
 
   if (action === "batch_reference_video") {
-    return handleBatchReferenceVideo(projectId, userId, payload, modelConfig, episodeId);
+    return handleBatchSceneFrameViaQueue(projectId, userId, payload, modelConfig, episodeId, "reference_video_generate");
   }
 
   if (action === "single_video_prompt") {
@@ -270,11 +270,11 @@ export async function POST(
   }
 
   if (action === "batch_ref_image_generate") {
-    return handleBatchRefImageGenerate(projectId, userId, payload, modelConfig, episodeId);
+    return handleBatchSceneFrameViaQueue(projectId, userId, payload, modelConfig, episodeId, "scene_frame_generate");
   }
 
   if (action === "single_ref_image_generate") {
-    return handleSingleRefImageGenerate(projectId, userId, payload, modelConfig);
+    return enqueueSingleTask(payload, modelConfig, "scene_frame_generate");
   }
 
   if (action === "generate_ref_prompts") {
@@ -282,7 +282,7 @@ export async function POST(
   }
 
   if (action === "single_ref_image_generate_all") {
-    return handleSingleShotRefImageGenerateAll(projectId, userId, payload, modelConfig);
+    return enqueueSingleShotRefImages(projectId, payload, modelConfig);
   }
 
   // Image/video generation - keep in task queue
@@ -2263,6 +2263,83 @@ async function handleBatchVideoGenerate(
 }
 
 // --- single_scene_frame: generate Toonflow-style scene reference frame only ---
+
+
+
+// ═══ Queue Dispatch Helpers (R2V Worker access) ═══
+
+async function enqueueSingleTask(
+  payload: Record<string, unknown> | undefined,
+  modelConfig: ModelConfig | undefined,
+  taskType: string,
+) {
+  const shotId = payload?.shotId as string;
+  if (!shotId) return NextResponse.json({ error: "No shotId" }, { status: 400 });
+  const projectId = (payload as any)?.projectId as string;
+  if (!projectId) return NextResponse.json({ error: "No projectId" }, { status: 400 });
+  
+  const task = await enqueueTask({
+    type: taskType as any,
+    projectId,
+    payload: { shotId, projectId, userId: (payload as any)?.userId, modelConfig, ratio: payload?.ratio },
+  });
+  return NextResponse.json({ taskId: task.id, status: "enqueued" });
+}
+
+async function handleBatchSceneFrameViaQueue(
+  projectId: string,
+  userId: string,
+  payload: Record<string, unknown> | undefined,
+  modelConfig: ModelConfig | undefined,
+  episodeId: string | undefined,
+  taskType: string,
+) {
+  const batchVersionId = payload?.versionId as string | undefined;
+  const { eq, and, asc } = await import("drizzle-orm");
+  const shotWhereConditions = [eq(shots.projectId, projectId)];
+  if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
+  if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
+  
+  const allShots = await db.select().from(shots)
+    .where(and(...shotWhereConditions))
+    .orderBy(asc(shots.sequence));
+  
+  const taskIds: string[] = [];
+  for (const shot of allShots) {
+    const t = await enqueueTask({
+      type: taskType as any,
+      projectId,
+      episodeId,
+      payload: { shotId: shot.id, projectId, userId, modelConfig, ratio: payload?.ratio },
+    });
+    taskIds.push(t.id);
+  }
+  return NextResponse.json({ enqueued: taskIds.length, taskIds });
+}
+
+async function enqueueSingleShotRefImages(
+  projectId: string,
+  payload: Record<string, unknown> | undefined,
+  modelConfig: ModelConfig | undefined,
+) {
+  const shotId = payload?.shotId as string;
+  if (!shotId) return NextResponse.json({ error: "No shotId" }, { status: 400 });
+  
+  const { loadShotLegacyView } = await import("@/lib/shot-asset-utils");
+  const view = await loadShotLegacyView(shotId);
+  const pending = view.referenceImages.filter(r => r.status === "pending" && r.prompt?.trim());
+  
+  const taskIds: string[] = [];
+  for (const ref of pending) {
+    const t = await enqueueTask({
+      type: "scene_frame_generate" as any,
+      projectId,
+      payload: { shotId, projectId, userId: (payload as any)?.userId, modelConfig, ratio: payload?.ratio },
+    });
+    taskIds.push(t.id);
+  }
+  return NextResponse.json({ enqueued: taskIds.length, taskIds, pendingCount: pending.length });
+}
 
 async function handleSingleSceneFrame(
   projectId: string,

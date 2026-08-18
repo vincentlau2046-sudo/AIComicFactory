@@ -40,7 +40,7 @@ export async function dequeueTask(opts?: {
     ? sql`(SELECT id FROM tasks
         WHERE status = 'pending'
         AND (scheduled_at IS NULL OR scheduled_at <= ${now.getTime()})
-        AND type NOT IN ('frame_generate','video_generate','character_image')
+        AND type NOT IN ('frame_generate','video_generate','character_image','scene_frame_generate','reference_video_generate')
         ORDER BY created_at ASC LIMIT 1)`
     : sql`(SELECT id FROM tasks
         WHERE status = 'pending'

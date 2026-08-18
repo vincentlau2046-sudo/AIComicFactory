@@ -7,6 +7,8 @@ import { handleShotSplit } from "./shot-split";
 import { handleFrameGenerate } from "./frame-generate";
 import { handleVideoGenerate } from "./video-generate";
 import { handleVideoAssemble } from "./video-assemble";
+import { handleSceneFrameGenerate } from "./scene-frame-generate";
+import { handleReferenceVideoGenerate } from "./reference-video-generate";
 
 export function registerPipelineHandlers() {
   registerHandlers({
@@ -18,5 +20,7 @@ export function registerPipelineHandlers() {
     frame_generate: handleFrameGenerate,
     video_generate: handleVideoGenerate,
     video_assemble: handleVideoAssemble,
+    scene_frame_generate: handleSceneFrameGenerate,
+    reference_video_generate: handleReferenceVideoGenerate,
   });
 }
