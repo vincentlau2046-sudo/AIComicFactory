@@ -8,7 +8,7 @@ import type { AIProvider } from "@/lib/ai/types";
 import type { H3PromptInput, H3PromptOutput } from "../types";
 import { buildR2VPromptTemplate } from "./prompt-template";
 import { buildR2VPrompt } from "./ref-builder";
-import { resolveLanguage, parseLLMSections } from "../shared/base-builder";
+import { resolveLanguage } from "../shared/base-builder";
 
 /**
  * R2V Vision LLM builder.
@@ -40,7 +40,9 @@ export async function buildR2VPromptLLM(
 
     if (!raw?.trim()) throw new Error("[H3-R2V] Empty VL response");
 
-    const sections = parseLLMSections(raw, input, lang);
+    // R2V output is already a complete 6-section text — no parsing needed.
+    // Store as single section; handler joins and stores as shot.videoPrompt.
+    const sections = [raw.trim()];
 
     return {
       output: {

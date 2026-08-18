@@ -73,7 +73,7 @@ export async function handleRefVideoPromptGenerate(task: Task) {
   });
 
   // 4. Resolve H3 system prompt from Registry (like FL2V)
-  const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId })
+  const h3System = await resolvePrompt("ref_video_prompt_h3", { userId, projectId })
     .catch(() => undefined);
 
   // 5. Vision LLM with fallback

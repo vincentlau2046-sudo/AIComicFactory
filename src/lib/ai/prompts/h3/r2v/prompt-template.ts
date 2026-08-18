@@ -155,23 +155,32 @@ function buildUserContext(input: H3PromptInput, lang: H3Language): string {
   // ── Section 7: Output Format Requirements ────
   parts.push(`=== ${L("输出格式要求", "OUTPUT FORMAT REQUIREMENTS")} ===`);
   parts.push(L(
-    "按 MiniMax H3 Ref2VA 6-section 格式输出。每个 section 用对应的英文标题开始，然后写中文内容：\n\n" +
-    "horizontal_style:\n(描述视觉风格和颜色调色板)\n\n" +
-    "frame_alignment:\n(说明 <Picture N> 对应的时间点)\n\n" +
-    "integrated_multimodal_description:\n" +
-    "(详细视频描述。每 2-3 秒一个自然段落。每个段落用 <Subject N> 和 <Picture N> 标签。\n" +
-    "对白使用 <d>[中文] text</d> 格式嵌入对应的 subject。\n" +
-    "每个段落必须以时间戳开始。\n" +
-    "每个段落包含对应的运镜动作)\n\n" +
-    "overall_soundscape:\n(环境音、氛围声、音效)\n\n" +
-    "non_diegetic_music:\n(非叙事音乐的描述)\n\n" +
-    "严格要求：禁止真实人名/品牌/IP/导演/演员。禁止markdown代码块。禁止前言。",
-    "Output in MiniMax H3 Ref2VA format with these English section headers and Chinese content:\n\n" +
-    "horizontal_style: (visual style and color palette)\n" +
-    "frame_alignment: (<Picture N> timing)\n" +
-    "integrated_multimodal_description: (video description with timestamps, <Subject N>/<Picture N> tags)\n" +
-    "overall_soundscape: (ambient sound)\n" +
-    "non_diegetic_music: (non-diegetic music description)"
+    "按以下 6-section 英文标题格式输出。内容中文。section 顺序严格不可变：\n\n" +
+    "subject_definitions:\n" +
+    "<Subject 1> is 角色名，性别，身高cm，体型描述，面部特征… in <Picture N>.\n" +
+    "<Subject 2> is 场景环境: 场景描述… in <Picture N>.\n\n" +
+    "summary:\n" +
+    "[reference_generation] One paragraph in English describing the target video and its main reference relationships.\n\n" +
+    "retention_analysis:\n" +
+    "<Subject 1>: fully_preserved — 角色外观由 <Picture N> 严格锁定\n" +
+    "<Subject 2>: weak_reference — 场景氛围作为视觉引导\n\n" +
+    "detailed_description:\n" +
+    "(每2-3秒一个段落，精确到0.1s。用 <Subject N> <Picture N> 标签。\n" +
+    " 对白用 <d>[语言] 文本</d>。每段标注运镜动作)\n" +
+    "0.0s-3.0s: ... 运镜: push in (中幅度)\n" +
+    "3.0s-6.0s: ... 运镜: 中景切近景 (小幅度)\n\n" +
+    "overall_soundscape:\n" +
+    "(环境音/氛围声/音效描述。不可写 N/A)\n\n" +
+    "non_diegetic_music:\n" +
+    "(非叙事音乐描述。不可写 N/A)\n\n" +
+    "严格要求：禁止真实人名品牌IP。禁止markdown代码块。禁止前言。",
+    "Output in 6-section format with English headers, Chinese content. Sections must follow this exact order:\n\n" +
+    "subject_definitions: (each Subject with appearance from reference images)\n" +
+    "summary: (English paragraph with [task_type])\n" +
+    "retention_analysis: (fully_preserved/partially_preserved/attribute_transfer/weak_reference)\n" +
+    "detailed_description: (time-segmented with <Subject N>/<Picture N>/<d> tags)\n" +
+    "overall_soundscape: (ambient audio, cannot be N/A)\n" +
+    "non_diegetic_music: (music description, cannot be N/A)"
   ));
 
   return parts.join("\n");
