@@ -87,20 +87,17 @@ export async function handleReferenceVideoGenerate(task: Task) {
   const videoMaxDuration = getModelMaxDuration(payload.modelConfig?.video?.modelId);
   const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
 
-  // 6. Build video prompt (Vision LLM with fallback)
+  // 6. Build video prompt
+  //    Priority: reference-format stored prompt > Vision LLM > fallback template
   let videoPrompt: string;
-  if (shot.videoPrompt) {
-    // Use stored prompt
-    const charRefInfos = charRefs.map((c, i) => ({ name: c.name, index: i + 1 }));
-    const sceneFrameInfos = sceneFramePaths.map((_, i) => {
-      const name = (sceneFrames[i]?.meta as any)?.sceneName || (sceneFramePaths.length > 1 ? `场景-${i + 1}` : `场景`);
-      return { label: name, index: charRefs.length + i + 1 };
-    });
-    const fullMapping = [...charRefInfos.map((c) => `@图片${c.index}是${c.name}`),
-      ...sceneFrameInfos.map((s) => `@图片${s.index}是${s.label}`)].join("，") + "。";
-    videoPrompt = shot.videoPrompt.includes("图像映射") ? shot.videoPrompt : `图像映射：${fullMapping}。\n\n${shot.videoPrompt}`;
+  const storedPrompt = shot.videoPrompt || "";
+  const hasRefFormat = storedPrompt.includes("@图片") || storedPrompt.includes("图像映射");
+
+  if (hasRefFormat) {
+    // Valid reference-mode prompt (from ref_video_prompt_generate task)
+    videoPrompt = storedPrompt;
   } else {
-    // Vision LLM generation with fallback
+    // No stored reference prompt → Vision LLM with fallback
     try {
       const textProvider = resolveAIProvider(payload.modelConfig);
       const systemPrompt = await resolvePrompt("ref_video_prompt", {

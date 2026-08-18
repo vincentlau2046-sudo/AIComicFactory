@@ -237,6 +237,14 @@ export async function POST(
     return handleBatchVideoGenerate(projectId, userId, payload, modelConfig, episodeId);
   }
 
+  if (action === "single_ref_video_prompt") {
+    return enqueueSingleTask(payload, modelConfig, "ref_video_prompt_generate");
+  }
+
+  if (action === "batch_ref_video_prompt") {
+    return handleBatchSceneFrameViaQueue(projectId, userId, payload, modelConfig, episodeId, "ref_video_prompt_generate");
+  }
+
   if (action === "single_scene_frame") {
     return handleSingleSceneFrame(projectId, userId, payload, modelConfig);
   }

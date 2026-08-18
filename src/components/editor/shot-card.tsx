@@ -395,7 +395,7 @@ export function ShotCard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "single_video_prompt",
+          action: generationMode === "reference" ? "single_ref_video_prompt" : "single_video_prompt",
           payload: { shotId: id },
           modelConfig: getModelConfig(),
         }),

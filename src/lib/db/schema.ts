@@ -385,6 +385,7 @@ export const tasks = sqliteTable("tasks", {
       "frame_generate",
       "scene_frame_generate",
       "reference_video_generate",
+      "ref_video_prompt_generate",
       "video_generate",
       "video_assemble",
     ],

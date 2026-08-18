@@ -9,6 +9,7 @@ import { handleVideoGenerate } from "./video-generate";
 import { handleVideoAssemble } from "./video-assemble";
 import { handleSceneFrameGenerate } from "./scene-frame-generate";
 import { handleReferenceVideoGenerate } from "./reference-video-generate";
+import { handleRefVideoPromptGenerate } from "./ref-video-prompt-generate";
 
 export function registerPipelineHandlers() {
   registerHandlers({
@@ -20,6 +21,7 @@ export function registerPipelineHandlers() {
     frame_generate: handleFrameGenerate,
     video_generate: handleVideoGenerate,
     video_assemble: handleVideoAssemble,
+    ref_video_prompt_generate: handleRefVideoPromptGenerate,
     scene_frame_generate: handleSceneFrameGenerate,
     reference_video_generate: handleReferenceVideoGenerate,
   });

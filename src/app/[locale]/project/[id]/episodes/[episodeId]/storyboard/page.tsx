@@ -506,9 +506,13 @@ export default function EpisodeStoryboardPage() {
   async function handleBatchGenerateVideoPrompts() {
     if (!project) return;
     setGeneratingVideoPrompts(true);
-    setLastBatchAction("batch_video_prompt");
+    setLastBatchAction(generationMode === "reference" ? "batch_ref_video_prompt" : "batch_video_prompt");
 
-    const targets = project.shots.filter((s) => !s.videoPrompt);
+    // Reference mode: all shots need prompts (ignore keyframe residual)
+    // Keyframe mode: only shots without existing prompt
+    const targets = generationMode === "reference"
+      ? project.shots
+      : project.shots.filter((s) => !s.videoPrompt);
     setBatchProgress({ total: targets.length, completed: 0, failed: [] });
 
     try {
@@ -516,7 +520,7 @@ export default function EpisodeStoryboardPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "batch_video_prompt",
+          action: generationMode === "reference" ? "batch_ref_video_prompt" : "batch_video_prompt",
           payload: { versionId: selectedVersionId },
           modelConfig: getModelConfig(),
           episodeId: useProjectStore.getState().currentEpisodeId,
@@ -600,6 +604,7 @@ export default function EpisodeStoryboardPage() {
       batch_scene_frame: "single_scene_frame",
       batch_reference_video: "single_reference_video",
       batch_video_prompt: "single_video_prompt",
+      batch_ref_video_prompt: "single_ref_video_prompt",
     };
     const singleAction = lastBatchAction ? actionMap[lastBatchAction] : null;
     if (!singleAction) return;
@@ -608,7 +613,7 @@ export default function EpisodeStoryboardPage() {
     if (lastBatchAction === "batch_frame_generate") setGeneratingFrames(true);
     else if (lastBatchAction === "batch_video_generate" || lastBatchAction === "batch_reference_video") setGeneratingVideos(true);
     else if (lastBatchAction === "batch_scene_frame") setGeneratingSceneFrames(true);
-    else if (lastBatchAction === "batch_video_prompt") setGeneratingVideoPrompts(true);
+    else if (lastBatchAction === "batch_video_prompt" || lastBatchAction === "batch_ref_video_prompt") setGeneratingVideoPrompts(true);
 
     setBatchProgress({ total: failedShots.length, completed: 0, failed: [] });
     const newFailedIds: string[] = [];
