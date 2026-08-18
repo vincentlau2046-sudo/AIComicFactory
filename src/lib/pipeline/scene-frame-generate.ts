@@ -16,7 +16,7 @@ import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { failTask } from "@/lib/task-queue";
-import { getActiveAssets, insertAssetVersion } from "@/lib/shot-asset-utils";
+import { getActiveAssets, insertAssetVersion, copyToUploads } from "@/lib/shot-asset-utils";
 import { ratioToSize } from "@/lib/ai/size";
 
 export async function handleSceneFrameGenerate(task: Task) {
@@ -61,16 +61,17 @@ export async function handleSceneFrameGenerate(task: Task) {
         quality: "hd",
         ...batchImageOpts,
       });
+      const uploadPath = copyToUploads(imagePath, 'reference');
       await insertAssetVersion({
         shotId: shot.id,
         type: "reference",
         sequenceInType: entry.sequenceInType,
         prompt: entry.prompt,
-        fileUrl: imagePath,
+        fileUrl: uploadPath,
         status: "completed",
         characters: entry.characters ?? undefined,
       });
-      generatedPaths.push(imagePath);
+      generatedPaths.push(uploadPath);
       generated++;
     } catch (err) {
       failed++;
