@@ -526,7 +526,17 @@ export default function EpisodeStoryboardPage() {
           episodeId: useProjectStore.getState().currentEpisodeId,
         }),
       });
-      const data = await response.json() as { results: Array<{ shotId?: string; status: string }> };
+      const data = await response.json() as { results?: Array<{ shotId?: string; status: string }>; enqueued?: number };
+
+      // Reference mode: backend returns enqueued count (async processing)
+      if (data.enqueued !== undefined) {
+        setBatchProgress({ total: data.enqueued, completed: 0, failed: [] });
+        toast.success(`Enqueued ${data.enqueued} video prompt tasks — generating...`);
+        setGeneratingVideoPrompts(false);
+        return;
+      }
+
+      // Keyframe mode: backend returns completion results
       const failedIds = (data.results || []).filter((r) => r.status === "error").map((r) => r.shotId!).filter(Boolean);
       const totalProcessed = data.results?.length || targets.length;
       setBatchProgress({ total: totalProcessed, completed: totalProcessed, failed: failedIds });
