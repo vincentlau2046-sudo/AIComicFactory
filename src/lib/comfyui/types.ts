@@ -75,6 +75,7 @@ export interface ExecuteResult {
   duration: number  // ms
   seed: number
   outputs: WorkflowOutput[]
+  failedDownloads?: Array<{ nodeId: number; filename: string; subfolder: string; error: string }>
 }
 
 export interface QueueStatus {

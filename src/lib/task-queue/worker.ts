@@ -2,9 +2,30 @@ import { dequeueTask, completeTask, failTask } from "./queue";
 import type { TaskHandlerMap, Task } from "./types";
 
 const POLL_INTERVAL_MS = 2000;
+const COMFYUI_BASE_URL = process.env.COMFYUI_BASE_URL || 'http://localhost:8188';
 
 let isRunning = false;
 let handlers: TaskHandlerMap = {};
+
+// ─── ComfyUI health cache ───
+let comfyHealthy = true;
+let comfyLastCheck = 0;
+
+async function checkComfyHealth(): Promise<boolean> {
+  const now = Date.now();
+  // Healthy: 30s cache. Unhealthy: 10s cache (faster recovery detection).
+  const ttl = comfyHealthy ? 30_000 : 10_000;
+  if (now - comfyLastCheck < ttl) return comfyHealthy;
+  try {
+    const res = await fetch(`${COMFYUI_BASE_URL}/system_stats`, { signal: AbortSignal.timeout(3000) });
+    comfyHealthy = res.ok;
+  } catch (err) {
+    comfyHealthy = false;
+    console.error(`[Worker] ComfyUI health check failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  comfyLastCheck = now;
+  return comfyHealthy;
+}
 
 export function registerHandlers(newHandlers: TaskHandlerMap) {
   handlers = { ...handlers, ...newHandlers };
@@ -30,7 +51,9 @@ async function poll() {
   if (!isRunning) return;
 
   try {
-    const task = await dequeueTask();
+    const ok = await checkComfyHealth();
+    if (!ok) console.log("[Worker] ComfyUI offline, skipping ComfyUI tasks");
+    const task = await dequeueTask({ skipComfy: !ok });
     if (task) {
       await processTask(task);
     }

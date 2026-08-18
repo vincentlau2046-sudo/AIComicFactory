@@ -232,14 +232,55 @@ export class ComfyUIClient {
     return json
   }
 
-  /** Download an output file from ComfyUI's output directory */
+  /** Download an output file from ComfyUI's output directory with retry. */
   async downloadOutput(nodeId: number, filename: string, subfolder?: string): Promise<Buffer> {
     const params = new URLSearchParams({ filename, type: 'output', subfolder: subfolder || '' })
-    const res = await this.rawRequest('GET', `/view?${params}`)
-    if (!res.ok) {
-      throw new Error(`Failed to download output: ${res.status}`)
+    const deadline = Date.now() + 60_000; // 60s total deadline
+    let lastErr: Error | undefined;
+
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (Date.now() >= deadline) {
+        throw new Error(`Download deadline exceeded for ${filename}`);
+      }
+      try {
+        const res = await this.rawRequest('GET', `/view?${params}`, undefined, { timeout: 30_000 });
+        if (!res.ok) {
+          // 404: ComfyUI file not ready yet (race condition) — retry once
+          if (res.status === 404 && attempt < 1) {
+            lastErr = new Error(`Download 404 (retryable): ${filename}`);
+            await sleep(1000);
+            continue;
+          }
+          if (res.status === 404) throw new Error(`Download 404 (permanent): ${filename}`);
+          // 5xx / 502/503/504: retryable
+          if (res.status >= 500 || [502, 503, 504].includes(res.status)) {
+            lastErr = new Error(`Download HTTP ${res.status}: ${filename}`);
+            if (attempt < 3) { await sleep(1000 * Math.pow(2, attempt) + Math.random() * 500); continue; }
+            throw lastErr;
+          }
+          throw new Error(`Download HTTP ${res.status}: ${filename}`);
+        }
+        const buf = Buffer.from(await res.arrayBuffer());
+        // Content-Length integrity check
+        const contentLength = res.headers.get('content-length');
+        if (contentLength && buf.length !== parseInt(contentLength, 10)) {
+          lastErr = new Error(`Download truncated: expected ${contentLength}B, got ${buf.length}B`);
+          if (attempt < 3) { await sleep(1000 * Math.pow(2, attempt) + Math.random() * 500); continue; }
+          throw lastErr;
+        }
+        return buf;
+      } catch (err) {
+        lastErr = err instanceof Error ? err : new Error(String(err));
+        // Connection/timeout errors: retry
+        if (attempt < 3 && (lastErr.message.includes('fetch') || lastErr.message.includes('timeout') || lastErr.message.includes('abort'))) {
+          console.warn(`[ComfyUI] Download retry ${attempt + 1}/4 for ${filename}: ${lastErr.message}`);
+          await sleep(1000 * Math.pow(2, attempt) + Math.random() * 500);
+          continue;
+        }
+        if (attempt < 3) throw lastErr; // non-retryable
+      }
     }
-    return Buffer.from(await res.arrayBuffer())
+    throw lastErr ?? new Error(`Download failed after 4 attempts: ${filename}`);
   }
 
   /** Free GPU memory — call before model switch */
@@ -340,9 +381,11 @@ export class ComfyUIClient {
     )
   }
 
-  private async rawRequest(method: string, path: string, body?: BodyInit): Promise<Response> {
+  private async rawRequest(method: string, path: string, body?: BodyInit, opts?: { timeout?: number }): Promise<Response> {
     const url = `${this.baseUrl}${path}`
-    return fetch(url, { method, body })
+    const init: RequestInit = { method, body };
+    if (opts?.timeout) init.signal = AbortSignal.timeout(opts.timeout);
+    return fetch(url, init);
   }
 }
 

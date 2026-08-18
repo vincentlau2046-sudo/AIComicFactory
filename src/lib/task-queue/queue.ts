@@ -28,22 +28,30 @@ export async function enqueueTask(params: {
   return task;
 }
 
-export async function dequeueTask(): Promise<
+export async function dequeueTask(opts?: {
+  skipComfy?: boolean;
+}): Promise<
   typeof tasks.$inferSelect | null
 > {
   const now = new Date();
 
+  // Build subquery — skip ComfyUI types if ComfyUI is offline
+  const subquery = opts?.skipComfy
+    ? sql`(SELECT id FROM tasks
+        WHERE status = 'pending'
+        AND (scheduled_at IS NULL OR scheduled_at <= ${now.getTime()})
+        AND type NOT IN ('frame_generate','video_generate','character_image')
+        ORDER BY created_at ASC LIMIT 1)`
+    : sql`(SELECT id FROM tasks
+        WHERE status = 'pending'
+        AND (scheduled_at IS NULL OR scheduled_at <= ${now.getTime()})
+        ORDER BY created_at ASC LIMIT 1)`;
+
   // Atomic claim: UPDATE ... WHERE in a single statement to avoid race conditions.
-  // Finds the first pending task that is either unscheduled or due, and atomically sets it to "running".
   const [task] = await db
     .update(tasks)
     .set({ status: "running" })
-    .where(
-      eq(
-        tasks.id,
-        sql`(SELECT id FROM ${tasks} WHERE ${tasks.status} = 'pending' AND (${tasks.scheduledAt} IS NULL OR ${tasks.scheduledAt} <= ${now.getTime()}) ORDER BY ${tasks.createdAt} ASC LIMIT 1)`
-      )
-    )
+    .where(eq(tasks.id, subquery))
     .returning();
 
   return task || null;

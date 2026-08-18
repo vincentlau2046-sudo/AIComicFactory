@@ -87,6 +87,7 @@ export class AtomicWorkflowExecutor {
 
     // 4. Parse and download outputs
     const outputs: WorkflowOutput[] = []
+    const failedDownloads: Array<{ nodeId: number; filename: string; subfolder: string; error: string }> = []
     for (const outputDef of meta.outputs) {
       const nodeOutputs = history.outputs
       if (!nodeOutputs || typeof nodeOutputs !== 'object') break
@@ -142,8 +143,10 @@ export class AtomicWorkflowExecutor {
                 localPath: finalPath,
                 originalName: filename,
               })
-            } catch {
-              // skip this file on download error
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.error(`[Executor] Download failed: ${filename} (node ${nodeId}) — ${msg}`);
+              failedDownloads.push({ nodeId: Number(nodeId), filename, subfolder: subfolder || '', error: msg });
             }
           } // matches loop
         } // mediaKeys loop
@@ -157,7 +160,39 @@ export class AtomicWorkflowExecutor {
       duration: Date.now() - startTime,
       seed: usedSeed,
       outputs,
+      failedDownloads: failedDownloads.length > 0 ? failedDownloads : undefined,
     }
+  }
+
+  /**
+   * Re-download specific output files from a completed ComfyUI prompt.
+   */
+  async downloadOutputsByPromptId(
+    promptId: string,
+    failedFiles: Array<{ nodeId: number; filename: string; subfolder: string }>,
+    outputDir?: string,
+  ): Promise<{ downloaded: WorkflowOutput[]; failed: typeof failedFiles }> {
+    const dir = outputDir || process.env.OUTPUT_DIR || '/tmp/aicf-outputs';
+    const jobDir = path.join(dir, promptId);
+    fs.mkdirSync(jobDir, { recursive: true });
+    const downloaded: WorkflowOutput[] = [];
+    const failed: typeof failedFiles = [];
+    for (const f of failedFiles) {
+      try {
+        const buf = await this.client.downloadOutput(f.nodeId, f.filename, f.subfolder);
+        const finalPath = path.join(jobDir, f.filename);
+        fs.writeFileSync(finalPath, buf);
+        downloaded.push({
+          type: /\.(mp4|webm|gif)$/i.test(f.filename) ? 'video' : 'image',
+          localPath: finalPath,
+          originalName: f.filename,
+        });
+      } catch (err) {
+        console.error(`[Executor] Recovery download failed: ${f.filename}`);
+        failed.push(f);
+      }
+    }
+    return { downloaded, failed };
   }
 
   // ─── Parameter Injection ────────────────────────────────
