@@ -20,7 +20,7 @@ import { getModelMaxDuration } from "@/lib/ai/model-limits";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { failTask } from "@/lib/task-queue";
-import { getActiveAsset, getActiveAssets, insertAssetVersion, loadShotLegacyView, stripCharHint } from "@/lib/shot-asset-utils";
+import { getActiveAsset, getActiveAssets, insertAssetVersion, loadShotLegacyView, stripCharHint, copyToUploads } from "@/lib/shot-asset-utils";
 import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 
 export async function handleReferenceVideoGenerate(task: Task) {
@@ -167,12 +167,13 @@ export async function handleReferenceVideoGenerate(task: Task) {
   });
 
   // 8. Persist
+  const videoPath = copyToUploads(result.filePath, 'reference_video');
   await insertAssetVersion({
     shotId: shot.id,
     type: "reference_video",
     sequenceInType: 0,
     prompt: videoPrompt,
-    fileUrl: result.filePath,
+    fileUrl: videoPath,
     status: "completed",
   });
 

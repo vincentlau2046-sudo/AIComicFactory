@@ -2384,21 +2384,20 @@ async function handleSingleSceneFrame(
     const sceneFramePath = await imageProvider.generateImage(sceneFramePrompt, {
       quality: "hd",
     });
+    const uploadPath = copyToUploads(sceneFramePath, 'scene_frame');
 
     {
       const refEx = await getActiveAsset(shotId, "reference", 0);
       if (refEx) {
-        // Preserve pre-existing characters metadata on regeneration.
-        await patchAsset(refEx.id, { fileUrl: sceneFramePath, status: "completed" });
+        await patchAsset(refEx.id, { fileUrl: uploadPath, status: "completed" });
       } else {
-        // Fresh creation: copy characters from sibling ref assets if any.
         const siblingChars = sceneFrameView.referenceImages[0]?.characters ?? undefined;
         await insertAssetVersion({
           shotId,
           type: "reference",
           sequenceInType: 0,
           prompt: "",
-          fileUrl: sceneFramePath,
+          fileUrl: uploadPath,
           status: "completed",
           characters: siblingChars,
         });
@@ -2409,7 +2408,7 @@ async function handleSingleSceneFrame(
       .set({ status: "pending" })
       .where(eq(shots.id, shotId));
 
-    return NextResponse.json({ shotId, sceneRefFrame: sceneFramePath, status: "ok" });
+    return NextResponse.json({ shotId, sceneRefFrame: uploadPath, status: "ok" });
   } catch (err) {
     console.error(`[SingleSceneFrame] Error for shot ${shot.sequence}:`, err);
     await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shotId));
