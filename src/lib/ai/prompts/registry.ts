@@ -2780,7 +2780,7 @@ const REF_VIDEO_H3_RULES = [
   "<Subject 3> is 场景环境: 竹林中，青翠竹干密布，地面落叶层叠 in <Picture 1>.",
   "",
   "summary:",
-  "[reference_generation + keyframe_completion] Li Mubai chases Yu Jiaolong through a bamboo forest, leaping from ground level to treetops for a brief sword duel.",
+  "[reference_generation + keyframe_completion] 李慕白在竹林中追逐玉娇龙，两人从地面跃上竹梢短暂交手。本镜头通过场景帧锁定竹林环境和角色外观。",
   "",
   "retention_analysis:",
   "<Subject 1>: fully_preserved - 角色外观由 <Picture 3> 严格锁定",
