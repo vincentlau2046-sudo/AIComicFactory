@@ -4,12 +4,13 @@ import type { TaskHandlerMap, Task } from "./types";
 const POLL_INTERVAL_MS = 2000;
 const COMFYUI_BASE_URL = process.env.COMFYUI_BASE_URL || 'http://localhost:8188';
 const MAX_CONCURRENCY = parseInt(process.env.TASK_MAX_CONCURRENCY || "4", 10);
-const COMFYUI_TASK_TYPES = new Set(['frame_generate','video_generate','character_image','scene_frame_generate','reference_video_generate']);
 
 let isRunning = false;
 let handlers: TaskHandlerMap = {};
+
+// ─── Slot tracking ───
 let activeCount = 0;
-let comfyActive = false;  // ComfyUI single-GPU — enforce serial
+let comfyActive = false;
 
 // ─── ComfyUI health cache ───
 let comfyHealthy = true;
@@ -40,7 +41,6 @@ async function processTask(task: Task) {
     await failTask(task.id, `No handler registered for task type: ${task.type}`);
     return;
   }
-
   try {
     const result = await handler(task);
     await completeTask(task.id, result);
@@ -50,27 +50,33 @@ async function processTask(task: Task) {
   }
 }
 
+function runTask(task: Task, isComfy: boolean) {
+  activeCount++;
+  if (isComfy) comfyActive = true;
+  processTask(task).finally(() => {
+    activeCount--;
+    if (isComfy) comfyActive = false;
+  });
+}
+
 async function poll() {
   if (!isRunning) return;
 
   try {
     const ok = await checkComfyHealth();
-    if (!ok) console.log("[Worker] ComfyUI offline, skipping ComfyUI tasks");
+    if (!ok) console.log("[Worker] ComfyUI offline");
 
-    const slots = MAX_CONCURRENCY - activeCount;
-    if (slots > 0) {
-      const tasks = await dequeueTasks(slots, { skipComfy: !ok });
-      for (const task of tasks) {
-        const isComfy = COMFYUI_TASK_TYPES.has(task.type);
-        // ComfyUI tasks are serial (single-GPU) — skip if one already running
-        if (isComfy && comfyActive) continue;
-        activeCount++;
-        if (isComfy) comfyActive = true;
-        processTask(task).finally(() => {
-          activeCount--;
-          if (isComfy) comfyActive = false;
-        });
-      }
+    // ── Path A: ComfyUI tasks — serial, one at a time ──
+    if (ok && !comfyActive) {
+      const comfyTask = await dequeueTask({ skipComfy: false });
+      if (comfyTask) runTask(comfyTask, true);
+    }
+
+    // ── Path B: LLM/VL tasks — concurrent, up to MAX_CONCURRENCY ──
+    const llmSlots = MAX_CONCURRENCY - activeCount;
+    if (llmSlots > 0) {
+      const llmTasks = await dequeueTasks(llmSlots, { skipComfy: true });
+      for (const t of llmTasks) runTask(t, false);
     }
   } catch (err) {
     console.error("[TaskWorker] Poll error:", err);
