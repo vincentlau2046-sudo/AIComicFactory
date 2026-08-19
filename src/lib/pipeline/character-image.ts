@@ -5,6 +5,7 @@ import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { buildCharacterFrontViewPrompt } from "@/lib/ai/prompts/character-image";
+import { copyToUploads } from "@/lib/shot-asset-utils";
 
 export async function handleCharacterImage(task: Task) {
   const payload = task.payload as { characterId: string; modelConfig?: ModelConfigPayload };
@@ -35,7 +36,8 @@ export async function handleCharacterImage(task: Task) {
   });
 
   // Extract front view from pipeline intermediates (character-image pipeline gen_front step)
-  const frontViewPath = (ai as any).lastPipelineResult?.intermediates?.["gen_front.front_image"];
+  const frontViewRaw = (ai as any).lastPipelineResult?.intermediates?.["gen_front.front_image"];
+  const frontViewPath = frontViewRaw ? copyToUploads(frontViewRaw, 'character_front') : undefined;
 
   await db
     .update(characters)

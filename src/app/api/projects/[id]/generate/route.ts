@@ -1159,8 +1159,12 @@ async function handleSingleCharacterImage(
       },
     });
 
-    // Copy to uploads for browser serving
+    // Copy fourview to uploads for browser serving
     const imagePath = copyToUploads(rawImagePath, 'character_reference');
+
+    // Extract front view from pipeline intermediates
+    const frontViewRaw = (ai as any).lastPipelineResult?.intermediates?.["gen_front.front_image"];
+    const frontViewPath = frontViewRaw ? copyToUploads(frontViewRaw, 'character_front') : undefined;
 
     // Append to history
     let history: string[] = [];
@@ -1178,7 +1182,7 @@ async function handleSingleCharacterImage(
       .update(characters)
       .set({
         referenceImage: imagePath,
-        frontViewImage: (ai as any).lastPipelineResult?.intermediates?.["gen_front.front_image"] ?? undefined,
+        frontViewImage: frontViewPath ?? undefined,
         referenceImageHistory: JSON.stringify(history),
       })
       .where(eq(characters.id, characterId));
