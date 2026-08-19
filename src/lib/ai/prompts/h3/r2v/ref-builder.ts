@@ -87,10 +87,11 @@ function buildAllSubjectDefs(input: H3PromptInput): SubjectDef[] {
 
     // Character reference images → <Picture N>
     if (char.referenceImage) {
-      // Picture index = characters before this with ref images + 1 (for first_frame)
+      // Picture index = sceneFrames count + chars before this with ref + 1
+      const sceneCount = (input.sceneFrames?.length ?? 0);
       const picIdx = input.characters
         .filter((c, j) => j < i && c.referenceImage)
-        .length + 2;  // +2 accounts for Picture 1 (first_frame) if present
+        .length + sceneCount + 1;
       sourceLabels.push(`<Picture ${picIdx}>`);
     }
 
@@ -118,7 +119,7 @@ function buildAllSubjectDefs(input: H3PromptInput): SubjectDef[] {
   if (input.sceneDescription) {
     const idx = defs.length + 1;
     const sourceLabels: string[] = [];
-    if (input.firstFrame) sourceLabels.push("<Picture 1>");
+    if (input.sceneFrames?.length) sourceLabels.push(`<Picture 1>`);
     defs.push({
       label: `<Subject ${idx}>`,
       definition: `The scene environment: ${input.sceneDescription}${input.sceneLighting ? `, lit by ${input.sceneLighting}` : ""}${sourceLabels.length ? ` in ${sourceLabels.join(", ")}` : ""}`,
@@ -133,23 +134,13 @@ function buildAllSubjectDefs(input: H3PromptInput): SubjectDef[] {
 function buildPictureDefs(input: H3PromptInput): PictureDef[] {
   const defs: PictureDef[] = [];
 
-  // §2.2: First frame → <Picture 1>
-  if (input.firstFrame?.fileUrl) {
-    defs.push({
-      label: "<Picture 1>",
-      shotIndex: 1,
-      role: "first_frame",
-      description: input.firstFrame.prompt ?? "the opening frame of the video",
-    });
-  }
-
-  // §2.2: Last frame → next Picture
-  if (input.lastFrame?.fileUrl) {
+  // Scene reference images (R2V mode)
+  for (const sf of input.sceneFrames ?? []) {
     defs.push({
       label: `<Picture ${defs.length + 1}>`,
       shotIndex: 1,
-      role: "last_frame",
-      description: input.lastFrame.prompt ?? "the closing frame of the video",
+      role: "scene_reference",
+      description: sf.prompt ?? "scene reference image",
     });
   }
 
@@ -267,14 +258,16 @@ function buildRetentionSection(
   for (const p of pictures) {
     let retention: RetentionVision;
     let reason: string;
-    if (p.role === "first_frame") {
+    if (p.role === "scene_reference") {
+      retention = "weak_reference"; reason = "scene reference provides visual guidance";
+    } else if (p.role === "first_frame") {
       retention = "fully_preserved"; reason = "the opening composition is preserved";
     } else if (p.role === "last_frame") {
       retention = "fully_preserved"; reason = "the closing composition is preserved";
     } else {
       retention = "weak_reference"; reason = "character reference image provides visual guidance";
     }
-    lines.push(`${p.label} (${p.role === "first_frame" ? "[Shot 1] first frame" : p.role === "last_frame" ? "[Shot 1] last frame" : "storyboard reference"}): ${retention} — ${reason}.`);
+    lines.push(`${p.label} (${p.role === "first_frame" ? "[Shot 1] first frame" : p.role === "last_frame" ? "[Shot 1] last frame" : p.role === "scene_reference" ? "scene reference" : "storyboard reference"}): ${retention} — ${reason}.`);
   }
 
   // §4.2: Audio
@@ -310,6 +303,7 @@ function buildSubjectDefsSection(
   for (const p of pictures) {
     const roleText = p.role === "first_frame" ? "is the first frame of [Shot 1]"
       : p.role === "last_frame" ? "is the last frame of [Shot 1]"
+      : p.role === "scene_reference" ? "is a scene reference image"
       : "is a character reference image";
     lines.push(`${p.label} ${roleText}. ${p.description}.`);
   }

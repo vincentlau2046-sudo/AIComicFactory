@@ -52,6 +52,7 @@ export interface BuildH3InputOptions {
   /** Optional: frame file URLs (pipeline has these, route may not) */
   firstFrame?: { fileUrl: string; prompt?: string | null };
   lastFrame?: { fileUrl: string; prompt?: string | null };
+  sceneFrames?: { prompt: string | null }[];
   /** Optional: additional fields from pipeline */
   extraFields?: Partial<H3PromptInput>;
 }
@@ -61,7 +62,7 @@ export interface BuildH3InputOptions {
  * Both Pipeline and Route paths should use this to stay in sync.
  */
 export async function buildH3Input(opts: BuildH3InputOptions): Promise<H3PromptInput> {
-  const { userId, projectId, shot, shotCharacters: maybeChars, firstFrame, lastFrame, extraFields } = opts;
+  const { userId, projectId, shot, shotCharacters: maybeChars, firstFrame, lastFrame, sceneFrames, extraFields } = opts;
 
   // ── Characters ──
   const episodeId = shot.episodeId;
@@ -158,6 +159,7 @@ export async function buildH3Input(opts: BuildH3InputOptions): Promise<H3PromptI
     })),
     firstFrame,
     lastFrame,
+    sceneFrames,
     dialogues: dialoguesList,
     narrations: narrations.length > 0 ? narrations : undefined,
     innerMonologues: innerMonologues.length > 0 ? innerMonologues : undefined,

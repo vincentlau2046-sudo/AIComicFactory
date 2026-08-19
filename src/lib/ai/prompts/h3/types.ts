@@ -42,7 +42,7 @@ export interface SubjectDef {
 export interface PictureDef {
   label: string;
   shotIndex: number;
-  role: "first_frame" | "last_frame" | "keyframe" | "storyboard";
+  role: "first_frame" | "last_frame" | "keyframe" | "storyboard" | "scene_reference";
   description: string;
 }
 
@@ -85,6 +85,8 @@ export interface H3PromptInput {
   }[];
   firstFrame?: { fileUrl: string; prompt?: string | null };
   lastFrame?: { fileUrl: string; prompt?: string | null };
+  /** Scene reference images (R2V mode) — per-shot composition/style references */
+  sceneFrames?: { prompt: string | null }[];
   dialogues?: {
     characterName: string; text: string; sequence?: number;
     startRatio?: string; endRatio?: string;

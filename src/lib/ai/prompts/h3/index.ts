@@ -17,7 +17,8 @@ import type { H3PromptInput, H3PromptOutput } from "./types";
 export async function buildVideoPromptLLM(
   input: H3PromptInput,
   textProvider: AIProvider,
-  systemOverride?: string
+  systemOverride?: string,
+  images?: string[]
 ): Promise<H3PromptOutput> {
   if (input.generationMode === "reference") {
     const { buildR2VPrompt } = await import("./r2v/ref-builder");
@@ -25,7 +26,7 @@ export async function buildVideoPromptLLM(
   }
   // Default: FL2V (keyframe mode)
   const { buildFL2VPromptLLM } = await import("./fl2v/builder");
-  return buildFL2VPromptLLM(input, textProvider, systemOverride);
+  return buildFL2VPromptLLM(input, textProvider, systemOverride, images);
 }
 
 /** Local builder — no LLM, fast fallback */

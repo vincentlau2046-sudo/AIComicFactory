@@ -19,7 +19,8 @@ import { resolveLanguage, buildH3Sections, parseLLMSections } from "../shared/ba
 export async function buildFL2VPromptLLM(
   input: H3PromptInput,
   textProvider: AIProvider,
-  systemOverride?: string
+  systemOverride?: string,
+  images?: string[]
 ): Promise<H3PromptOutput> {
   const lang = resolveLanguage(input);
 
@@ -30,6 +31,7 @@ export async function buildFL2VPromptLLM(
       systemPrompt: system,
       temperature: 0.7,
       maxTokens: 32000,
+      images,
     });
 
     if (!raw?.trim()) throw new Error("[H3-FL2V] Empty LLM response");

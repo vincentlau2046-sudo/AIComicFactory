@@ -267,7 +267,10 @@ export async function handleVideoGenerate(task: Task) {
         slotContents: videoSlots,
       },
     });
-    const h3Output = await buildH3Builder(h3Input, textProvider, h3System);
+    const keyframeImages: string[] = [];
+    if (firstFrameAsset.fileUrl) keyframeImages.push(firstFrameAsset.fileUrl);
+    if (lastFrameAsset.fileUrl) keyframeImages.push(lastFrameAsset.fileUrl);
+    const h3Output = await buildH3Builder(h3Input, textProvider, h3System, keyframeImages.length > 0 ? keyframeImages : undefined);
     prompt = h3Output.sections.join("\n\n");
   } else {
     // Legacy path: Seedance-style prompt (unchanged from v0.1.x)

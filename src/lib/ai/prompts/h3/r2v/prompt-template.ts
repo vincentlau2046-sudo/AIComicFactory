@@ -38,14 +38,15 @@ function buildContentLayer(input: H3PromptInput, lang: H3Language): string {
   out.push("");
   out.push(r("image_mapping", L("=== 参考图映射 ===", "=== IMAGE MAPPING ===")));
 
-  if (input.firstFrame?.prompt) {
-    out.push(`<Picture 1> = ${L("首帧场景", "First frame")}: ${input.firstFrame.prompt}`);
+  // Dynamic: iterate ALL scene reference images (R2V — not keyframes)
+  let picIdx = 1;
+  for (const sf of input.sceneFrames ?? []) {
+    const label = sf.prompt || L("场景参考", "Scene reference");
+    out.push(L(`<Picture ${picIdx}> = ${L("场景参考图", "Scene ref")}: ${label.slice(0, 80)}`,
+      `<Picture ${picIdx}> = Scene ref: ${label.slice(0, 80)}`));
+    picIdx++;
   }
-  if (input.lastFrame?.prompt) {
-    const idx = input.firstFrame?.prompt ? 2 : 1;
-    out.push(`<Picture ${idx}> = ${L("尾帧场景", "Last frame")}: ${input.lastFrame.prompt}`);
-  }
-  let picIdx = (input.firstFrame?.prompt ? 1 : 0) + (input.lastFrame?.prompt ? 1 : 0) + 1;
+  // Dynamic: iterate character reference images
   for (const ch of input.characters) {
     if (ch.referenceImage) {
       out.push(L(`<Picture ${picIdx}> = 角色 ${ch.name}`, `<Picture ${picIdx}> = ${ch.name}`));

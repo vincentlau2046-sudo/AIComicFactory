@@ -58,12 +58,7 @@ export async function handleRefVideoPromptGenerate(task: Task) {
     projectId,
     shot,
     shotCharacters,
-    firstFrame: sceneFrames[0]?.fileUrl
-      ? { fileUrl: sceneFrames[0].fileUrl!, prompt: sceneFrames[0].prompt || "" }
-      : undefined,
-    lastFrame: sceneFrames[sceneFrames.length - 1]?.fileUrl
-      ? { fileUrl: sceneFrames[sceneFrames.length - 1].fileUrl!, prompt: sceneFrames[sceneFrames.length - 1].prompt || "" }
-      : undefined,
+    sceneFrames: sceneFrames.map(sf => ({ prompt: sf.prompt || null })),
     extraFields: {
       bgmUrl: undefined,  // buildH3Input loads this from episode/project
       costumes: projectCharacters
