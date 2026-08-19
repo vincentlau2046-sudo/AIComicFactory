@@ -63,6 +63,8 @@ export function buildR2VPrompt(input: H3PromptInput): H3PromptOutput {
  */
 function buildDetailedWithVoice(detail: string, input: H3PromptInput): string {
   const parts = [detail];
+  const voiceCtx = buildVoiceContextSection(input);
+  if (voiceCtx) parts.push(voiceCtx);
 
   if (input.narrations?.length) {
     parts.push("\n旁白（已预生成）:\n" + input.narrations.join("\n"));
@@ -75,6 +77,25 @@ function buildDetailedWithVoice(detail: string, input: H3PromptInput): string {
 }
 
 // ═══ subject_definitions §2 ═══════════════════════════════════
+
+// ═══ voice_context (2026-08-20, EP05 诊断 #7) ══════════════════
+// 将 shot-split 产出的声音骨架传给 VL，防止自由发明
+function buildVoiceContextSection(input: H3PromptInput): string {
+  const voices: string[] = [];
+  for (const d of input.dialogues ?? []) {
+    voices.push(`[dialogue] ${d.characterName}: "${d.text}"`);
+  }
+  for (const n of input.narrations ?? []) {
+    voices.push(`[narration] ${n}`);
+  }
+  for (const m of input.innerMonologues ?? []) {
+    voices.push(`[inner_monologue] ${m}`);
+  }
+  if (voices.length === 0) {
+    return "【Voice Context】\n本镜头无预设声音内容。你可以在 detailed_description 中补充 1-2 个音效事件（SFX），但禁止发明角色对话或内心独白。";
+  }
+  return "【Voice Context — 以下为本镜头已预设的声音，你必须在 detailed_description 的对应时间段引用它们。禁止修改、替换或新增角色对话/旁白/独白。】\n" + voices.join("\n");
+}
 // Source: Official guide, section 2
 
 function buildAllSubjectDefs(input: H3PromptInput): SubjectDef[] {
@@ -115,18 +136,9 @@ function buildAllSubjectDefs(input: H3PromptInput): SubjectDef[] {
     });
   }
 
-  // §2.1: Scene/environment as Subject (if scene data present)
-  if (input.sceneDescription) {
-    const idx = defs.length + 1;
-    const sourceLabels: string[] = [];
-    if (input.sceneFrames?.length) sourceLabels.push(`<Picture 1>`);
-    defs.push({
-      label: `<Subject ${idx}>`,
-      definition: `The scene environment: ${input.sceneDescription}${input.sceneLighting ? `, lit by ${input.sceneLighting}` : ""}${sourceLabels.length ? ` in ${sourceLabels.join(", ")}` : ""}`,
-      sourceLabels,
-    });
-  }
-
+  // NOTE: 场景不创建 Subject — 只通过 <Picture 1> 在 detailed_description 中引用
+  // R5 规则: 环境必须通过 <Picture N> 引用，不得定义为 <Subject N>
+  // Scene Subject 已移除 (2026-08-20, EP05 诊断 #4)
   return defs;
 }
 

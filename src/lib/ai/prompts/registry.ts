@@ -2353,9 +2353,16 @@ const FL2V_CONSTRAINT_BODY_VOCAB = `【身体动作 — 白名单】
 16. 禁止抽象词："陷入沉思"→"眼帘低垂，眉心微蹙"
     禁止模糊词："神情变化"→"眉头从紧锁渐转为舒展"`;
 
-const FL2V_CONSTRAINT_VOICE = `【声音 — 主动补位】
-17. 每 3-5 秒至少一句声音（对白或旁白）。禁止纯默片片段。
-18. 旁白是叙事利器，心声让读者身临其境。零空白规则。`;
+const FL2V_CONSTRAINT_VOICE = `【声音 — 分级密度 (2026-08-20 修订, EP05 诊断 #3)】
+17. Voice 密度按镜头类型分级（不是每 3s 强制嵌入）:
+    - combat(战斗): 1-2 voice + 1 SFX, 允许 ≥4s 静默呼吸段
+    - dialogue(对话): 2-3 voice 事件
+    - emotional(情绪): 1-2 voice(含独白), 优先沉默→声音渐变
+    - transitional(过渡): 1 voice(旁白)
+    - spectacle(大场面): 0-1 voice, 以音效+视觉为主
+18. 静默也是叙事工具——战斗的喘息、凝视的留白。
+19. 如果镜头提供 Voice Context（来自 shot-split 预生成），必须在对应时间段引用，禁止修改/替换/新增。
+20. Voice Context 为空时，禁止发明角色对话、旁白或内心独白（仅允许 SFX）。`;
 
 const fl2vConstraintsDef: PromptDefinition = {
   key: "video_h3_fl2v_constraints",
@@ -2806,11 +2813,17 @@ const REF_CONSTRAINT_TIME_STRUCTURE = `【时间结构 — 强制执行】
 R10. 按每 2-3s 切分子段落
 R11. 每段独占一行，格式: "0.0s-3.0s: 运镜+角色动作+对白/旁白"`;
 
-const REF_CONSTRAINT_CAMERA = `【运镜 — 第一优先级】
-R12. 每个时间段首句必须是运镜动作："镜头 [运动类型] [幅度] [速度]"
-     例："镜头缓慢推近，小幅度。"
-R13. 运镜必须含幅度（小/中/大/快速）和速度修饰
-R14. 主运镜方向：{{CAMERA_DIRECTION}}`;
+const REF_CONSTRAINT_CAMERA = `【运镜 — 硬性约束 (2026-08-20 修订, EP05 诊断 #2)】
+R12-HARD: detailed_description 的第一个时间段 (0s-3s/0s-4s) 的运镜必须精确匹配 {{CAMERA_DIRECTION}}。
+  违规示例: cameraDirection="static" 但首段写 "快切/横移" → 违规
+  违规示例: cameraDirection="slow zoom out" 但首段写 "推近" → 违规（方向相反）
+R12b: 声明 cameraDirection 的运镜类型在 detailed_description 的全部时间段中至少占比 50%。
+  示例: 4 段中至少 2 段使用 {{CAMERA_DIRECTION}}，其余可补充辅助运镜
+R12c-HARD: 以下为硬性禁止，不可出现:
+  - cameraDirection 与首段运镜方向相反 (slow zoom out 但写 "推近")
+  - cameraDirection="static" 但使用任何运动类运镜
+  - cameraDirection="tracking shot" 但全部时间段无跟拍运镜
+R14: 运镜方向={{CAMERA_DIRECTION}}`;
 
 const REF_CONSTRAINT_ACTION_DETAIL = `【动作颗粒度 — 最大详细度】
 R15. detailed_description 必须极度详细——禁止简化为情节大纲或引用关系列表
@@ -2822,10 +2835,23 @@ const REF_CONSTRAINT_BODY_VOCAB = `【身体动作 — 白名单】
 R19. 使用具体物理动词：转头、抬眼、垂眼、握紧、松开、抬手、放手、迈步、后退、前倾、后仰、起身、坐下、跪地、站起、转体、眯眼、眨眼
 R20. 禁止抽象描述`;
 
-const REF_CONSTRAINT_VOICE = `【声音 — 零空白规则】
-R21. 旁白/独白/对白必须嵌入 detailed_description 的对应时间段
-R22. 每 3-5s 至少一句声音（对白/旁白/独白）。禁止纯默片
-R23. 旁白是叙事利器——心声让读者身临其境。零空白规则`;
+const REF_CONSTRAINT_VOICE = `【声音 — 分级密度 (2026-08-20 修订, EP05 诊断 #3)】
+R21: 旁白/独白/对白必须嵌入 detailed_description 的对应时间段
+R22-GRADED: Voice 密度按镜头类型分级（不是每 3s 强制嵌入）:
+  - combat(战斗): 1-2 voice + 1 SFX, 允许 ≥4s 静默呼吸段
+  - dialogue(对话): 2-3 voice 事件
+  - emotional(情绪): 1-2 voice(含独白), 优先沉默→声音渐变
+  - transitional(过渡): 1 voice(旁白)
+  - spectacle(大场面): 0-1 voice, 以音效+视觉为主
+R23: 旁白是叙事利器——心声让读者身临其境。静默也是叙事工具——战斗的喘息、凝视的留白。
+
+R27-VOICE_REF: 如果镜头提供 Voice Context（来自 shot-split 预生成），你必须:
+  - 在 detailed_description 对应时间段引用这些声音
+  - 禁止修改、替换、或新增角色对话/旁白/独白
+R28-SFX: 你可以在 Voice Context 之外仅补充音效描述:
+  - 武器碰撞、脚步声、环境音等非语言类声音
+  - 格式: [sfx]:金属碰撞声/脚步声回响/风声呼啸
+R29-SILENCE: Voice Context 为空时，禁止发明角色对话、旁白或内心独白（仅允许 SFX）`;
 
 const REF_CONSTRAINT_FORMAT = `【格式】
 R24. 禁止 markdown、代码块、注释——纯 H3 格式输出

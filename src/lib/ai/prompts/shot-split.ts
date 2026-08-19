@@ -50,6 +50,10 @@ export function buildShotSplitSystem(maxDuration: number): string {
         "characters": ["出现在该镜头中的准确角色名"],
         "transitionIn": "cut",
         "transitionOut": "cut",
+        "time_of_day": "清晨|午时|午后|傍晚|深夜|黎明",
+        "timeline": "主线|平行|闪回",
+        "narrations": [{"text": "旁白内容", "startTime": 0.5, "endTime": 2.0}],
+        "innerMonologues": [{"character": "角色名", "text": "内心独白", "startTime": 1.0, "endTime": 3.0}],
         "referenceImagePrompts": ["参考图 1 的生成描述", "参考图 2 的描述"]
       }
     ]
@@ -220,8 +224,9 @@ ${proportionalTiers}
 - 180 度规则——保持角色在画面中位于一致的一侧
 - 时长：所有镜头必须为 ${minDuration}-${maxDuration}s。对白密集型 = ${Math.min(maxDuration, 12)}-${maxDuration}s；动作镜头 = ${minDuration}-${Math.min(maxDuration, 12)}s；建立镜头 = ${minDuration}-${Math.min(maxDuration, 10)}s
 - 连续性：第 N 个镜头的 endFrame 必须与第 N+1 个镜头的 startFrame 在逻辑上衔接（相同角色、一致环境、自然的位置过渡）
+- 时间连续性（2026-08-20 新增，EP05 诊断 #1）：每个 shot 必须标注 time_of_day。相邻 shot 的 time_of_day 跨越 ≥2 个时段时 → 必须插入过渡 shot 或将跳转 shot 标记为 timeline="平行"。剧情中两条不同时间线交织时，非主时间线的 shot 必须标记 timeline="平行"并在 narration 中包含过渡语（如"与此同时..."）。
 - 覆盖性：剧本中每个场景至少生成一个镜头。不得跳过或合并场景。如果场景复杂，应拆分为多个镜头。每个场景标记（SCENE N）必须产生至少一个镜头。
-- 对白覆盖：**每个镜头都应该有台词**。即使剧本中某段没有明确对白，也要根据剧情和角色性格补充合理的台词（内心独白、旁白、环境对话、角色反应语等）。纯空镜/建立镜头除外，但也应尽量配旁白或画外音。对白让视频更有叙事张力，避免"哑巴镜头"。
+〓 声音约束（2026-08-20 修订，EP05 诊断 #5）: 每个 shot 的 narrations + innerMonologues + dialogues 三者不可全为空。声音密度按 shot 类型分级: combat→1-2 voice+SFX，dialogue→2-3 voice，emotional→1-2 (含独白)，transitional→1 (旁白)，spectacle→0-1 (以音效为主)。禁止连续 3 个以上 shot 无任何 voice。禁止同一角色连续 2 shot 使用格式雷同的内心独白。
 
 ## 转场指南
 - 场景切换（不同地点或时间跳转）：使用 "dissolve"
