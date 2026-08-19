@@ -33,7 +33,7 @@ import { eq, asc, and, lt, gt, lte, gte, desc, or, isNull, isNotNull, inArray } 
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import path from "path";
 import { id as genId } from "@/lib/id";
-import { enqueueTask } from "@/lib/task-queue";
+import { enqueueTask, completeTask, failTask } from "@/lib/task-queue";
 import type { TaskType } from "@/lib/task-queue";
 import { buildScriptParsePrompt } from "@/lib/ai/prompts/script-parse";
 import { buildScriptGeneratePrompt } from "@/lib/ai/prompts/script-generate";
@@ -52,11 +52,13 @@ import { buildVideoPrompt, buildReferenceVideoPrompt } from "@/lib/ai/prompts/vi
 import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-generate";
 import { buildCharacterTurnaroundPrompt, buildCharacterFrontViewPrompt } from "@/lib/ai/prompts/character-image";
 import { assembleVideo } from "@/lib/video/ffmpeg";
+import { parallelLimit } from "@/lib/ai/batch";
 import { parseRefImages, serializeRefImages, appendToHistory, type RefImage } from "@/lib/ref-image-utils";
 import {
   loadShotLegacyView,
   loadShotLegacyViewsBatch,
   getActiveAsset,
+  getActiveAssets,
   getLatestCompletedAsset,
   insertAssetVersion,
   patchAsset,
@@ -242,7 +244,7 @@ export async function POST(
   }
 
   if (action === "batch_ref_video_prompt") {
-    return handleBatchSceneFrameViaQueue(projectId, userId, payload, modelConfig, episodeId, "ref_video_prompt_generate");
+    return handleBatchVideoPromptBg(projectId, userId, payload, modelConfig, episodeId, "ref_video_prompt_generate");
   }
 
   if (action === "single_scene_frame") {
@@ -3156,6 +3158,119 @@ async function handleSingleVideoPrompt(
   }
 }
 
+// ─── Batch Video Prompt BG (non-blocking sync + parallelLimit) ──────────
+
+async function handleBatchVideoPromptBg(
+  projectId: string,
+  userId: string,
+  payload?: Record<string, unknown>,
+  modelConfig?: ModelConfig,
+  episodeId?: string,
+  taskType: string = "video_prompt_generate"
+) {
+  let batchVersionId = payload?.versionId as string | undefined;
+  if (!batchVersionId) {
+    const [latestVer] = await db.select({ id: storyboardVersions.id })
+      .from(storyboardVersions)
+      .where(and(
+        eq(storyboardVersions.projectId, projectId),
+        ...(episodeId ? [eq(storyboardVersions.episodeId, episodeId)] : [])
+      ))
+      .orderBy(desc(storyboardVersions.versionNum)).limit(1);
+    if (!latestVer?.id) return NextResponse.json({ error: "No version found" }, { status: 400 });
+    batchVersionId = latestVer.id;
+  }
+
+  const shotWhere = [eq(shots.projectId, projectId)];
+  if (batchVersionId) shotWhere.push(eq(shots.versionId, batchVersionId));
+  if (episodeId) shotWhere.push(eq(shots.episodeId, episodeId));
+  const allShots = await db.select().from(shots).where(and(...shotWhere)).orderBy(asc(shots.sequence));
+
+  if (allShots.length === 0) {
+    return NextResponse.json({ error: "No shots found" }, { status: 400 });
+  }
+
+  // Create task entries → WebUI immediately visible
+  const taskPayload = { projectId, userId, modelConfig, ratio: (payload?.ratio as string) || "16:9" };
+  const taskIds = await Promise.all(allShots.map(s =>
+    enqueueTask({ type: taskType as any, projectId, payload: { ...taskPayload, shotId: s.id }, episodeId, maxRetries: 0 })
+  ));
+
+  // Return immediately
+  const maxBatch = parseInt(process.env.LLM_MAX_BATCH_SIZE || "4", 10);
+
+  processPromptBatch(allShots, taskIds, userId, projectId, modelConfig, episodeId, taskType)
+    .catch(err => console.error(`[BatchPromptBg] failed:`, err));
+
+  return NextResponse.json({ taskIds: taskIds.map(t => t.id), total: allShots.length, status: "processing" });
+}
+
+async function processPromptBatch(
+  batchShots: any[], taskIds: any[],
+  userId: string, projectId: string,
+  modelConfig?: ModelConfig, episodeId?: string,
+  taskType?: string
+) {
+  const maxBatch = parseInt(process.env.LLM_MAX_BATCH_SIZE || "4", 10);
+  const textProvider = resolveAIProvider(modelConfig);
+  const batchChars = await getEpisodeCharacters(projectId, episodeId);
+
+  const isRefMode = taskType === "ref_video_prompt_generate";
+
+  await parallelLimit(batchShots, maxBatch, async (shot, i) => {
+    const taskId = taskIds[i].id;
+    try {
+      const shotLegacy = await loadShotLegacyView(shot.id);
+
+      const { buildH3Input } = await import("@/lib/ai/prompts/h3");
+
+      if (isRefMode) {
+        // Ref mode: use scene frames as references (not keyframes)
+        const refAssets = await getActiveAssets(shot.id, "reference");
+        const sceneFrames = refAssets.filter(r => r.fileUrl).sort((a, b) => a.sequenceInType - b.sequenceInType);
+        if (sceneFrames.length === 0) {
+          await failTask(taskId, "No scene frames");
+          return;
+        }
+        const sceneFramePaths = sceneFrames.map(r => r.fileUrl as string);
+        const shotChars = batchChars.filter(c => c.referenceImage);
+
+        const h3Input = await buildH3Input({
+          userId, projectId, shot,
+          shotCharacters: shotChars,
+          sceneFrames: sceneFrames.map(sf => ({ prompt: sf.prompt || null })),
+          extraFields: { languageMode: (process.env.H3_LANGUAGE as any) || "zh" },
+        });
+
+        // Use VL with scene frame images
+        const { buildR2VPromptLLM } = await import("@/lib/ai/prompts/h3/r2v/builder");
+        const visionProvider = resolveAIProvider(modelConfig);
+        const result = await buildR2VPromptLLM(h3Input, visionProvider, sceneFramePaths);
+        const promptText = "[R2V-VL] " + result.output.sections.join("\n\n");
+        await db.update(shots).set({ videoPrompt: promptText }).where(eq(shots.id, shot.id));
+      } else {
+        // FL mode: use keyframes
+        const h3Input = await buildH3Input({
+          userId, projectId, shot,
+          shotCharacters: batchChars,
+          firstFrame: shotLegacy?.firstFrame ? { fileUrl: shotLegacy.firstFrame, prompt: shotLegacy.startFrameDesc } : undefined,
+          lastFrame: shotLegacy?.lastFrame ? { fileUrl: shotLegacy.lastFrame, prompt: shotLegacy.endFrameDesc } : undefined,
+          extraFields: { languageMode: (process.env.H3_LANGUAGE as any) || "zh" },
+        });
+        const { buildVideoPromptLLM: buildH3 } = await import("@/lib/ai/prompts/h3");
+        const h3Output = await buildH3(h3Input, textProvider);
+        const promptText = h3Output.sections.join("\n\n");
+        await db.update(shots).set({ videoPrompt: promptText }).where(eq(shots.id, shot.id));
+      }
+
+      await completeTask(taskId, { shotId: shot.id, status: "ok" });
+    } catch (err: any) {
+      await failTask(taskId, err?.message || String(err));
+      console.error(`[BatchPromptBg] Shot ${shot.sequence} failed:`, err?.message);
+    }
+  });
+}
+
 // ─── Generate Video Prompt (batch) ───────────────────────────────────────────
 
 async function handleBatchVideoPrompt(
@@ -3278,8 +3393,11 @@ async function handleBatchVideoPrompt(
   const textProvider = resolveAIProvider(modelConfig);
   const h3System = await resolvePrompt("video_h3_prompt", { userId, projectId }).catch(() => undefined);
   const h3Lang = (process.env.H3_LANGUAGE as "zh" | "en" | undefined) || "zh";
-  const results = await Promise.all(
-    eligibleFinal.map(async (shot) => {
+  const results: Array<{ shotId: string; status: string }> = [];
+  const maxBatch = parseInt(process.env.LLM_MAX_BATCH_SIZE || "4", 10);
+  await parallelLimit(
+    eligibleFinal, maxBatch,
+    async (shot) => {
       try {
         const { buildVideoPromptLLM: buildH3, buildH3Input } = await import("@/lib/ai/prompts/h3");
         const shotLegacy = batchShotsLegacy.get(shot.id);
@@ -3295,12 +3413,12 @@ async function handleBatchVideoPrompt(
         const h3Text = h3Output.sections.join("\n\n");
         await db.update(shots).set({ videoPrompt: h3Text }).where(eq(shots.id, shot.id));
         console.log(`[BatchH3VideoPrompt] Shot ${shot.sequence} ok (${h3Output.mode})`);
-        return { shotId: shot.id, status: "ok" };
+        results.push({ shotId: shot.id, status: "ok" });
       } catch (err: any) {
         console.error(`[BatchH3VideoPrompt] Shot ${shot.sequence} failed:`, err?.message);
-        return { shotId: shot.id, status: "error" };
+        results.push({ shotId: shot.id, status: "error" });
       }
-    })
+    }
   );
   const ok = results.filter(r => r.status === "ok").length;
   console.log(`[BatchH3VideoPrompt] Done: ${ok}/${eligibleFinal.length} ok${skipped.length > 0 ? ` (${skipped.length} skipped)` : ""}`);
