@@ -34,9 +34,15 @@ export async function handleCharacterImage(task: Task) {
     },
   });
 
+  // Extract front view from pipeline intermediates (character-image pipeline gen_front step)
+  const frontViewPath = (ai as any).lastPipelineResult?.intermediates?.front;
+
   await db
     .update(characters)
-    .set({ referenceImage: imagePath })
+    .set({
+      referenceImage: imagePath,
+      ...(frontViewPath ? { frontViewImage: frontViewPath as string } : {}),
+    })
     .where(eq(characters.id, payload.characterId));
 
   return { imagePath };

@@ -72,7 +72,7 @@ export async function handleReferenceVideoGenerate(task: Task) {
   const charRefs = projectCharacters
     .filter((c) => !!c.referenceImage &&
       (shotCharNames.has(stripCharHint(c.name)) || shotCharNames.has((c as any).baseName || "")))
-    .map((c) => ({ name: c.name, imagePath: c.referenceImage as string }));
+    .map((c) => ({ name: c.name, imagePath: (c as any).frontViewImage || c.referenceImage as string }));
 
   // 5. Ordered reference images: characters first, then scenes
   const orderedRefImages = [...charRefs.map((c) => c.imagePath), ...sceneFramePaths];
