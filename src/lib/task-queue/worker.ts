@@ -1,11 +1,14 @@
-import { dequeueTask, completeTask, failTask } from "./queue";
+import { dequeueTask, dequeueTasks, completeTask, failTask } from "./queue";
 import type { TaskHandlerMap, Task } from "./types";
 
 const POLL_INTERVAL_MS = 2000;
 const COMFYUI_BASE_URL = process.env.COMFYUI_BASE_URL || 'http://localhost:8188';
+const MAX_CONCURRENCY = parseInt(process.env.TASK_MAX_CONCURRENCY || "4", 10);
 
 let isRunning = false;
 let handlers: TaskHandlerMap = {};
+
+let activeCount = 0;
 
 // ─── ComfyUI health cache ───
 let comfyHealthy = true;
@@ -53,9 +56,14 @@ async function poll() {
   try {
     const ok = await checkComfyHealth();
     if (!ok) console.log("[Worker] ComfyUI offline, skipping ComfyUI tasks");
-    const task = await dequeueTask({ skipComfy: !ok });
-    if (task) {
-      await processTask(task);
+
+    const slots = MAX_CONCURRENCY - activeCount;
+    if (slots > 0) {
+      const tasks = await dequeueTasks(slots, { skipComfy: !ok });
+      for (const task of tasks) {
+        activeCount++;
+        processTask(task).finally(() => { activeCount--; });
+      }
     }
   } catch (err) {
     console.error("[TaskWorker] Poll error:", err);

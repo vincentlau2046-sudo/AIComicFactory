@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { tasks } from "@/lib/db/schema";
-import { eq, asc, sql } from "drizzle-orm";
+import { eq, asc, inArray, sql } from "drizzle-orm";
 import { id as genId } from "@/lib/id";
 import type { TaskType } from "./types";
 
@@ -26,6 +26,31 @@ export async function enqueueTask(params: {
     })
     .returning();
   return task;
+}
+
+export async function dequeueTasks(
+  limit: number,
+  opts?: { skipComfy?: boolean }
+): Promise<Array<typeof tasks.$inferSelect>> {
+  const now = new Date();
+  const subquery = opts?.skipComfy
+    ? sql`(SELECT id FROM tasks
+        WHERE status = 'pending'
+        AND (scheduled_at IS NULL OR scheduled_at <= ${now.getTime()})
+        AND type NOT IN ('frame_generate','video_generate','character_image','scene_frame_generate','reference_video_generate')
+        ORDER BY created_at ASC LIMIT ${limit})`
+    : sql`(SELECT id FROM tasks
+        WHERE status = 'pending'
+        AND (scheduled_at IS NULL OR scheduled_at <= ${now.getTime()})
+        ORDER BY created_at ASC LIMIT ${limit})`;
+
+  const claimed = await db
+    .update(tasks)
+    .set({ status: "running" })
+    .where(inArray(tasks.id, subquery))
+    .returning();
+
+  return claimed;
 }
 
 export async function dequeueTask(opts?: {
