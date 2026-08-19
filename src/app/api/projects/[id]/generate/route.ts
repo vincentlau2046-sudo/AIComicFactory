@@ -1176,7 +1176,11 @@ async function handleSingleCharacterImage(
 
     await db
       .update(characters)
-      .set({ referenceImage: imagePath, referenceImageHistory: JSON.stringify(history) })
+      .set({
+        referenceImage: imagePath,
+        frontViewImage: (ai as any).lastPipelineResult?.intermediates?.["gen_front.front_image"] ?? undefined,
+        referenceImageHistory: JSON.stringify(history),
+      })
       .where(eq(characters.id, characterId));
 
     // Mark downstream ref images stale: any shot's referenceImages that include this character
