@@ -404,6 +404,8 @@ export const tasks = sqliteTable("tasks", {
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date()),
   scheduledAt: integer("scheduled_at", { mode: "timestamp" }),
   episodeId: text("episode_id").references(() => episodes.id, {
     onDelete: "cascade",

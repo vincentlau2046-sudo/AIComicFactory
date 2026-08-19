@@ -152,28 +152,34 @@ export async function handleReferenceVideoGenerate(task: Task) {
 
   // Image order: all scene frames first, then character refs (matches prompt Picture numbering)
   const allRefImages = [...sceneFramePaths, ...charRefs.map(c => c.imagePath)];
-  const result = await videoProvider.generateVideo({
-    initialImage: allRefImages[0],
-    prompt: videoPrompt,
-    duration: effectiveDuration,
-    ratio,
-    referenceImages: allRefImages.slice(1),
-  });
 
-  // 8. Persist
-  const videoPath = copyToUploads(result.filePath, 'reference_video');
-  await insertAssetVersion({
-    shotId: shot.id,
-    type: "reference_video",
-    sequenceInType: 0,
-    prompt: videoPrompt,
-    fileUrl: videoPath,
-    status: "completed",
-  });
+  try {
+    const result = await videoProvider.generateVideo({
+      initialImage: allRefImages[0],
+      prompt: videoPrompt,
+      duration: effectiveDuration,
+      ratio,
+      referenceImages: allRefImages.slice(1),
+    });
 
-  await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
+    // 8. Persist
+    const videoPath = copyToUploads(result.filePath, 'reference_video');
+    await insertAssetVersion({
+      shotId: shot.id,
+      type: "reference_video",
+      sequenceInType: 0,
+      prompt: videoPrompt,
+      fileUrl: videoPath,
+      status: "completed",
+    });
 
-  return { shotId: shot.id, referenceVideoUrl: result.filePath };
+    await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
+
+    return { shotId: shot.id, referenceVideoUrl: result.filePath };
+  } catch (err) {
+    await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
+    throw err;
+  }
 }
 
 // ─── Helpers ───
