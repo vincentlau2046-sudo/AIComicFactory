@@ -10,14 +10,14 @@
  */
 
 import { db } from "@/lib/db";
-import { shots } from "@/lib/db/schema";
+import { shots, shotAssets, tasks } from "@/lib/db/schema";
 import { resolveAIProvider, resolveVideoProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
 import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-generate";
 import { buildReferenceVideoPrompt } from "@/lib/ai/prompts/video-generate";
 import { getModelMaxDuration } from "@/lib/ai/model-limits";
-import { eq } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { failTask } from "@/lib/task-queue";
 import { getActiveAsset, getActiveAssets, insertAssetVersion, loadShotLegacyView, stripCharHint, copyToUploads } from "@/lib/shot-asset-utils";
@@ -47,7 +47,27 @@ export async function handleReferenceVideoGenerate(task: Task) {
     await failTask(task.id, "reference_video already generating, retry later");
     return;
   }
-  // Regeneration: insertAssetVersion handles deactivation of old active row automatically
+
+  // Stale recovery: if shot is stuck "generating" >15min → reset and proceed
+  // Uses the most recent running task's createdAt as processing-start proxy
+  const STALE_TIMEOUT_MS = 15 * 60 * 1000;
+  if (shot.status === "generating") {
+    const runningTask = await db.select({ created: tasks.createdAt })
+      .from(tasks)
+      .where(and(eq(tasks.type, "reference_video_generate"), eq(tasks.status, "running")))
+      .orderBy(desc(tasks.createdAt))
+      .limit(1);
+    if (!runningTask[0] || (runningTask[0].created && Date.now() - new Date(runningTask[0].created).getTime() > STALE_TIMEOUT_MS)) {
+      console.log(`[RefVideo] Shot ${shot.sequence} stale (>15min or no running task), resetting`);
+      await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
+      if (existing) {
+        await db.update(shotAssets).set({ isActive: 0 }).where(eq(shotAssets.id, existing.id));
+      }
+    } else {
+      await failTask(task.id, "shot still generating — active task exists");
+      return;
+    }
+  }
 
   // 3. Collect + validate scene frames (all must be completed)
   const allRefs = await getActiveAssets(shot.id, "reference");
