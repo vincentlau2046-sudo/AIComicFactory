@@ -35,7 +35,7 @@ export async function handleCharacterImage(task: Task) {
   });
 
   // Extract front view from pipeline intermediates (character-image pipeline gen_front step)
-  const frontViewPath = (ai as any).lastPipelineResult?.intermediates?.front_image;
+  const frontViewPath = (ai as any).lastPipelineResult?.intermediates?.["gen_front.front_image"];
 
   await db
     .update(characters)
