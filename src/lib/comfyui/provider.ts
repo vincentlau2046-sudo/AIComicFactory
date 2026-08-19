@@ -416,7 +416,10 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
 
     const existingIds = Object.keys(wf).map(Number).filter(n => !isNaN(n))
     const lastNodeId = Math.max(...existingIds)
-    const clamped = Math.min(imageCount, 9) // MiniMax H3: max 9 reference images
+    const clamped = Math.min(imageCount, 9); // MiniMax H3: max 9 reference images
+    if (imageCount > 9) {
+      console.warn(`[R2V] buildMultiRefWorkflow: clamping ${imageCount} images to 9 (H3 limit)`);
+    }
 
     const imageNodes: number[] = []
     const refLinks: Record<string, any> = {}

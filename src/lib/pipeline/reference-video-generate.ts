@@ -155,12 +155,15 @@ export async function handleReferenceVideoGenerate(task: Task) {
   await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
 
   const videoProvider = resolveVideoProvider(payload.modelConfig);
+
+  // Image order: all scene frames first, then character refs (matches prompt Picture numbering)
+  const allRefImages = [...sceneFramePaths, ...charRefs.map(c => c.imagePath)];
   const result = await videoProvider.generateVideo({
-    initialImage: sceneFramePaths[0],
+    initialImage: allRefImages[0],
     prompt: videoPrompt,
     duration: effectiveDuration,
     ratio,
-    referenceImages: orderedRefImages,
+    referenceImages: allRefImages.slice(1),
   });
 
   // 8. Persist
