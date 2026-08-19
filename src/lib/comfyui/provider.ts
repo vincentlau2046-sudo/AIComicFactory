@@ -302,6 +302,9 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       })
       const node = modified[String(imageNodes[i])] as any
       node.inputs.image = uploaded.name
+      if (uploaded.subfolder) {
+        node.inputs.subfolder = uploaded.subfolder;
+      }
     }
 
     // 3. Inject non-image params into MiniMaxH3ReferenceToVideo node
