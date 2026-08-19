@@ -123,6 +123,8 @@ export async function handleShotSplit(task: Task) {
         depthOfField: (shotData.depthOfField as string) || "medium",
         soundDesign: (shotData.soundDesign as string) || "",
         musicCue: (shotData.musicCue as string) || "",
+        narrations: Array.isArray(shotData.narrations) ? JSON.stringify(shotData.narrations) : "[]",
+        innerMonologues: Array.isArray(shotData.innerMonologues) ? JSON.stringify(shotData.innerMonologues) : "[]",
         episodeId: payload.episodeId ?? null,
         sceneId: sceneId ?? null,
       })

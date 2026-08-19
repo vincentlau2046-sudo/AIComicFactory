@@ -47,11 +47,31 @@ export function buildR2VPrompt(input: H3PromptInput): H3PromptOutput {
       buildSubjectDefsSection(subjects, pictures, audios),
       buildSummarySection(taskTypes, subjects, input),
       buildRetentionSection(subjects, pictures, audios, input),
-      baseOutput.sections[0],  // detailed_description (from base mode)
+      buildDetailedWithVoice(baseOutput.sections[0], input),  // detailed_description + voice
       baseOutput.sections[1],  // overall_soundscape
       baseOutput.sections[2],  // non_diegetic_music
     ],
   };
+}
+
+// ═══ Helpers ═══════════════════════════════════════════════
+
+/**
+ * Inject pre-generated narrations/innerMonologues into the
+ * detailed_description for R2V local fallback (G2 fix).
+ * Mirrors the VL path's Constraint Layer R17-19 voice injection.
+ */
+function buildDetailedWithVoice(detail: string, input: H3PromptInput): string {
+  const parts = [detail];
+
+  if (input.narrations?.length) {
+    parts.push("\n旁白（已预生成）:\n" + input.narrations.join("\n"));
+  }
+  if (input.innerMonologues?.length) {
+    parts.push("\n内心独白（已预生成）:\n" + input.innerMonologues.join("\n"));
+  }
+
+  return parts.join("");
 }
 
 // ═══ subject_definitions §2 ═══════════════════════════════════

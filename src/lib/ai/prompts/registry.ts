@@ -2721,6 +2721,152 @@ const refImagePromptsDef: PromptDefinition = {
 // ── Registry ─────────────────────────────────────────────
 
 
+// ─── 15. ref_video_h3_content ──────────────────────────────
+// R2V Content Layer — section headers and format instructions.
+
+const REF_CONTENT_ROLE_TASK = `你是一位专业的 MiniMax H3 Ref2VA 视频提示词工程师。
+给定场景帧（首帧/尾帧）和角色参考图，你的任务是为该镜头生成完整的 6-section H3 R2V 视频生成提示词。`;
+
+const REF_CONTENT_IMAGE_MAPPING = `=== 参考图映射 ===
+使用 <Picture N> 标签引用参考图。严格按以下顺序编号：`;
+
+const REF_CONTENT_CHARACTERS = `=== 登场角色 ===`;
+
+const REF_CONTENT_SCENE_SHOT = `=== 场景与分镜 ===`;
+
+const REF_CONTENT_MOTION_CAMERA = `=== 动作脚本与运镜 ===
+以下为镜头的完整动作脚本。你需要：
+1. 按照动作节拍自然切分为 2-3 秒的子段落
+2. 每个子段落标注精确的时间起点 (0.0s-3.0s: ...)
+3. 每个子段落注入对应的运镜动作（幅度: 小/中/大/快速）
+4. 所有时间标注使用精确到小数点后一位的秒数`;
+
+const REF_CONTENT_DIALOGUE_HEADER = `=== 对白 ===
+对白使用 <d>[语言] 文本</d> 格式。脚本语言=中文时用 [中文]，英文时用 [English]。`;
+
+const REF_CONTENT_NARRATION_HEADER = `=== 旁白（已预生成）===
+以下旁白根据剧本自动生成，必须嵌入 detailed_description 的对应时间段：`;
+
+const REF_CONTENT_INNER_MONOLOGUE_HEADER = `=== 内心独白（已预生成）===
+以下独白根据剧本自动生成，必须嵌入 detailed_description 的对应时间段：`;
+
+const REF_CONTENT_AUDIO_HEADER = `=== 音频参考 ===`;
+
+const refContentH3Def: PromptDefinition = {
+  key: "ref_video_h3_content",
+  nameKey: "promptTemplates.prompts.refVideoH3Content",
+  descriptionKey: "promptTemplates.prompts.refVideoH3ContentDesc",
+  category: "h3",
+  slots: [
+    slot("role_task", REF_CONTENT_ROLE_TASK, true),
+    slot("image_mapping", REF_CONTENT_IMAGE_MAPPING, false),
+    slot("characters", REF_CONTENT_CHARACTERS, false),
+    slot("scene_shot", REF_CONTENT_SCENE_SHOT, false),
+    slot("motion_camera", REF_CONTENT_MOTION_CAMERA, true),
+    slot("dialogue_header", REF_CONTENT_DIALOGUE_HEADER, false),
+    slot("narration_header", REF_CONTENT_NARRATION_HEADER, false),
+    slot("inner_monologue_header", REF_CONTENT_INNER_MONOLOGUE_HEADER, false),
+    slot("audio_header", REF_CONTENT_AUDIO_HEADER, false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_task"), "", r("image_mapping"), r("characters"), r("scene_shot"), r("motion_camera"), r("dialogue_header"), r("narration_header"), r("inner_monologue_header"), r("audio_header")].join("\n");
+  },
+};
+
+// ─── 16. ref_video_h3_constraints ──────────────────────────
+// R2V Constraint Layer — core (R1-R9) + detail (R10-R26).
+
+const REF_CONSTRAINT_FORMAT_6_SECTION = `【6-Section 输出格式 — 最高优先级】
+R1. 必须输出全部 6 个 section，严格按以下顺序：
+    subject_definitions
+    summary
+    retention_analysis
+    detailed_description
+    overall_soundscape
+    non_diegetic_music
+R2. section 标题必须全英文，内容可用中文`;
+
+const REF_CONSTRAINT_SUBJECT_CLOSURE = `【Subject/Picture 标签闭环 — Ref 核心规则】
+R3. subject_definitions 中定义的每个 <Subject N> 必须在 detailed_description 中至少出现一次
+R4. detailed_description 中引用的每个 <Picture N> 必须在上方「参考图映射」中有定义
+R5. <Subject N> 用于可复用视觉内容（角色/场景/道具）
+    <Picture N> 用于构图锚点和具体帧
+R6. 赋予每个参考图一个明确的职能：在 detailed_description 开头声明每张图的角色`;
+
+const REF_CONSTRAINT_ENV_REFERENCE = `【环境 — 通过标签引用，声明职能】
+R7. 场景帧参考图提供环境风格和布局——使用 <Picture N> 标签引用，不要逐字重述图中内容
+R8. 声明每张场景参考图的职能："<Picture 1> provides the market layout; target lighting is cold dawn."
+R9. 描述目标视频中你希望生成的环境光照和动态变化
+    正确: "<Picture 1> provides city gate layout; cold morning mist rolls in from the right."
+    错误: "<Picture 1> shows a city gate with grey stone walls and wooden doors."`;
+
+const REF_CONSTRAINT_TIME_STRUCTURE = `【时间结构 — 强制执行】
+R10. 按每 2-3s 切分子段落
+R11. 每段独占一行，格式: "0.0s-3.0s: 运镜+角色动作+对白/旁白"`;
+
+const REF_CONSTRAINT_CAMERA = `【运镜 — 第一优先级】
+R12. 每个时间段首句必须是运镜动作："镜头 [运动类型] [幅度] [速度]"
+     例："镜头缓慢推近，小幅度。"
+R13. 运镜必须含幅度（小/中/大/快速）和速度修饰
+R14. 主运镜方向：{{CAMERA_DIRECTION}}`;
+
+const REF_CONSTRAINT_ACTION_DETAIL = `【动作颗粒度 — 最大详细度】
+R15. detailed_description 必须极度详细——禁止简化为情节大纲或引用关系列表
+R16. 每个时间段完整建立：构图→主体位置/外观→环境/光照(<Picture N>标签)→动作状态变化→运镜→声音
+R17. 每 2-3s 安排微动作节拍，用「先...随即...然后...最终」串联动作链
+R18. 每个时间子段落 60-120 中文字符（约 2-3 句），过短则缺乏细节`;
+
+const REF_CONSTRAINT_BODY_VOCAB = `【身体动作 — 白名单】
+R19. 使用具体物理动词：转头、抬眼、垂眼、握紧、松开、抬手、放手、迈步、后退、前倾、后仰、起身、坐下、跪地、站起、转体、眯眼、眨眼
+R20. 禁止抽象描述`;
+
+const REF_CONSTRAINT_VOICE = `【声音 — 零空白规则】
+R21. 旁白/独白/对白必须嵌入 detailed_description 的对应时间段
+R22. 每 3-5s 至少一句声音（对白/旁白/独白）。禁止纯默片
+R23. 旁白是叙事利器——心声让读者身临其境。零空白规则`;
+
+const REF_CONSTRAINT_FORMAT = `【格式】
+R24. 禁止 markdown、代码块、注释——纯 H3 格式输出
+R25. 禁止逐字复制剧本——转换为丰富的影视级散文
+R26. 角色已在参考图中——仅描述动作和状态变化，禁止描述静态外貌`;
+
+const refConstraintsH3Def: PromptDefinition = {
+  key: "ref_video_h3_constraints",
+  nameKey: "promptTemplates.prompts.refVideoH3Constraints",
+  descriptionKey: "promptTemplates.prompts.refVideoH3ConstraintsDesc",
+  category: "h3",
+  slots: [
+    slot("core_format", REF_CONSTRAINT_FORMAT_6_SECTION, true),
+    slot("core_subject", REF_CONSTRAINT_SUBJECT_CLOSURE, true),
+    slot("core_env", REF_CONSTRAINT_ENV_REFERENCE, true),
+    slot("time_structure", REF_CONSTRAINT_TIME_STRUCTURE, true),
+    slot("camera", REF_CONSTRAINT_CAMERA, true),
+    slot("action_detail", REF_CONSTRAINT_ACTION_DETAIL, true),
+    slot("body_vocab", REF_CONSTRAINT_BODY_VOCAB, true),
+    slot("voice", REF_CONSTRAINT_VOICE, true),
+    slot("format", REF_CONSTRAINT_FORMAT, true),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [
+      "=== 核心约束 — 必须严格遵守 ===", "",
+      r("core_format"), "",
+      r("core_subject"), "",
+      r("core_env"), "",
+      "=== 详细约束 ===", "",
+      r("time_structure"), "",
+      r("camera"), "",
+      r("action_detail"), "",
+      r("body_vocab"), "",
+      r("voice"), "",
+      r("format"),
+    ].join("\n");
+  },
+};
+
 // ─── ref_video_prompt_h3 ────────────────────────────────────
 
 const REF_VIDEO_H3_ROLE = "你是一位视频提示词撰写专家，兼容 MiniMax H3 Ref2VA 视频生成模型。你会收到一组**有序**的参考图并据此撰写提示词：前N张是场景帧（纯环境/构图参考，按时间顺序排列），后M张是角色参考图（每张绑定一个角色名）。你收到的「剧本动作」包含精确的秒级时间线，这是输出提示词的最重要输入——必须将时间线拆解为连续的动作链。节奏公式：每2-3秒安排一个动作节拍，节拍之间用过渡动作衔接。";
@@ -2882,6 +3028,8 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   refVideoPromptDef,
   videoH3PromptDef,
   refVideoPromptH3Def,
+  refContentH3Def,
+  refConstraintsH3Def,
   fl2vGuideDef,
   fl2vContentDef,
   fl2vConstraintsDef,

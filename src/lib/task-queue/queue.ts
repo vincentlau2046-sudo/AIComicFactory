@@ -75,28 +75,14 @@ export async function failTask(id: string, error: string) {
 
   if (!task) return;
 
-  const newRetries = (task.retries ?? 0) + 1;
-  const maxRetries = task.maxRetries ?? 3;
-
-  if (newRetries < maxRetries) {
-    await db
-      .update(tasks)
-      .set({
-        status: "pending",
-        retries: newRetries,
-        error,
-      })
-      .where(eq(tasks.id, id));
-  } else {
-    await db
-      .update(tasks)
-      .set({
-        status: "failed",
-        retries: newRetries,
-        error,
-      })
-      .where(eq(tasks.id, id));
-  }
+  await db
+    .update(tasks)
+    .set({
+      status: "failed",
+      retries: (task.retries ?? 0) + 1,
+      error,
+    })
+    .where(eq(tasks.id, id));
 }
 
 export async function getTasksByProject(projectId: string) {

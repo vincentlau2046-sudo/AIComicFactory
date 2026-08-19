@@ -10,10 +10,12 @@
  *
  * VideoProvider.generateVideo():
  *   - firstFrame + lastFrame → h3-i2v
- *   - initialImage only      → h3-r2v
+ *   - initialImage only      → h3-r2v (single-ref)
+ *   - initialImage + referenceImages → h3-r2v (multi-ref, dynamic workflow)
  *   - no images              → h3-t2v
  */
 
+import fs from 'node:fs'
 import path from 'node:path'
 import { ComfyUIClient } from './client'
 import { WorkflowRegistry } from './registry'
@@ -214,41 +216,170 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
   /**
    * Generate a video via ComfyUI H3 atomic workflow.
    *
-   * Mode selection:
+   * Mode dispatch:
    * - firstFrame + lastFrame present → h3-i2v (image-to-video with keyframes)
-   * - initialImage present → h3-r2v (reference-to-video)
+   * - initialImage present → h3-r2v (reference-to-video, single or multi-ref)
    * - no images → h3-t2v (text-to-video)
    */
   async generateVideo(params: VideoGenerateParams): Promise<VideoGenerateResult> {
     await this.ensureInitialized()
 
-    let workflowId: string
+    if (params.firstFrame && params.lastFrame) {
+      return this.generateKeyframeVideo(params)
+    }
+
+    if (params.initialImage) {
+      // Deduplicate: initialImage may also appear in referenceImages
+      const seen = new Set<string>()
+      const allRefImages: string[] = []
+      for (const img of [params.initialImage, ...(params.referenceImages || [])]) {
+        if (!seen.has(img)) {
+          seen.add(img)
+          allRefImages.push(img)
+        }
+      }
+      return this.generateReferenceVideo(params, allRefImages)
+    }
+
+    return this.generateTextVideo(params)
+  }
+
+  /**
+   * Keyframe (I2V) mode: firstFrame + lastFrame → h3-i2v.
+   * Uses standard meta.yaml-driven executor path.
+   */
+  private async generateKeyframeVideo(
+    params: VideoGenerateParams & { firstFrame: string; lastFrame: string }
+  ): Promise<VideoGenerateResult> {
+    const inputs: Record<string, string | number | undefined> = {
+      prompt: params.prompt,
+      first_frame: params.firstFrame,
+      last_frame: params.lastFrame,
+    }
+    this.computeDuration(params.duration, params.ratio || '16:9', inputs)
+    return this.executeAndDownload('h3-i2v', inputs)
+  }
+
+  /**
+   * Text-to-video mode: no images → h3-t2v.
+   * Uses standard meta.yaml-driven executor path.
+   */
+  private async generateTextVideo(params: VideoGenerateParams): Promise<VideoGenerateResult> {
     const inputs: Record<string, string | number | undefined> = {
       prompt: params.prompt,
     }
+    this.computeDuration(params.duration, params.ratio || '16:9', inputs)
+    return this.executeAndDownload('h3-t2v', inputs)
+  }
 
-    if (params.firstFrame && params.lastFrame) {
-      workflowId = 'h3-i2v'
-      inputs.first_frame = params.firstFrame
-      inputs.last_frame = params.lastFrame
-    } else if (params.initialImage) {
-      workflowId = 'h3-r2v'
-      inputs.ref_image = params.initialImage
-    } else {
-      workflowId = 'h3-t2v'
+  /**
+   * Reference-to-video (R2V) mode: dynamic multi-ref workflow.
+   *
+   * Builds a custom workflow JSON on-the-fly with N LoadImage nodes,
+   * uploads reference images, and submits directly to ComfyUI.
+   * Does NOT use the standard executor path — the workflow JSON
+   * is dynamically generated to accommodate variable image counts.
+   */
+  private async generateReferenceVideo(
+    params: VideoGenerateParams,
+    allRefImages: string[]
+  ): Promise<VideoGenerateResult> {
+    const { meta, workflowJson } = this.registry.get('h3-r2v')
+
+    // 1. Build dynamic workflow: clone template + add N LoadImage nodes
+    const { workflow: modified, imageNodes } = this.buildMultiRefWorkflow(
+      workflowJson, allRefImages.length
+    )
+
+    // 2. Upload each reference image to ComfyUI, inject filename into LoadImage node
+    for (let i = 0; i < allRefImages.length; i++) {
+      const filePath = allRefImages[i]
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`[R2V] Reference image not found: ${filePath}`)
+      }
+      const uploaded = await this.client.uploadImage(filePath, {
+        uniqueName: `r2v_ref_${i + 1}`,
+      })
+      const node = modified[String(imageNodes[i])] as any
+      node.inputs.image = uploaded.name
     }
 
-    // Approximate H3 length: 10s ≈ 73 frames at 24fps
-    // H3 step size is 17 frames, so round to nearest step
-    const totalFrames = Math.round(params.duration * 24)
-    const stepped = Math.max(17, Math.round(totalFrames / 17) * 17)
-    inputs.length = Math.min(stepped, 3600)
+    // 3. Inject non-image params into MiniMaxH3ReferenceToVideo node
+    const vaNodeId = this.findNodeByType(modified, 'MiniMaxH3ReferenceToVideo')
+    if (!vaNodeId) throw new Error('MiniMaxH3ReferenceToVideo node not found in R2V workflow')
+    const vaNode = modified[String(vaNodeId)] as any
+    vaNode.inputs.prompt = params.prompt
 
-    this.ensureResolution(params, inputs)
+    const { width, height } = this.resolveResolution(params.ratio || '16:9')
+    vaNode.inputs.width = width
+    vaNode.inputs.height = height
 
+    const totalFrames = Math.round((params.duration || 5) * 24)
+    vaNode.inputs.length = Math.min(Math.max(17, Math.round(totalFrames / 17) * 17), 3600)
+
+    console.log(
+      `[R2V] Submitting: ${allRefImages.length} ref images, ${params.duration}s, ${width}x${height}, prompt=${params.prompt.slice(0, 80)}...`
+    )
+
+    // 4. Submit + poll
+    const promptId = await this.client.submit(modified)
+    const history = await this.client.pollResult(promptId, {
+      timeout: 1_800_000, // 30 min
+    })
+
+    // 5. Download video output (replicate executor download logic for video type)
+    const outputDir = this.outputDir
+    const jobDir = path.join(outputDir, promptId)
+    fs.mkdirSync(jobDir, { recursive: true })
+
+    for (const outputDef of meta.outputs) {
+      const nodeOutputs = history.outputs
+      if (!nodeOutputs || typeof nodeOutputs !== 'object') continue
+
+      for (const [, nodeData] of Object.entries(nodeOutputs)) {
+        const keys: string[] = ['videos', 'images']
+        for (const key of keys) {
+          const files = (nodeData as Record<string, unknown[]>)[key]
+          if (!Array.isArray(files)) continue
+          for (const file of files) {
+            const f = file as Record<string, unknown>
+            const filename = f.filename as string
+            if (!filename) continue
+            // Match video type outputs only
+            const isVideo = /\.(mp4|webm)$/i.test(filename) || f.animated
+            const matchesType = outputDef.type === 'video' && isVideo
+            if (!matchesType && outputDef.type !== 'video') continue
+
+            try {
+              const buf = await this.client.downloadOutput(
+                Number(Object.keys(nodeOutputs)[0]),
+                filename,
+                (f.subfolder as string) || ''
+              )
+              const localPath = path.join(jobDir, filename)
+              fs.writeFileSync(localPath, buf)
+              return { filePath: localPath }
+            } catch (err) {
+              console.error(`[R2V] Download failed: ${filename} — ${err}`)
+            }
+          }
+        }
+      }
+    }
+
+    throw new Error('R2V generation produced no video output')
+  }
+
+  /**
+   * Submit a standard (non-dynamic) workflow via the executor, then download video.
+   */
+  private async executeAndDownload(
+    workflowId: string,
+    inputs: Record<string, string | number | undefined>
+  ): Promise<VideoGenerateResult> {
     const result = await this.executor.execute(workflowId, inputs, {
       outputDir: this.outputDir,
-      timeout: 1_800_000, // 30 min for video generation
+      timeout: 1_800_000,
     })
 
     if (result.status !== 'success' || result.outputs.length === 0) {
@@ -263,22 +394,95 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     return { filePath: videoOutput.localPath }
   }
 
-  // ─── Helpers ────────────────────────────────────────────
+  // ─── Dynamic Workflow Builders ──────────────────────────
 
-  private ensureResolution(params: VideoGenerateParams, inputs: Record<string, string | number | undefined>): void {
-    const ratio = params.ratio || '16:9'
+  /**
+   * Build a modified R2V workflow with N LoadImage nodes wired to the
+   * MiniMaxH3ReferenceToVideo node's ref_images dict.
+   *
+   * The base workflow template has ref_images: {} (empty) on the
+   * MiniMaxH3ReferenceToVideo node. This method clones the template,
+   * adds N LoadImage nodes, and populates the ref_images dict with
+   * links to those nodes.
+   */
+  private buildMultiRefWorkflow(
+    baseWorkflow: Record<string, any>,
+    imageCount: number
+  ): { workflow: Record<string, any>; imageNodes: number[] } {
+    const wf = JSON.parse(JSON.stringify(baseWorkflow))
+
+    const vaNodeId = this.findNodeByType(wf, 'MiniMaxH3ReferenceToVideo')
+    if (!vaNodeId) throw new Error('MiniMaxH3ReferenceToVideo node not found in workflow template')
+
+    const existingIds = Object.keys(wf).map(Number).filter(n => !isNaN(n))
+    const lastNodeId = Math.max(...existingIds)
+    const clamped = Math.min(imageCount, 9) // MiniMax H3: max 9 reference images
+
+    const imageNodes: number[] = []
+    const refLinks: Record<string, any> = {}
+
+    for (let i = 0; i < clamped; i++) {
+      const nodeId = lastNodeId + 1 + i
+      wf[String(nodeId)] = {
+        class_type: 'LoadImage',
+        inputs: { image: 'placeholder.png' },
+      }
+      imageNodes.push(nodeId)
+      refLinks[`ref_image_${i + 1}`] = [String(nodeId), 0]
+    }
+
+    wf[String(vaNodeId)].inputs.ref_images = refLinks
+
+    return { workflow: wf, imageNodes }
+  }
+
+  /** Find the first node with the given class_type, return its id or null. */
+  private findNodeByType(
+    workflow: Record<string, any>,
+    classType: string
+  ): number | null {
+    for (const [id, node] of Object.entries(workflow)) {
+      if (node && typeof node === 'object' && node.class_type === classType) {
+        return Number(id)
+      }
+    }
+    return null
+  }
+
+  // ─── Resolution & Duration Helpers ──────────────────────
+
+  /** Compute width, height, length from ratio + duration, write into inputs map. */
+  private computeDuration(
+    duration: number,
+    ratio: string,
+    inputs: Record<string, string | number | undefined>
+  ): void {
+    const { width, height } = this.resolveResolution(ratio)
+    inputs.width = width
+    inputs.height = height
+
+    const totalFrames = Math.round(duration * 24)
+    inputs.length = Math.min(Math.max(17, Math.round(totalFrames / 17) * 17), 3600)
+  }
+
+  /** Resolve aspect ratio to (width, height) for H3 native resolution grid. */
+  private resolveResolution(ratio: string): { width: number; height: number } {
     switch (ratio) {
-      case '16:9': inputs.width = 960; inputs.height = 544; break
-      case '9:16': inputs.width = 544; inputs.height = 960; break
-      case '1:1':  inputs.width = 768; inputs.height = 768; break
-      case '4:3':  inputs.width = 960; inputs.height = 720; break
-      default:
+      case '16:9': return { width: 960, height: 544 }
+      case '9:16': return { width: 544, height: 960 }
+      case '1:1':  return { width: 768, height: 768 }
+      case '4:3':  return { width: 960, height: 720 }
+      default: {
         const parts = ratio.split(':').map(Number)
         if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) {
           const base = 768
-          inputs.width = Math.round(base * parts[0] / Math.max(parts[0], parts[1]))
-          inputs.height = Math.round(base * parts[1] / Math.max(parts[0], parts[1]))
+          return {
+            width: Math.round(base * parts[0] / Math.max(parts[0], parts[1])),
+            height: Math.round(base * parts[1] / Math.max(parts[0], parts[1])),
+          }
         }
+        return { width: 960, height: 544 }
+      }
     }
   }
 
