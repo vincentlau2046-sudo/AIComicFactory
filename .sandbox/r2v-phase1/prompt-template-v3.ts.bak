@@ -1,0 +1,421 @@
+// ═══════════════════════════════════════════════
+// H3 R2V Prompt Template (v3) — FL-isomorphic 3-layer architecture
+//
+// Layer 1: buildContentLayer     — DB context assembly (mirrors FL §0-§8)
+// Layer 2: buildRefConstraintLayer — Ref-specific hard rules (mirrors FL §Constraint)
+// Layer 3: buildOutputFormat      — Output format requirements
+//
+// Entry point: buildR2VPromptTemplate(input, systemOverride?) → {system, user}
+// ═══════════════════════════════════════════════
+
+import type { H3PromptInput, H3Language } from "../types";
+import { mapCameraDirection } from "../camera-map";
+import { resolveLanguage } from "../shared/base-builder";
+import { getDefaultSlotContents } from "@/lib/ai/prompts/registry";
+
+export async function buildR2VPromptTemplate(
+  input: H3PromptInput,
+  systemOverride?: string,
+): Promise<{ system: string; user: string }> {
+  const lang = resolveLanguage(input);
+
+  // System prompt: from Registry slot or override
+  let system = systemOverride || "";
+  if (!system) {
+    const slots = getDefaultSlotContents("ref_video_prompt_h3");
+    system = slots?.role_definition || slots?.rules || "";
+  }
+
+  // User prompt: 3-layer assembly (FL-isomorphic)
+  const user = [
+    buildContentLayer(input, lang),
+    buildRefConstraintLayer(input, lang),
+    buildOutputFormat(input, lang),
+  ].join("\n\n");
+
+  return { system, user };
+}
+
+// ═══════════════════════════════════════════════
+// Layer 1: Content — DB context assembly
+// ═══════════════════════════════════════════════
+
+function buildContentLayer(input: H3PromptInput, lang: H3Language): string {
+  const L = (zh: string, en: string) => lang === "zh" ? zh : en;
+  const parts: string[] = [];
+
+  // ── §0 Role & Task ─────────────────────────────
+  parts.push(L(
+    "你是一位专业的 MiniMax H3 Ref2VA 视频提示词工程师。",
+    "You are a professional MiniMax H3 Ref2VA video prompt engineer."
+  ));
+  parts.push(L(
+    "给定场景帧（首帧/尾帧）和角色参考图，你的任务是为该镜头生成完整的 6-section H3 R2V 视频生成提示词。",
+    "Given scene frames (first/last frame) and character reference images, generate a complete 6-section H3 R2V video prompt for this shot."
+  ));
+
+  // ── §1 Image Mapping ──────────────────────────
+  parts.push("");
+  parts.push(`=== ${L("参考图映射", "REFERENCE IMAGE MAPPING")} ===`);
+  parts.push(L(
+    "使用 <Picture N> 标签引用参考图。严格按以下顺序编号：",
+    "Use <Picture N> tags to reference images. Numbering strictly follows this order:"
+  ));
+
+  if (input.firstFrame?.prompt) {
+    parts.push(`<Picture 1> = ${L("首帧场景", "First frame scene")}: ${input.firstFrame.prompt}`);
+  }
+  if (input.lastFrame?.prompt) {
+    const idx = input.firstFrame?.prompt ? 2 : 1;
+    parts.push(`<Picture ${idx}> = ${L("尾帧场景", "Last frame scene")}: ${input.lastFrame.prompt}`);
+  }
+
+  let picIdx = (input.firstFrame?.prompt ? 1 : 0) + (input.lastFrame?.prompt ? 1 : 0) + 1;
+  for (const char of input.characters) {
+    if (char.referenceImage) {
+      parts.push(L(
+        `<Picture ${picIdx}> = 角色 ${char.name}${char.visualHint ? `（${char.visualHint}）` : ""}`,
+        `<Picture ${picIdx}> = Character ${char.name}`
+      ));
+      picIdx++;
+    }
+  }
+
+  // ── §2 Characters ─────────────────────────────
+  parts.push("");
+  parts.push(`=== ${L("登场角色", "CHARACTERS")} ===`);
+  for (let i = 0; i < input.characters.length; i++) {
+    const c = input.characters[i];
+    if (!c.referenceImage) continue;
+    const attrs = [
+      c.description,
+      c.visualHint,
+      c.heightCm && c.heightCm > 0 ? `${c.heightCm}cm/${c.bodyType || "average"}` : null,
+      c.performanceStyle,
+    ].filter(Boolean).join(" — ");
+    parts.push(L(
+      `<Subject ${i + 1}> = ${c.name}: ${attrs}`,
+      `<Subject ${i + 1}> = ${c.name}: ${attrs || "character"}`
+    ));
+  }
+  if (input.sceneDescription) {
+    const sceneIdx = input.characters.length + 1;
+    parts.push(L(
+      `<Subject ${sceneIdx}> = 场景环境: ${input.sceneDescription}${input.sceneLighting ? ` / 光照: ${input.sceneLighting}` : ""}`,
+      `<Subject ${sceneIdx}> = Scene: ${input.sceneDescription}`
+    ));
+  }
+
+  // ── §3 Scene & Shot Context ───────────────────
+  parts.push("");
+  parts.push(`=== ${L("场景与分镜", "SCENE & SHOT CONTEXT")} ===`);
+  if (input.projectTitle) parts.push(L(`项目: ${input.projectTitle}`, `Project: ${input.projectTitle}`));
+  if (input.projectOutline) parts.push(L(`大纲: ${input.projectOutline}`, `Outline: ${input.projectOutline}`));
+  if (input.projectWorldSetting) parts.push(L(`世界观: ${input.projectWorldSetting}`, `World Setting: ${input.projectWorldSetting}`));
+
+  // ── §4 Motion & Camera ────────────────────────
+  parts.push("");
+  parts.push(`=== ${L("动作脚本与运镜", "MOTION & CAMERA")} ===`);
+  parts.push(L(
+    "以下为镜头的完整动作脚本。你需要：\n1. 按照动作节拍自然切分为 2-3 秒的子段落\n2. 每个子段落标注精确的时间起点 (0.0s-3.0s: ...)\n3. 每个子段落注入对应的运镜动作（幅度: 小/中/大/快速）\n4. 所有时间标注使用精确到小数点后一位的秒数",
+    "Below is the shot's complete motion script. You must:\n1. Split into 2-3 second sub-beats naturally\n2. Label each with precise time start (0.0s-3.0s: ...)\n3. Inject corresponding camera movement (amplitude: small/medium/large/rapid)\n4. All timestamps use seconds with one decimal place"
+  ));
+  if (input.motionScript) parts.push(L(`动作脚本: ${input.motionScript}`, `Motion: ${input.motionScript}`));
+  if (input.videoScript) parts.push(L(`视频脚本: ${input.videoScript}`, `Video Script: ${input.videoScript}`));
+  if (input.cameraDirection) parts.push(L(`运镜指令: ${input.cameraDirection}`, `Camera: ${input.cameraDirection}`));
+  parts.push(L(`时长: ${input.duration || 10}s`, `Duration: ${input.duration || 10}s`));
+
+  // ── §5 Dialogue ───────────────────────────────
+  parts.push("");
+  if (input.dialogues?.length) {
+    parts.push(`=== ${L("对白", "DIALOGUES")} ===`);
+    parts.push(L(
+      "对白使用 <d>[语言] 文本</d> 格式。脚本语言=中文时用 [中文]，英文时用 [English]。",
+      "Dialogues use <d>[language] text</d> format."
+    ));
+    for (const d of input.dialogues) {
+      const subjIdx = input.characters.findIndex(c => c.name === d.characterName);
+      const subjLabel = subjIdx >= 0 ? ` (S${subjIdx + 1})` : "";
+      parts.push(L(
+        `${d.characterName}${subjLabel} 说：<d>[中文] ${d.text}</d>`,
+        `${d.characterName}${subjLabel} says: <d>[English] ${d.text}</d>`
+      ));
+    }
+  } else {
+    parts.push(L(
+      `=== ${L("对白", "DIALOGUES")} ===\n${L("本镜头无对白，通过动作和画面叙事。", "No dialogue in this shot. Tell the story through action and visuals.")}`,
+      `=== DIALOGUES ===\nNo dialogue. Use motion and visuals only.`
+    ));
+  }
+
+  // ── §6a Narration (Pre-generated) [NEW] ───────
+  // Mirror FL §6a — no activeModules gate for Ref path
+  if (input.narrations?.length) {
+    parts.push("");
+    parts.push(L(
+      "=== 旁白（已预生成）===\n以下旁白根据剧本自动生成，必须嵌入 detailed_description 的对应时间段：",
+      "=== Narration (Pre-generated) ===\nThe following narration was auto-generated from the script. Embed into the corresponding time segments of detailed_description:"
+    ));
+    parts.push(input.narrations.join("\n"));
+  }
+
+  // ── §6b Inner Monologue (Pre-generated) [NEW] ─
+  if (input.innerMonologues?.length) {
+    parts.push("");
+    parts.push(L(
+      "=== 内心独白（已预生成）===\n以下独白根据剧本自动生成，必须嵌入 detailed_description 的对应时间段：",
+      "=== Inner Monologue (Pre-generated) ===\nThe following monologue was auto-generated from the script. Embed into the corresponding time segments of detailed_description:"
+    ));
+    parts.push(input.innerMonologues.join("\n"));
+  }
+
+  // ── §7 Audio References ───────────────────────
+  parts.push("");
+  parts.push(`=== ${L("音频参考", "AUDIO REFERENCES")} ===`);
+  if (input.bgmUrl) {
+    parts.push(L(`BGM 风格参考: ${input.bgmUrl}`, `BGM reference: ${input.bgmUrl}`));
+  } else {
+    parts.push(L("BGM: 基于项目氛围和剧情自行设计", "BGM: Design based on project atmosphere"));
+  }
+  if (input.soundDesign) {
+    parts.push(L(`音效设计: ${input.soundDesign}`, `Sound Design: ${input.soundDesign}`));
+  }
+  if (input.musicCue) {
+    parts.push(L(`音乐提示: ${input.musicCue}`, `Music cue: ${input.musicCue}`));
+  }
+
+  return parts.join("\n");
+}
+
+// ═══════════════════════════════════════════════
+// Layer 2: Constraints — Ref-specific hard rules
+// ═══════════════════════════════════════════════
+
+function buildRefConstraintLayer(input: H3PromptInput, lang: H3Language): string {
+  const L = (zh: string, en: string) => lang === "zh" ? zh : en;
+  const camera = mapCameraDirection(input.cameraDirection);
+  const duration = input.duration || 10;
+  const segments = computeSegments(duration);
+  const hasDialogues = !!input.dialogues?.length;
+  const hasNarrations = !!input.narrations?.length;
+  const hasInnerMonologues = !!input.innerMonologues?.length;
+  const hasVoice = hasDialogues || hasNarrations || hasInnerMonologues;
+
+  const lines: string[] = [];
+
+  // ── Header ──
+  lines.push(L("=== 约束规则", "=== CONSTRAINTS"));
+  lines.push("");
+
+  // ── 6-Section Output Format (Highest Priority) ──
+  lines.push(L(
+    "【6-Section 输出格式 — 最高优先级】\n" +
+    "R1. 必须输出全部 6 个 section，严格按以下顺序：\n" +
+    "    subject_definitions\n" +
+    "    summary\n" +
+    "    retention_analysis\n" +
+    "    detailed_description\n" +
+    "    overall_soundscape\n" +
+    "    non_diegetic_music\n" +
+    "R2. section 标题必须全英文，内容可用中文",
+    "【6-Section Format — HIGHEST PRIORITY】\n" +
+    "R1. Output ALL 6 sections in exact order:\n" +
+    "    subject_definitions\n" +
+    "    summary\n" +
+    "    retention_analysis\n" +
+    "    detailed_description\n" +
+    "    overall_soundscape\n" +
+    "    non_diegetic_music\n" +
+    "R2. Section headers in English; body may be in Chinese"
+  ));
+  lines.push("");
+
+  // ── Subject/Picture Tag Closure (Ref Core) ──
+  lines.push(L(
+    "【Subject/Picture 标签闭环 — Ref 核心规则】\n" +
+    "R3. subject_definitions 中定义的每个 <Subject N> 必须在 detailed_description 中至少出现一次\n" +
+    "R4. detailed_description 中引用的每个 <Picture N> 必须在上方「参考图映射」中有定义\n" +
+    "R5. <Subject N> 用于可复用视觉内容（角色/场景/道具）\n" +
+    "    <Picture N> 用于构图锚点和具体帧\n" +
+    "R6. 赋予每个参考图一个明确的职能：在 detailed_description 开头声明每张图的角色",
+    "【Subject/Picture Tag Closure — Ref Core】\n" +
+    "R3. Every <Subject N> defined in subject_definitions MUST appear in detailed_description\n" +
+    "R4. Every <Picture N> used in detailed_description MUST be defined in Image Mapping above\n" +
+    "R5. <Subject N> for reusable visual content (characters/scenes/props)\n" +
+    "    <Picture N> for composition anchors and concrete frames\n" +
+    "R6. Assign each reference image a clear job: state its role at the start of detailed_description"
+  ));
+  lines.push("");
+
+  // ── Time Structure (Ref format: 0.0s-3.0s) ──
+  const segLabels = segments.map(s => s.label);
+  lines.push(L(
+    `【时间结构 — 强制执行】\n` +
+    `R7. 按每 2-3s 切分子段落，共 ${segments.length} 段：${segLabels.join(" / ")}\n` +
+    `R8. 每段独占一行，格式: "0.0s-3.0s: 运镜+角色动作+对白/旁白"`,
+    `【Time Structure — MANDATORY】\n` +
+    `R7. Split into ${segments.length} sub-beats: ${segLabels.join(" / ")}\n` +
+    `R8. Each on its own line: "0.0s-3.0s: camera + action + dialogue/narration"`
+  ));
+  lines.push("");
+
+  // ── Camera Priority (aligned with FL Rule 7-9) ──
+  lines.push(L(
+    `【运镜 — 第一优先级】\n` +
+    `R9.  每个时间段首句必须是运镜动作："镜头 [运动类型] [幅度] [速度]"\n` +
+    `     例："镜头缓慢推近，小幅度。"\n` +
+    `R10. 运镜必须含幅度（小/中/大/快速）和速度修饰\n` +
+    `R11. 主运镜方向：${camera}`,
+    `【Camera — FIRST PRIORITY】\n` +
+    `R9.  Each time segment starts with camera action: "The camera [movement] [amplitude] [speed]"\n` +
+    `R10. Include amplitude (small/medium/large/rapid) and speed modifiers\n` +
+    `R11. Primary motion: ${camera}`
+  ));
+  lines.push("");
+
+  // ── Action Granularity (Ref: "as detailed as possible") ──
+  lines.push(L(
+    "【动作颗粒度 — 最大详细度】\n" +
+    "R12. detailed_description 必须极度详细——禁止简化为情节大纲或引用关系列表\n" +
+    "R13. 每个时间段完整建立：构图→主体位置/外观→环境/光照(<Picture N>标签)→动作状态变化→运镜→声音\n" +
+    "R14. 每 2-3s 安排微动作节拍，用「先...随即...然后...最终」串联动作链",
+    "【Action Detail — MAXIMUM GRANULARITY】\n" +
+    "R12. detailed_description must be as detailed as possible — never reduce to plot summary\n" +
+    "R13. Each segment establishes: composition→subject position/appearance→environment/lighting (<Picture N> tags)→action changes→camera→sound\n" +
+    "R14. Chain micro-actions every 2-3s with temporal connectors"
+  ));
+  lines.push("");
+
+  // ── Body Vocabulary (aligned with FL Rule 15-16) ──
+  lines.push(L(
+    "【身体动作 — 白名单】\n" +
+    "R15. 使用具体物理动词：转头、抬眼、垂眼、握紧、松开、抬手、放手、迈步、后退、前倾、后仰、起身、坐下、跪地、站起、转体、眯眼、眨眼\n" +
+    "R16. 禁止抽象描述",
+    "【Body Action Vocabulary】\n" +
+    "R15. Use concrete physical verbs: turn head, raise eyes, clench, release, step forward, lean back, stand up, kneel, turn body, squint, blink\n" +
+    "R16. No abstract terms"
+  ));
+  lines.push("");
+
+  // ── Voice: Zero-Silence Rule (aligned with FL, no activeModules gate) ──
+  const voiceTitle = L("【声音 — 零空白规则】", "【Voice — Zero-Silence Rule】");
+
+  if (hasNarrations || hasInnerMonologues) {
+    lines.push(voiceTitle);
+    lines.push(L(
+      "R17. 上方「旁白/独白（已预生成）」中提供了叙事声音行——必须嵌入 detailed_description 的对应时间段\n" +
+      "R18. 每 3-5s 至少一句声音（对白/旁白/独白）。禁止纯默片\n" +
+      "R19. 旁白是叙事利器——心声让读者身临其境",
+      "R17. The NARRATION/MONOLOGUE sections above provide voice lines — embed them into detailed_description\n" +
+      "R18. At least one spoken line every 3-5s. No silent shots\n" +
+      "R19. Narration is a storytelling tool — inner thoughts immerse the reader"
+    ));
+  } else if (hasDialogues) {
+    lines.push(voiceTitle);
+    lines.push(L(
+      "R17. 对白格式：<Subject N> (S1) says: <d>[中文] 正文</d>\n" +
+      "    画外音格式：<Subject N> (S1) says in an off-screen voiceover: <d>[中文] 正文</d>\n" +
+      "    while his lips remain completely closed.\n" +
+      "R18. 对白必须嵌入对应时间段——先描述角色动作，再写对白行\n" +
+      "R19. 每 3-5s 至少一句声音（对白/旁白）。禁止纯默片",
+      "R17. Dialogue: <Subject N> (S1) says: <d>[Chinese] text</d>\n" +
+      "    Off-screen: <Subject N> (S1) says in an off-screen voiceover: <d>[Chinese] text</d>\n" +
+      "    while lips remain completely closed.\n" +
+      "R18. Embed dialogue in its time segment — describe action first, then dialogue\n" +
+      "R19. At least one spoken line every 3-5s. No silent shots"
+    ));
+  } else {
+    // No dialogue, no narration, no inner monologue — must generate
+    lines.push(voiceTitle);
+    lines.push(L(
+      "R17. 此镜头无对白、无旁白、无独白——必须主动生成画外音或旁白\n" +
+      "R18. 每 3-5s 至少一句声音。禁止纯默片片段\n" +
+      "R19. 旁白是叙事利器——心声让读者身临其境。零空白规则",
+      "R17. This shot has no dialogue or narration — actively generate voiceover\n" +
+      "R18. At least one spoken line every 3-5s. No silent segments\n" +
+      "R19. Narration is a storytelling tool. Zero-silence rule"
+    ));
+  }
+  lines.push("");
+
+  // ── Format ──
+  lines.push(L(
+    "【格式】\n" +
+    "R20. 禁止 markdown、代码块、注释——纯 H3 格式输出\n" +
+    "R21. 禁止逐字复制剧本——转换为丰富的影视级散文\n" +
+    "R22. 角色已在参考图中——仅描述动作和状态变化，禁止描述静态外貌",
+    "【Format】\n" +
+    "R20. NO markdown, NO code blocks, NO commentary — pure H3 format\n" +
+    "R21. DO NOT copy script verbatim — convert to rich cinematic prose\n" +
+    "R22. Characters already in reference images — describe ACTIONS only, not static appearance"
+  ));
+
+  return lines.join("\n");
+}
+
+// ═══════════════════════════════════════════════
+// Layer 3: Output Format Requirements
+// ═══════════════════════════════════════════════
+
+function buildOutputFormat(input: H3PromptInput, lang: H3Language): string {
+  const L = (zh: string, en: string) => lang === "zh" ? zh : en;
+  const parts: string[] = [];
+
+  parts.push(`=== ${L("输出格式要求", "OUTPUT FORMAT REQUIREMENTS")} ===`);
+
+  parts.push(L(
+    "严格按上方【约束规则】中的 6-section 格式输出。",
+    "Output in the exact 6-section format specified in the CONSTRAINTS above."
+  ));
+  parts.push("");
+
+  parts.push(L(
+    "关键提醒：\n" +
+    "• summary 首行保留 [reference_generation] 标记，正文紧跟其后\n" +
+    "• summary 必须用与脚本相同的语言书写（中文脚本 → summary 用中文）\n" +
+    "• detailed_description 使用 \"0.0s-3.0s:\" 时间戳格式，每一行为一个子段落\n" +
+    "• 对白嵌入 detailed_description，格式：<Subject N> (S1) says: <d>[中文] text</d>\n" +
+    "• 旁白/独白（如有提供给您的）必须嵌入 detailed_description 的时间段中",
+    "Key reminders:\n" +
+    "• summary starts with [reference_generation] tag, body follows immediately\n" +
+    "• summary in the same language as the script\n" +
+    "• detailed_description uses \"0.0s-3.0s:\" timestamp format, one line per sub-beat\n" +
+    "• Dialogue embedded in detailed_description: <Subject N> (S1) says: <d>[Chinese] text</d>\n" +
+    "• Narration/monologue (if provided) embedded in detailed_description time segments"
+  ));
+  parts.push("");
+
+  parts.push(L(
+    "禁止：重复 section、省略任何 section、输出 markdown 代码块、输出前言或总结。",
+    "FORBIDDEN: duplicate sections, omitted sections, markdown blocks, preambles or summaries."
+  ));
+
+  return parts.join("\n");
+}
+
+// ═══════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════
+
+function computeSegments(duration: number): Array<{ label: string }> {
+  if (duration <= 5) return [{ label: "0-5s" }];
+  if (duration <= 8) {
+    const m = Math.floor(duration / 2);
+    return [{ label: `0-${m}s` }, { label: `${m}-${duration}s` }];
+  }
+  if (duration <= 14) {
+    const s = Math.floor(duration / 3);
+    return [
+      { label: `0-${s}s` },
+      { label: `${s}-${s * 2}s` },
+      { label: `${s * 2}-${duration}s` },
+    ];
+  }
+  const s = Math.floor(duration / 4);
+  return [
+    { label: `0-${s}s` },
+    { label: `${s}-${s * 2}s` },
+    { label: `${s * 2}-${s * 3}s` },
+    { label: `${s * 3}-${duration}s` },
+  ];
+}

@@ -41,13 +41,19 @@ export async function handleReferenceVideoGenerate(task: Task) {
 
   const view = await loadShotLegacyView(shot.id);
 
-  // 2. Guard: block if another task is already generating this video
+  // 2. Idempotency: skip if already completed OR currently generating
   const existing = await getActiveAsset(shot.id, "reference_video", 0);
-  if (existing?.status === "generating") {
-    await failTask(task.id, "reference_video already generating, retry later");
-    return;
+  if (existing) {
+    if (existing.status === "completed" && existing.fileUrl) {
+      await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
+      return { shotId: shot.id, referenceVideoUrl: existing.fileUrl, skipped: true };
+    }
+    if (existing.status === "generating") {
+      // Another task is generating — wait and retry
+      await failTask(task.id, "reference_video already generating, retry later");
+      return;
+    }
   }
-  // Regeneration: insertAssetVersion handles deactivation of old active row automatically
 
   // 3. Collect + validate scene frames (all must be completed)
   const allRefs = await getActiveAssets(shot.id, "reference");
@@ -149,15 +155,12 @@ export async function handleReferenceVideoGenerate(task: Task) {
   await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
 
   const videoProvider = resolveVideoProvider(payload.modelConfig);
-
-  // Image order: all scene frames first, then character refs (matches prompt Picture numbering)
-  const allRefImages = [...sceneFramePaths, ...charRefs.map(c => c.imagePath)];
   const result = await videoProvider.generateVideo({
-    initialImage: allRefImages[0],
+    initialImage: sceneFramePaths[0],
     prompt: videoPrompt,
     duration: effectiveDuration,
     ratio,
-    referenceImages: allRefImages.slice(1),
+    referenceImages: orderedRefImages,
   });
 
   // 8. Persist
