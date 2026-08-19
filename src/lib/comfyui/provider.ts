@@ -452,7 +452,11 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       refLinks[`ref_image_${i + 1}`] = [String(nodeId), 0]
     }
 
-    wf[String(vaNodeId)].inputs.ref_images = refLinks
+    // Write ref_image_N as direct inputs on the node (Autogrow format, ComfyUI 0.30+)
+    // NOT nested dict — Autogrow reads from inputs.ref_image_1, not inputs.ref_images.ref_image_1
+    for (const [key, value] of Object.entries(refLinks)) {
+      wf[String(vaNodeId)].inputs[key] = value;
+    }
 
     return { workflow: wf, imageNodes }
   }
