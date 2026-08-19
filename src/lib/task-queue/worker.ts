@@ -4,11 +4,12 @@ import type { TaskHandlerMap, Task } from "./types";
 const POLL_INTERVAL_MS = 2000;
 const COMFYUI_BASE_URL = process.env.COMFYUI_BASE_URL || 'http://localhost:8188';
 const MAX_CONCURRENCY = parseInt(process.env.TASK_MAX_CONCURRENCY || "4", 10);
+const COMFYUI_TASK_TYPES = new Set(['frame_generate','video_generate','character_image','scene_frame_generate','reference_video_generate']);
 
 let isRunning = false;
 let handlers: TaskHandlerMap = {};
-
 let activeCount = 0;
+let comfyActive = false;  // ComfyUI single-GPU — enforce serial
 
 // ─── ComfyUI health cache ───
 let comfyHealthy = true;
@@ -16,7 +17,6 @@ let comfyLastCheck = 0;
 
 async function checkComfyHealth(): Promise<boolean> {
   const now = Date.now();
-  // Healthy: 30s cache. Unhealthy: 10s cache (faster recovery detection).
   const ttl = comfyHealthy ? 30_000 : 10_000;
   if (now - comfyLastCheck < ttl) return comfyHealthy;
   try {
@@ -61,8 +61,15 @@ async function poll() {
     if (slots > 0) {
       const tasks = await dequeueTasks(slots, { skipComfy: !ok });
       for (const task of tasks) {
+        const isComfy = COMFYUI_TASK_TYPES.has(task.type);
+        // ComfyUI tasks are serial (single-GPU) — skip if one already running
+        if (isComfy && comfyActive) continue;
         activeCount++;
-        processTask(task).finally(() => { activeCount--; });
+        if (isComfy) comfyActive = true;
+        processTask(task).finally(() => {
+          activeCount--;
+          if (isComfy) comfyActive = false;
+        });
       }
     }
   } catch (err) {
