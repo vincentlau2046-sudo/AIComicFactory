@@ -324,6 +324,21 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       `[R2V] Submitting: ${allRefImages.length} ref images, ${params.duration}s, ${width}x${height}, prompt=${params.prompt.slice(0, 80)}...`
     )
 
+    // ── DEBUG: dump submitted ref_images structure ──
+    const vaNodeForDebug = modified[String(vaNodeId)] as any;
+    console.log(`[R2V-DEBUG] MiniMaxH3ReferenceToVideo node ${vaNodeId} inputs:`);
+    console.log(`[R2V-DEBUG]   ref_images =`, JSON.stringify(vaNodeForDebug.inputs.ref_images));
+    for (const key of Object.keys(vaNodeForDebug.inputs)) {
+      if (key.startsWith('ref_image_')) {
+        console.log(`[R2V-DEBUG]   direct input ${key} =`, JSON.stringify(vaNodeForDebug.inputs[key]));
+      }
+    }
+    for (const nid of imageNodes) {
+      const ln = modified[String(nid)] as any;
+      console.log(`[R2V-DEBUG]   LoadImage node ${nid}: image=${ln.inputs.image}, subfolder=${ln.inputs.subfolder || '(none)'}`);
+    }
+    // ── END DEBUG ──
+
     // 4. Submit + poll
     const promptId = await this.client.submit(modified)
     const history = await this.client.pollResult(promptId, {
