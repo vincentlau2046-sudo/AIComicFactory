@@ -452,8 +452,8 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       refLinks[`ref_image_${i + 1}`] = [String(nodeId), 0]
     }
 
-    // Write ref_image_N as direct inputs on the node (Autogrow format, ComfyUI 0.30+)
-    // NOT nested dict — Autogrow reads from inputs.ref_image_1, not inputs.ref_images.ref_image_1
+    // Write ref_image_N as direct inputs (Autogrow format, ComfyUI 0.30+)
+    // Packed into ref_images dict by execute() via **kwargs
     for (const [key, value] of Object.entries(refLinks)) {
       wf[String(vaNodeId)].inputs[key] = value;
     }
