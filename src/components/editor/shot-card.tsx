@@ -238,6 +238,25 @@ export function ShotCard({
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [rewritingText, setRewritingText] = useState(false);
   const [generatingKeyframePrompt, setGeneratingKeyframePrompt] = useState(false);
+  const taskPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll task table until all tasks are done, then call onDone
+  function pollUntilDone(taskIds: string[], onDone: () => void) {
+    if (taskPollRef.current) clearInterval(taskPollRef.current);
+    const idSet = new Set(taskIds);
+    taskPollRef.current = setInterval(async () => {
+      try {
+        const resp = await apiFetch(`/api/projects/${projectId}/tasks`);
+        if (!resp.ok) return;
+        const data = await resp.json() as { tasks: { id: string; status: string }[] };
+        const pending = data.tasks.filter(t => idSet.has(t.id) && (t.status === "pending" || t.status === "running"));
+        if (pending.length === 0 && data.tasks.some(t => idSet.has(t.id))) {
+          if (taskPollRef.current) { clearInterval(taskPollRef.current); taskPollRef.current = null; }
+          onDone();
+        }
+      } catch (_) {}
+    }, 3000);
+  }
 
   // Error log panel state
   const [errorLogs, setErrorLogs] = useState<
@@ -268,6 +287,9 @@ export function ShotCard({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, id]);
+
+  // Cleanup task poll on unmount
+  useEffect(() => { return () => { if (taskPollRef.current) clearInterval(taskPollRef.current); }; }, []);
 
   // Project characters (reactive)
   const projectCharacters = useProjectStore((s) => s.project?.characters || []);
@@ -372,7 +394,7 @@ export function ShotCard({
     if (!imageGuard()) return;
     setGeneratingSceneFrame(true);
     try {
-      await apiFetch(`/api/projects/${projectId}/generate`, {
+      const resp = await apiFetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -381,17 +403,23 @@ export function ShotCard({
           modelConfig: getModelConfig(),
         }),
       });
-      onUpdate();
+      const data = await resp.json();
+      if (data.taskId) {
+        pollUntilDone([data.taskId], () => { setGeneratingSceneFrame(false); onUpdate(); });
+      } else {
+        onUpdate();
+        setGeneratingSceneFrame(false);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+      setGeneratingSceneFrame(false);
     }
-    setGeneratingSceneFrame(false);
   }
 
   async function handleGenerateVideoPrompt() {
     setGeneratingPrompt(true);
     try {
-      await apiFetch(`/api/projects/${projectId}/generate`, {
+      const resp = await apiFetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -400,6 +428,13 @@ export function ShotCard({
           modelConfig: getModelConfig(),
         }),
       });
+      if (generationMode === "reference") {
+        const data = await resp.json();
+        if (data.taskId) {
+          pollUntilDone([data.taskId], () => { setGeneratingPrompt(false); onUpdate(); });
+          return;
+        }
+      }
       onUpdate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
@@ -411,7 +446,7 @@ export function ShotCard({
     if (!videoGuard()) return;
     setGeneratingVideo(true);
     try {
-      await apiFetch(`/api/projects/${projectId}/generate`, {
+      const resp = await apiFetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -420,6 +455,14 @@ export function ShotCard({
           modelConfig: getModelConfig(),
         }),
       });
+      if (generationMode === "reference") {
+        const data = await resp.json();
+        if (data.taskId) {
+          // Async (Worker): poll until complete
+          pollUntilDone([data.taskId], () => { setGeneratingVideo(false); onUpdate(); });
+          return;
+        }
+      }
       onUpdate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
@@ -736,12 +779,17 @@ export function ShotCard({
         }),
       });
       if (!resp.ok) throw new Error("Failed");
-      onUpdate();
-      toast.success(t("common.generationCompleted"));
+      const data = await resp.json();
+      if (data.taskId) {
+        pollUntilDone([data.taskId], () => { setGeneratingSceneFrame(false); onUpdate(); });
+      } else {
+        onUpdate();
+        setGeneratingSceneFrame(false);
+      }
     } catch (err) {
       toast.error(t("common.generationFailed"));
+      setGeneratingSceneFrame(false);
     }
-    setGeneratingSceneFrame(false);
   }
 
   function handleUploadFrame(field: "firstFrame" | "lastFrame" | "sceneRefFrame") {
